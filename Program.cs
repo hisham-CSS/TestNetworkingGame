@@ -11,6 +11,8 @@ namespace Bomberman
         private SpriteBatch _spriteBatch;
         private World _world;
 
+        private bool _spacePressed = false;
+
         public Game1()
         {
             _graphics = new GraphicsDeviceManager(this);
@@ -27,11 +29,41 @@ namespace Bomberman
             _world = new World();
             // Create a player
             var player = _world.CreateEntity();
-            _world.AddTransform(player, new TransformComponent { X = 32, Y = 32 });
-            _world.AddPlayer(player, new PlayerComponent { PlayerId = 0, Alive = true });
+            _world.Players.Add(player, new PlayerComponent { PlayerId = 0, Alive = true });
+            _world.Transforms.Add(player, new TransformComponent { GridX = 1, GridY = 1 });
+
+            // Create tiles (13x13 grid)
+            for (int y = 0; y < 13; y++)
+            {
+                for (int x = 0; x < 13; x++)
+                {
+                    var tile = _world.CreateEntity();
+                    var tileType = DetermineTileType(x, y);
+                    _world.Tiles.Add(tile, new TileComponent { Type = tileType, Destroyed = false });
+                    _world.Transforms.Add(tile, new TransformComponent { GridX = x, GridY = y });
+                }
+            }
+
             base.Initialize();
         }
 
+        private TileComponent.TileType DetermineTileType(int x, int y)
+        {
+            // Solid walls on edges and even grid positions
+            if (x == 0 || x == 12 || y == 0 || y == 12)
+                return TileComponent.TileType.Solid;
+            
+            if (x % 2 == 0 && y % 2 == 0)
+                return TileComponent.TileType.Solid;
+            
+            // Keep spawn corners clear
+            if ((x == 1 && y == 1) || (x == 1 && y == 11) || (x == 11 && y == 1) || (x == 11 && y == 11))
+                return TileComponent.TileType.Empty;
+            
+            // 70% destructible
+            return new Random().NextDouble() < 0.7 ? TileComponent.TileType.Destructible : TileComponent.TileType.Empty;
+        }
+  
         protected override void LoadContent()
         {
             _spriteBatch = new SpriteBatch(GraphicsDevice);
@@ -43,126 +75,120 @@ namespace Bomberman
 
         protected override void Update(GameTime gameTime)
         {
-            var keyboardState = Keyboard.GetState();
+             var keyboardState = Keyboard.GetState();
     
-            // Get the player
-            var entities = _world.GetEntities();
-            if (entities.Count > 0)
+            // Get player
+            var players = _world.Players.GetAll();
+            if (players.Count > 0)
             {
-                var player = entities[0];
-                var transform = _world.GetTransform(player);
-                var playerComp = _world.GetPlayer(player);
+                var playerTransforms = _world.Transforms.GetAll();
+                var transform = playerTransforms[0];
                 
-                if (transform.HasValue)
+                // Handle movement with collision
+                int newX = transform.GridX;
+                int newY = transform.GridY;
+                
+                if (keyboardState.IsKeyDown(Keys.W) || keyboardState.IsKeyDown(Keys.Up))
+                    if (IsWalkable(transform.GridX, transform.GridY - 1))
+                        newY--;
+                
+                if (keyboardState.IsKeyDown(Keys.S) || keyboardState.IsKeyDown(Keys.Down))
+                    if (IsWalkable(transform.GridX, transform.GridY + 1))
+                        newY++;
+                
+                if (keyboardState.IsKeyDown(Keys.A) || keyboardState.IsKeyDown(Keys.Left))
+                    if (IsWalkable(transform.GridX - 1, transform.GridY))
+                        newX--;
+                
+                if (keyboardState.IsKeyDown(Keys.D) || keyboardState.IsKeyDown(Keys.Right))
+                    if (IsWalkable(transform.GridX + 1, transform.GridY))
+                        newX++;
+                
+                transform.GridX = newX;
+                transform.GridY = newY;
+                playerTransforms[0] = transform;
+                
+                // Handle bomb placement (grid-snapped)
+                if (keyboardState.IsKeyDown(Keys.Space) && !_spacePressed)
                 {
-                    var newTransform = transform.Value;
+                    _spacePressed = true;
                     
-                    // Handle input
-                    if (keyboardState.IsKeyDown(Keys.W) || keyboardState.IsKeyDown(Keys.Up))
-                        newTransform.Y -= 2;
-                    if (keyboardState.IsKeyDown(Keys.S) || keyboardState.IsKeyDown(Keys.Down))
-                        newTransform.Y += 2;
-                    if (keyboardState.IsKeyDown(Keys.A) || keyboardState.IsKeyDown(Keys.Left))
-                        newTransform.X -= 2;
-                    if (keyboardState.IsKeyDown(Keys.D) || keyboardState.IsKeyDown(Keys.Right))
-                        newTransform.X += 2;
+                    // Check if bomb already exists at this location
+                    bool bombExists = false;
+                    var bombTransforms = _world.Transforms.GetAll();
+                    var bombs = _world.Bombs.GetAll();
                     
-                    // Clamp to grid
-                    newTransform.X = Math.Max(0, Math.Min(newTransform.X, 416 - 32));
-                    newTransform.Y = Math.Max(0, Math.Min(newTransform.Y, 416 - 32));
-                    
-                    _world.AddTransform(player, newTransform);
-
-                    // Handle bomb placement
-                    if (keyboardState.IsKeyDown(Keys.Space))
+                    for (int i = 0; i < bombs.Count; i++)
                     {
-                        // Check if there's already a bomb at this location
-                        bool bombExists = false;
-                        foreach (var entity in entities)
+                        if (bombTransforms[i].GridX == transform.GridX && bombTransforms[i].GridY == transform.GridY)
                         {
-                            var bombTransform = _world.GetTransform(entity);
-                            var bomb = _world.GetBomb(entity);
-                            if (bomb.HasValue && bombTransform.HasValue)
-                            {
-                                if (bombTransform.Value.X == newTransform.X && bombTransform.Value.Y == newTransform.Y)
-                                {
-                                    bombExists = true;
-                                    break;
-                                }
-                            }
-                        }
-                        
-                        if (!bombExists)
-                        {
-                            var bomb = _world.CreateEntity();
-                            _world.AddTransform(bomb, new TransformComponent { X = newTransform.X, Y = newTransform.Y });
-                            _world.AddBomb(bomb, new BombComponent { OwnerId = 0, Timer = 180, MaxTimer = 180 });
+                            bombExists = true;
+                            break;
                         }
                     }
-                }
-            }
-
-            // Update bombs
-            var bombsToExplode = new List<Entity>();
-            foreach (var entity in entities)
-            {
-                var bomb = _world.GetBomb(entity);
-                if (bomb.HasValue)
-                {
-                    var updatedBomb = bomb.Value;
-                    updatedBomb.Timer--;
                     
-                    if (updatedBomb.Timer <= 0)
+                    if (!bombExists)
                     {
-                        bombsToExplode.Add(entity);
-                    }
-                    else
-                    {
-                        _world.AddBomb(entity, updatedBomb);
+                        var bomb = _world.CreateEntity();
+                        _world.Bombs.Add(bomb, new BombComponent { Timer = 180, MaxTimer = 180 });
+                        _world.Transforms.Add(bomb, transform);
                     }
                 }
+                else if (!keyboardState.IsKeyDown(Keys.Space))
+                {
+                    _spacePressed = false;
+                }
             }
-
-            // Explode bombs
-            foreach (var bombEntity in bombsToExplode)
+            
+            // Update bomb timers
+            var bombList = _world.Bombs.GetAll();
+            var bombTransformList = _world.Transforms.GetAll();
+            
+            for (int i = 0; i < bombList.Count; i++)
             {
-                var bombTransform = _world.GetTransform(bombEntity);
-                if (bombTransform.HasValue)
+                var bomb = bombList[i];
+                bomb.Timer--;
+                bombList[i] = bomb;
+                
+                if (bomb.Timer <= 0)
                 {
                     // Create explosion at bomb location
                     var explosion = _world.CreateEntity();
-                    _world.AddTransform(explosion, bombTransform.Value);
-                    _world.AddExplosion(explosion, new ExplosionComponent { Timer = 30, MaxTimer = 30 });
-                }
-                
-                _world.RemoveBomb(bombEntity);
-            }
-
-            // Update explosions
-            var explosionsToRemove = new List<Entity>();
-            foreach (var entity in entities)
-            {
-                var explosion = _world.GetExplosion(entity);
-                if (explosion.HasValue)
-                {
-                    var updatedExplosion = explosion.Value;
-                    updatedExplosion.Timer--;
+                    _world.Explosions.Add(explosion, new ExplosionComponent { Timer = 30, MaxTimer = 30 });
+                    _world.Transforms.Add(explosion, bombTransformList[i]);
                     
-                    if (updatedExplosion.Timer <= 0)
+                    // Remove bomb (by swapping with last)
+                    if (i < bombList.Count - 1)
                     {
-                        explosionsToRemove.Add(entity);
+                        bombList[i] = bombList[bombList.Count - 1];
+                        bombTransformList[i] = bombTransformList[bombTransformList.Count - 1];
                     }
-                    else
-                    {
-                        _world.AddExplosion(entity, updatedExplosion);
-                    }
+                    bombList.RemoveAt(bombList.Count - 1);
+                    bombTransformList.RemoveAt(bombTransformList.Count - 1);
                 }
             }
-
-            // Remove expired explosions
-            foreach (var entity in explosionsToRemove)
+            
+            // Update explosion timers
+            var explosionList = _world.Explosions.GetAll();
+            var explosionTransformList = _world.Transforms.GetAll();
+            
+            for (int i = 0; i < explosionList.Count; i++)
             {
-                _world.RemoveExplosion(entity);
+                var explosion = explosionList[i];
+                explosion.Timer--;
+                explosionList[i] = explosion;
+                
+                if (explosion.Timer <= 0)
+                {
+                    // Remove explosion
+                    if (i < explosionList.Count - 1)
+                    {
+                        explosionList[i] = explosionList[explosionList.Count - 1];
+                        explosionTransformList[i] = explosionTransformList[explosionTransformList.Count - 1];
+                    }
+                    explosionList.RemoveAt(explosionList.Count - 1);
+                    explosionTransformList.RemoveAt(explosionTransformList.Count - 1);
+                }
             }
     
             base.Update(gameTime);
@@ -175,59 +201,58 @@ namespace Bomberman
             _spriteBatch.Begin(samplerState: SamplerState.PointClamp);
     
             const int tileSize = 32;
-            const int gridSize = 13;
-    
-            // Draw grid
-            for (int y = 0; y < gridSize; y++)
+
+            // Draw tiles (iterate sequentially through contiguous array)
+            var tiles = _world.Tiles.GetAll();
+            var tileTransforms = _world.Transforms.GetAll();
+            for (int i = 0; i < tiles.Count; i++)
             {
-                for (int x = 0; x < gridSize; x++)
+                var tile = tiles[i];
+                var transform = tileTransforms[i];
+        
+                Color color = tile.Type switch
                 {
-                    Color color = ((x + y) % 2 == 0) ? Color.DarkGray : Color.Black;
-                    DrawRectangle(x * tileSize, y * tileSize, tileSize, tileSize, color);
-                }
+                    TileComponent.TileType.Solid => Color.DarkGray,
+                    TileComponent.TileType.Destructible => Color.Brown,
+                    _ => Color.Black
+                };
+                DrawRectangle(transform.GridX * tileSize, transform.GridY * tileSize, tileSize, tileSize, color);
             }
 
             // Draw bombs
-            foreach (var entity in _world.GetEntities())
+            var bombs = _world.Bombs.GetAll();
+            var bombTransforms = _world.Transforms.GetAll();
+                
+            for (int i = 0; i < bombs.Count; i++)
             {
-                var bomb = _world.GetBomb(entity);
-                if (bomb.HasValue)
-                {
-                    var transform = _world.GetTransform(entity);
-                    if (transform.HasValue)
-                    {
-                        DrawRectangle(transform.Value.X, transform.Value.Y, tileSize, tileSize, Color.Black);
-                        DrawRectangle(transform.Value.X + 8, transform.Value.Y + 8, 16, 16, Color.Yellow);
-                    }
-                }
+                var transform = bombTransforms[i];
+                DrawRectangle(transform.GridX * tileSize, transform.GridY * tileSize, tileSize, tileSize, Color.Black);
+                DrawRectangle(transform.GridX * tileSize + 8, transform.GridY * tileSize + 8, 16, 16, Color.Yellow);
             }
-
+                
             // Draw explosions
-            foreach (var entity in _world.GetEntities())
+            var explosions = _world.Explosions.GetAll();
+            var explosionTransforms = _world.Transforms.GetAll();
+                
+            for (int i = 0; i < explosions.Count; i++)
             {
-                var explosion = _world.GetExplosion(entity);
-                if (explosion.HasValue)
-                {
-                    var transform = _world.GetTransform(entity);
-                    if (transform.HasValue)
-                    {
-                        DrawRectangle(transform.Value.X, transform.Value.Y, tileSize, tileSize, Color.OrangeRed);
-                    }
-                }
+                var transform = explosionTransforms[i];
+                DrawRectangle(transform.GridX * tileSize, transform.GridY * tileSize, tileSize, tileSize, Color.OrangeRed);
             }
                 
-            // Drawdon player
-            foreach (var entity in _world.GetEntities())
-            {
-                var transform = _world.GetTransform(entity);
-                var player = _world.GetPlayer(entity);
+            // Draw player
+            var players = _world.Players.GetAll();
+            var playerTransforms = _world.Transforms.GetAll();
                 
-                if (transform.HasValue && player.HasValue && player.Value.Alive)
-                {
-                    DrawRectangle(transform.Value.X, transform.Value.Y, tileSize, tileSize, Color.Red);
-                }
+            for (int i = 0; i < players.Count; i++)
+            {
+                if (!players[i].Alive)
+                    continue;
+                    
+                var transform = playerTransforms[i];
+                DrawRectangle(transform.GridX * tileSize, transform.GridY * tileSize, tileSize, tileSize, Color.Red);
             }
-            
+                
             _spriteBatch.End();
             base.Draw(gameTime);
         }
@@ -236,6 +261,37 @@ namespace Bomberman
         private void DrawRectangle(int x, int y, int width, int height, Color color)
         {
             _spriteBatch.Draw(_pixelTexture, new Rectangle(x, y, width, height), color);
+        }
+
+        private bool IsWalkable(int gridX, int gridY)
+        {
+            if (gridX < 0 || gridX >= 13 || gridY < 0 || gridY >= 13)
+                return false;
+            
+            // Check if there's a solid or destructible wall
+            var tiles = _world.Tiles.GetAll();
+            var tileTransforms = _world.Transforms.GetAll();
+            
+            for (int i = 0; i < tiles.Count; i++)
+            {
+                if (tileTransforms[i].GridX == gridX && tileTransforms[i].GridY == gridY)
+                {
+                    if (tiles[i].Type == TileComponent.TileType.Solid || tiles[i].Type == TileComponent.TileType.Destructible)
+                        return false;
+                }
+            }
+            
+            // Check if there's a bomb
+            var bombs = _world.Bombs.GetAll();
+            var bombTransforms = _world.Transforms.GetAll();
+            
+            for (int i = 0; i < bombs.Count; i++)
+            {
+                if (bombTransforms[i].GridX == gridX && bombTransforms[i].GridY == gridY)
+                    return false;
+            }
+            
+            return true;
         }
     }
 
