@@ -34,6 +34,8 @@ public struct PlayerComponent
 {
     public uint PlayerId;
     public bool Alive;
+    public int InputX;
+    public int InputY;
 }
 
 public struct BombComponent
