@@ -11,11 +11,11 @@ namespace Bomberman
         private const int MapHeight = 13;
         private const int TileSize = 32;
 
-        public Simulation(int seed)
+        public Simulation(int seed, int playerCount)
         {
             World = new World();
             GenerateMap(seed);
-            SpawnPlayers();
+            SpawnPlayers(playerCount);
         }
 
         private void GenerateMap(int seed)
@@ -75,7 +75,7 @@ namespace Bomberman
             return false;
         }
 
-        private void SpawnPlayers()
+        private void SpawnPlayers(int count)
         {
             var spawnPoints = new[]
             {
@@ -85,7 +85,7 @@ namespace Bomberman
                 new Vector2(MapWidth - 2, MapHeight - 2)
             };
 
-            for (int i = 0; i < 1; i++) // Just 1 player for now, extensible to 4
+            for (int i = 0; i < count; i++) // Just 1 player for now, extensible to 4
             {
                 var player = World.CreateEntity();
                 World.Players.Add(player, new PlayerComponent { PlayerId = (uint)i, Alive = true, BombRange = 1, BombCapacity = 1 });

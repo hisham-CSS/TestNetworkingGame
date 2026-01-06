@@ -52,6 +52,34 @@ namespace Bomberman
             }
         }
 
+        // Serialization Helpers for Networking
+        public static byte[] SerializeInput(int frameId, InputState input)
+        {
+            using (var ms = new MemoryStream())
+            using (var writer = new BinaryWriter(ms))
+            {
+                writer.Write(frameId);
+                writer.Write(input.Movement.X);
+                writer.Write(input.Movement.Y);
+                writer.Write(input.PlaceBomb);
+                return ms.ToArray();
+            }
+        }
+
+        public static (int frameId, InputState input) DeserializeInput(byte[] data)
+        {
+            using (var ms = new MemoryStream(data))
+            using (var reader = new BinaryReader(ms))
+            {
+                int frameId = reader.ReadInt32();
+                InputState input = new InputState();
+                input.Movement.X = reader.ReadSingle();
+                input.Movement.Y = reader.ReadSingle();
+                input.PlaceBomb = reader.ReadBoolean();
+                return (frameId, input);
+            }
+        }
+
         public void Load(string path)
         {
             if (!File.Exists(path)) 

@@ -8,17 +8,16 @@ namespace Bomberman
 {
     public class Game1 : Game
     {
-        private Texture2D _pixelTexture;
+        private Texture2D? _pixelTexture;
         private GraphicsDeviceManager _graphics;
-        private SpriteBatch _spriteBatch;
+        private SpriteBatch? _spriteBatch;
         
-        private Simulation _simulation;
+        private Simulation? _simulation;
         private KeyboardState _previousKeyboardState;
-
-        // Fixed Timestep
-        private const float FixedTimeStep = 1f / 60f;
-        private double _accumulator = 0.0;
         
+        private double _accumulator = 0.0;
+        private const double FixedTimeStep = 1.0 / 60.0;
+
         // Replay System
         private InputRecorder _recorder = new InputRecorder();
         private bool _isRecording = false;
@@ -26,10 +25,17 @@ namespace Bomberman
         private int _replayFrame = 0;
         private int randomSeed = 12345;
 
+        // Networking
+        private NetworkManager? _networkManager;
+        private bool _isNetworked = false;
+        private int _localPlayerId = 0; // 0 = Host, 1 = Client
+        private Dictionary<int, InputState> _remoteInputBuffer = new Dictionary<int, InputState>(); // Frame -> Input
+        private int _currentFrame = 0;
+
         // Game State
         private enum GameState { Menu, Playing, Replaying }
         private GameState _state = GameState.Menu;
-        private int _menuSelection = 0; // 0 = Play, 1 = Replay
+        private int _menuSelection = 0; // 0 = Play (Local), 1 = Host, 2 = Join, 3 = Replay
 
         public Game1()
         {
@@ -38,23 +44,18 @@ namespace Bomberman
             IsMouseVisible = true;
 
             // Set window size to match Simulation (15x13 tiles at 32 pixels)
-            // 15 * 32 = 480
-            // 13 * 32 = 416
             _graphics.PreferredBackBufferWidth = 480;
             _graphics.PreferredBackBufferHeight = 416;
         }
 
         protected override void Initialize()
         {
-            // _simulation = new Simulation(randomSeed); // Init on play instead
             base.Initialize();
         }
 
         protected override void LoadContent()
         {
             _spriteBatch = new SpriteBatch(GraphicsDevice);
-
-            // Create a 1x1 white texture for drawing primitives
             _pixelTexture = new Texture2D(GraphicsDevice, 1, 1);
             _pixelTexture.SetData(new[] { Color.White });
         }
@@ -63,9 +64,11 @@ namespace Bomberman
         {
             try
             {
-                // Console.WriteLine("Update Start");
                 var keyboardState = Keyboard.GetState();
                 
+                // Network Update
+                if (_networkManager != null) _networkManager.Update();
+
                 if (_state == GameState.Menu)
                 {
                     // Menu Logic
@@ -73,36 +76,70 @@ namespace Bomberman
                         !(_previousKeyboardState.IsKeyDown(Keys.W) || _previousKeyboardState.IsKeyDown(Keys.Up)))
                     {
                         _menuSelection--;
-                        if (_menuSelection < 0) _menuSelection = 1;
+                        if (_menuSelection < 0) _menuSelection = 3;
                     }
                     if ((keyboardState.IsKeyDown(Keys.S) || keyboardState.IsKeyDown(Keys.Down)) && 
                         !(_previousKeyboardState.IsKeyDown(Keys.S) || _previousKeyboardState.IsKeyDown(Keys.Down)))
                     {
                         _menuSelection++;
-                        if (_menuSelection > 1) _menuSelection = 0;
+                        if (_menuSelection > 3) _menuSelection = 0;
                     }
 
                     if (keyboardState.IsKeyDown(Keys.Space) && !_previousKeyboardState.IsKeyDown(Keys.Space) ||
                         keyboardState.IsKeyDown(Keys.Enter) && !_previousKeyboardState.IsKeyDown(Keys.Enter))
                     {
-                        if (_menuSelection == 0)
+                        if (_menuSelection == 0) // Local Play
                         {
-                            // Play
                              _state = GameState.Playing;
                              _isRecording = true;
                              _isReplaying = false;
+                             _isNetworked = false;
+                             _localPlayerId = 0;
                              _recorder.Reset();
-                             _simulation = new Simulation(randomSeed);
+                             _simulation = new Simulation(randomSeed, 1);
                         }
-                        else if (_menuSelection == 1)
+                        else if (_menuSelection == 1) // Host
                         {
-                            // Replay
+                            _state = GameState.Playing;
+                            _isRecording = false; // Disable recording in net play for now
+                            _isReplaying = false;
+                            _isNetworked = true;
+                            _localPlayerId = 0;
+                            _currentFrame = 0;
+                            _remoteInputBuffer.Clear();
+
+                            _networkManager = new NetworkManager(5000); // Host on 5000
+                            _networkManager.OnPacketReceived += OnNetworkPacket;
+                            
+                            _simulation = new Simulation(randomSeed, 2);
+                            Console.WriteLine("Hosting on Port 5000...");
+                        }
+                        else if (_menuSelection == 2) // Join
+                        {
+                            _state = GameState.Playing;
+                            _isRecording = false;
+                            _isReplaying = false;
+                            _isNetworked = true;
+                            _localPlayerId = 1;
+                            _currentFrame = 0;
+                            _remoteInputBuffer.Clear();
+
+                            _networkManager = new NetworkManager(5001); // Client on 5001 (simplified)
+                            _networkManager.Connect("127.0.0.1", 5000); // Connect to localhost host
+                            _networkManager.OnPacketReceived += OnNetworkPacket;
+
+                            _simulation = new Simulation(randomSeed, 2);
+                             Console.WriteLine("Joining 127.0.0.1:5000...");
+                        }
+                        else if (_menuSelection == 3) // Replay
+                        {
                             _state = GameState.Replaying;
                             _isRecording = false;
                             _isReplaying = true;
+                            _isNetworked = false;
                             _replayFrame = 0;
                             _recorder.Load(Path.Combine("Replays", "replay.json"));
-                            _simulation = new Simulation(randomSeed);
+                            _simulation = new Simulation(randomSeed, 2);
                         }
                     }
                 }
@@ -110,38 +147,9 @@ namespace Bomberman
                 {
                     if (keyboardState.IsKeyDown(Keys.Escape) && !_previousKeyboardState.IsKeyDown(Keys.Escape))
                     {
-                        // Return to Menu
                         _state = GameState.Menu;
-                        if (_isRecording) _recorder.Save(Path.Combine("Replays", "replay.json")); // Auto-save on exit
-                    }
-
-                    InputState[] inputs;
-
-                    if (_state == GameState.Replaying)
-                    {
-                         // Replay Mode
-                         inputs = _recorder.GetFrame(_replayFrame);
-                         if (inputs == null || inputs.Length == 0) inputs = new InputState[1];
-                    }
-                    else
-                    {
-                        // Live Logic
-                        Vector2 movement = Vector2.Zero;
-                        if (keyboardState.IsKeyDown(Keys.W) || keyboardState.IsKeyDown(Keys.Up)) movement.Y -= 1;
-                        if (keyboardState.IsKeyDown(Keys.S) || keyboardState.IsKeyDown(Keys.Down)) movement.Y += 1;
-                        if (keyboardState.IsKeyDown(Keys.A) || keyboardState.IsKeyDown(Keys.Left)) movement.X -= 1;
-                        if (keyboardState.IsKeyDown(Keys.D) || keyboardState.IsKeyDown(Keys.Right)) movement.X += 1;
-
-                        if (movement != Vector2.Zero) movement.Normalize();
-
-                        bool placeBomb = keyboardState.IsKeyDown(Keys.Space) && !_previousKeyboardState.IsKeyDown(Keys.Space);
-
-                        inputs = new InputState[] 
-                        {
-                            new InputState { Movement = movement, PlaceBomb = placeBomb }
-                        };
-
-                        if (_isRecording) _recorder.RecordFrame(inputs);
+                        if (_networkManager != null) { _networkManager.Close(); _networkManager = null; }
+                        if (_isRecording) _recorder.Save(Path.Combine("Replays", "replay.json"));
                     }
 
                     // Fixed Update Loop
@@ -149,8 +157,7 @@ namespace Bomberman
 
                     while (_accumulator >= FixedTimeStep)
                     {
-                        _simulation.Update(inputs, FixedTimeStep);
-                        if (_state == GameState.Replaying) _replayFrame++;
+                        StepSimulation(keyboardState); // Extracted method logic
                         _accumulator -= FixedTimeStep;
                     }
                 }
@@ -162,6 +169,85 @@ namespace Bomberman
             {
                  Console.WriteLine("Update Crash: " + e.ToString());
                  throw;
+            }
+        }
+
+        private void OnNetworkPacket(byte[] data)
+        {
+            var (frame, input) = InputRecorder.DeserializeInput(data);
+            // Console.WriteLine($"Recv Frame {frame}");
+            if (!_remoteInputBuffer.ContainsKey(frame))
+            {
+                _remoteInputBuffer.Add(frame, input);
+            }
+        }
+
+        private void StepSimulation(KeyboardState keyboardState)
+        {
+            InputState[] inputs;
+
+            if (_isReplaying)
+            {
+                    inputs = _recorder.GetFrame(_replayFrame);
+                    if (inputs == null || inputs.Length == 0) inputs = new InputState[1];
+                    if (inputs == null || inputs.Length == 0) inputs = new InputState[1];
+                    if (_simulation != null) _simulation.Update(inputs, (float)FixedTimeStep);
+                    _replayFrame++;
+                    return;
+            }
+
+            // Capture Local Input
+            Vector2 movement = Vector2.Zero;
+            if (keyboardState.IsKeyDown(Keys.W) || keyboardState.IsKeyDown(Keys.Up)) movement.Y -= 1;
+            if (keyboardState.IsKeyDown(Keys.S) || keyboardState.IsKeyDown(Keys.Down)) movement.Y += 1;
+            if (keyboardState.IsKeyDown(Keys.A) || keyboardState.IsKeyDown(Keys.Left)) movement.X -= 1;
+            if (keyboardState.IsKeyDown(Keys.D) || keyboardState.IsKeyDown(Keys.Right)) movement.X += 1;
+
+            if (movement != Vector2.Zero) movement.Normalize();
+
+            bool placeBomb = keyboardState.IsKeyDown(Keys.Space) && !_previousKeyboardState.IsKeyDown(Keys.Space);
+            
+            InputState localInput = new InputState { Movement = movement, PlaceBomb = placeBomb };
+
+            if (_isNetworked)
+            {
+                // Lockstep Logic
+                
+                // 1. Send Local Input for THIS frame
+                byte[] packet = InputRecorder.SerializeInput(_currentFrame, localInput);
+                if (_networkManager != null) _networkManager.Send(packet);
+
+                // 2. Do we have Remote Input for THIS frame?
+                if (_remoteInputBuffer.ContainsKey(_currentFrame))
+                {
+                    // YES! We have both.
+                    InputState remoteInput = _remoteInputBuffer[_currentFrame];
+                    
+                    // Construct Full Input Array (Player 0, Player 1)
+                    inputs = new InputState[2];
+                    inputs[_localPlayerId] = localInput;
+                    inputs[1 - _localPlayerId] = remoteInput;
+
+                    // Advance
+                    // Advance
+                    if (_simulation != null) _simulation.Update(inputs, (float)FixedTimeStep);
+                    _currentFrame++;
+                    // Remove old input to save memory (optional)
+                    _remoteInputBuffer.Remove(_currentFrame - 100); 
+                }
+                else
+                {
+                    // NO. STALL.
+                    // Console.WriteLine($"Stalling Frame {_currentFrame} (Waiting for P{1-_localPlayerId})");
+                }
+            }
+            else
+            {
+                // Local Single Player
+                inputs = new InputState[] { localInput };
+                if (_isRecording) _recorder.RecordFrame(inputs);
+                if (_isRecording) _recorder.RecordFrame(inputs);
+                if (_simulation != null) _simulation.Update(inputs, (float)FixedTimeStep);
             }
         }
 
@@ -177,38 +263,27 @@ namespace Bomberman
                 {
                     // Draw Menu
                     int btnWidth = 200;
-                    int btnHeight = 50;
+                    int btnHeight = 40;
                     int centerX = _graphics.PreferredBackBufferWidth / 2 - btnWidth / 2;
-                    int centerY = _graphics.PreferredBackBufferHeight / 2 - 60;
+                    int startY = 80;
+                    int spacing = 50;
 
-                    // Play Button (Green)
-                    Color playColor = _menuSelection == 0 ? Color.Lime : Color.Green;
-                    DrawRectangle(new Vector2(centerX, centerY), new Vector2(btnWidth, btnHeight), playColor);
-                    // Text
-                    string playText = "PLAY";
-                    int pScale = 4;
-                    int pTextWidth = playText.Length * (5 * pScale + pScale); // Width + Spacing
-                    DrawText(playText, new Vector2(centerX + btnWidth/2 - pTextWidth/2, centerY + 10), pScale, Color.White);
+                    // 0: Play
+                    DrawMenuButton(0, "PLAY", centerX, startY, btnWidth, btnHeight, Color.Green, Color.Lime);
+                    
+                    // 1: Host
+                    DrawMenuButton(1, "HOST", centerX, startY + spacing, btnWidth, btnHeight, Color.Purple, Color.Magenta);
 
-                    // Selection Border
-                    if (_menuSelection == 0) DrawHollowRect(new Rectangle(centerX-2, centerY-2, btnWidth+4, btnHeight+4), Color.White);
+                    // 2: Join
+                    DrawMenuButton(2, "JOIN", centerX, startY + spacing * 2, btnWidth, btnHeight, Color.Goldenrod, Color.Yellow);
 
-                    // Replay Button (Blue)
-                    int rX = centerX;
-                    int rY = centerY + 80;
-                    Color replayColor = _menuSelection == 1 ? Color.Cyan : Color.Blue;
-                    DrawRectangle(new Vector2(rX, rY), new Vector2(btnWidth, btnHeight), replayColor);
-                     // Text
-                    string repText = "REPLAY";
-                    int rTextWidth = repText.Length * (5 * pScale + pScale);
-                    DrawText(repText, new Vector2(rX + btnWidth/2 - rTextWidth/2, rY + 10), pScale, Color.White);
-
-                    // Selection Border
-                    if (_menuSelection == 1) DrawHollowRect(new Rectangle(rX-2, rY-2, btnWidth+4, btnHeight+4), Color.White);
+                    // 3: Replay
+                    DrawMenuButton(3, "REPLAY", centerX, startY + spacing * 3, btnWidth, btnHeight, Color.Blue, Color.Cyan);
                 }
                 else
                 {
                     // Draw Simulation
+                    if (_simulation == null) return;
                     var world = _simulation.World;
                     var transformEntities = world.Transforms.GetEntities();
                     var transforms = world.Transforms.GetAll();
@@ -319,6 +394,20 @@ namespace Bomberman
             return new TransformComponent();
         }
 
+        private void DrawMenuButton(int index, string text, int x, int y, int width, int height, Color normalColor, Color selectedColor)
+        {
+            Color color = _menuSelection == index ? selectedColor : normalColor;
+            DrawRectangle(new Vector2(x, y), new Vector2(width, height), color);
+            
+            // Text
+            int scale = 3;
+            int textWidth = text.Length * (5 * scale + scale);
+            DrawText(text, new Vector2(x + width/2 - textWidth/2, y + 10), scale, Color.White);
+
+            // Selection Border
+            if (_menuSelection == index) DrawHollowRect(new Rectangle(x-2, y-2, width+4, height+4), Color.White);
+        }
+
         private void DrawText(string text, Vector2 position, int scale, Color color)
         {
             int spacing = 1 * scale;
@@ -344,11 +433,11 @@ namespace Bomberman
 
         private void DrawHollowRect(Rectangle rect, Color color)
         {
-            int t = 2; // Thickness
-            DrawRectangle(new Vector2(rect.X, rect.Y), new Vector2(rect.Width, t), color); // Top
-            DrawRectangle(new Vector2(rect.X, rect.Bottom - t), new Vector2(rect.Width, t), color); // Bottom
-            DrawRectangle(new Vector2(rect.X, rect.Y), new Vector2(t, rect.Height), color); // Left
-            DrawRectangle(new Vector2(rect.Right - t, rect.Y), new Vector2(t, rect.Height), color); // Right
+            int t = 2; 
+            DrawRectangle(new Vector2(rect.X, rect.Y), new Vector2(rect.Width, t), color); 
+            DrawRectangle(new Vector2(rect.X, rect.Bottom - t), new Vector2(rect.Width, t), color); 
+            DrawRectangle(new Vector2(rect.X, rect.Y), new Vector2(t, rect.Height), color); 
+            DrawRectangle(new Vector2(rect.Right - t, rect.Y), new Vector2(t, rect.Height), color); 
         }
 
         private void DrawRectangle(Vector2 position, Vector2 size, Color color)
