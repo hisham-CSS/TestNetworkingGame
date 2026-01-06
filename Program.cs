@@ -493,7 +493,7 @@ namespace Bomberman
                      if (_localPlayerId == 0)
                      {
                          DrawText($"HOSTING: {_connectedPlayerCount}/{_totalPlayersForGame} Players", new Vector2(50, 100), 2, Color.Yellow);
-                         DrawText("Press 2,3,4 to set Count", new Vector2(50, 140), 1, Color.Gray);
+                         DrawText("Press 2,3,4 to set Count", new Vector2(50, 140), 1, Color.White);
                          DrawText("Press ENTER to Start", new Vector2(50, 180), 2, Color.Green);
                      }
                      else
