@@ -11,6 +11,7 @@ namespace Bomberman
         public ComponentPool<BombComponent> Bombs { get; } = new();
         public ComponentPool<ExplosionComponent> Explosions { get; } = new();
         public ComponentPool<TileComponent> Tiles { get; } = new();
+        public ComponentPool<PowerupComponent> Powerups { get; } = new();
         
         public Entity CreateEntity()
         {

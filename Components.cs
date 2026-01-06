@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Microsoft.Xna.Framework;
 
 public class ComponentPool<T> where T : struct
 {
@@ -21,27 +22,49 @@ public class ComponentPool<T> where T : struct
     
     public List<T> GetAll() => _components;
     public List<Entity> GetEntities() => _entities;
+    
+    public void Remove(Entity entity)
+    {
+        int index = _entities.IndexOf(entity);
+        if (index != -1)
+        {
+            if (index < _components.Count - 1)
+            {
+                _components[index] = _components[_components.Count - 1];
+                _entities[index] = _entities[_entities.Count - 1];
+            }
+            _components.RemoveAt(_components.Count - 1);
+            _entities.RemoveAt(_entities.Count - 1);
+        }
+    }
 }
-
 
 public struct TransformComponent
 {
-    public int GridX;  // Grid position (0-12)
-    public int GridY;  // Grid position (0-12)
+    public Vector2 Position; // Continuous position
+    public Vector2 Size;     // AABB Size
 }
 
 public struct PlayerComponent
 {
     public uint PlayerId;
     public bool Alive;
-    public int InputX;
-    public int InputY;
+    public int BombRange;
+    public int BombCapacity;
+}
+
+public struct InputState
+{
+    public Vector2 Movement; // Normalized vector
+    public bool PlaceBomb;
 }
 
 public struct BombComponent
 {
     public int Timer;
     public int MaxTimer;
+    public int Range;
+    public uint OwnerId; 
 }
 
 public struct ExplosionComponent
@@ -50,9 +73,16 @@ public struct ExplosionComponent
     public int MaxTimer;
 }
 
+public struct PowerupComponent
+{
+    public enum PowerupType { None, Range, Capacity }
+    public PowerupType Type;
+}
+
 public struct TileComponent
 {
     public enum TileType { Solid, Destructible, Empty }
     public TileType Type;
     public bool Destroyed;
+    public PowerupComponent.PowerupType HiddenPowerup;
 }

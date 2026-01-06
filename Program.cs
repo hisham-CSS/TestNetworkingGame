@@ -1,4 +1,6 @@
-﻿using Microsoft.Xna.Framework;
+﻿using System;
+using System.Collections.Generic;
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 
@@ -9,27 +11,13 @@ namespace Bomberman
         private Texture2D _pixelTexture;
         private GraphicsDeviceManager _graphics;
         private SpriteBatch _spriteBatch;
-        private World _world;
+        
+        private Simulation _simulation;
+        private KeyboardState _previousKeyboardState;
 
-        private bool _spacePressed = false;
-
-        // Define spawn points for up to 4 players
-        private static readonly (int x, int y)[] SpawnPoints = new[]
-        {
-            (1, 1),      // Top-left
-            (11, 1),     // Top-right
-            (1, 11),     // Bottom-left
-            (11, 11)     // Bottom-right
-        };
-
-        // Input smoothing
-        private int _inputX = 0;  // -1, 0, or 1
-        private int _inputY = 0;  // -1, 0, or 1
-        private double _moveTimer = 0;
-        private const double MoveDelay = 0.15;  // 150ms between moves
-
-        // Random for map generation (fixed seed for consistent maps)
-        private System.Random _mapRandom = new System.Random(42);
+        // Fixed Timestep
+        private const float FixedTimeStep = 1f / 60f;
+        private double _accumulator = 0.0;
 
         public Game1()
         {
@@ -37,331 +25,182 @@ namespace Bomberman
             Content.RootDirectory = "Content";
             IsMouseVisible = true;
 
-            // Set window size to 416x416 (13x32 tiles)
-            _graphics.PreferredBackBufferWidth = 416;
+            // Set window size to match Simulation (15x13 tiles at 32 pixels)
+            // 15 * 32 = 480
+            // 13 * 32 = 416
+            _graphics.PreferredBackBufferWidth = 480;
             _graphics.PreferredBackBufferHeight = 416;
         }
 
         protected override void Initialize()
         {
-            _world = new World();
-            // Create a player at spawn point 0
-            var player = _world.CreateEntity();
-            _world.Players.Add(player, new PlayerComponent { PlayerId = 0, Alive = true, InputX = _inputX, InputY = _inputY });
-            _world.Transforms.Add(player, new TransformComponent { GridX = SpawnPoints[0].x, GridY = SpawnPoints[0].y });
-
-            // Create tiles (13x13 grid)
-            for (int y = 0; y < 13; y++)
-            {
-                for (int x = 0; x < 13; x++)
-                {
-                    var tile = _world.CreateEntity();
-                    var tileType = DetermineTileType(x, y);
-                    _world.Tiles.Add(tile, new TileComponent { Type = tileType, Destroyed = false });
-                    _world.Transforms.Add(tile, new TransformComponent { GridX = x, GridY = y });
-                }
-            }
-
+            _simulation = new Simulation(12345); // Seeded
             base.Initialize();
         }
 
-        private TileComponent.TileType DetermineTileType(int x, int y)
-        {
-            // Solid walls only on edges
-            if (x == 0 || x == 12 || y == 0 || y == 12)
-                return TileComponent.TileType.Solid;
-            
-            // Keep spawn corners and surrounding areas clear (2x2 around each corner)
-            if ((x <= 2 && y <= 2) || (x >= 10 && y <= 2) || (x <= 2 && y >= 10) || (x >= 10 && y >= 10))
-                return TileComponent.TileType.Empty;
-            
-            // 40% destructible in other areas (leaving 60% empty for movement)
-            return _mapRandom.NextDouble() < 0.4 ? TileComponent.TileType.Destructible : TileComponent.TileType.Empty;
-        }
-    
         protected override void LoadContent()
         {
             _spriteBatch = new SpriteBatch(GraphicsDevice);
-
-            // Create a 1x1 white pixel texture for drawing rectangles
             _pixelTexture = new Texture2D(GraphicsDevice, 1, 1);
             _pixelTexture.SetData(new[] { Color.White });
         }
 
         protected override void Update(GameTime gameTime)
         {
-            var keyboardState = Keyboard.GetState();
-
-            // Update input buffer (what direction is the player trying to go?)
-            _inputX = 0;
-            _inputY = 0;
-            
-            if (keyboardState.IsKeyDown(Keys.W) || keyboardState.IsKeyDown(Keys.Up))
-                _inputY = -1;
-            if (keyboardState.IsKeyDown(Keys.S) || keyboardState.IsKeyDown(Keys.Down))
-                _inputY = 1;
-            
-            if (keyboardState.IsKeyDown(Keys.A) || keyboardState.IsKeyDown(Keys.Left))
-                _inputX = -1;
-            if (keyboardState.IsKeyDown(Keys.D) || keyboardState.IsKeyDown(Keys.Right))
-                _inputX = 1;
-
-            // Update movement timer
-            _moveTimer += gameTime.ElapsedGameTime.TotalSeconds;
-            
-            if (_moveTimer >= MoveDelay)
+            try
             {
-                _moveTimer = 0;
+                // Console.WriteLine("Update Start");
+                var keyboardState = Keyboard.GetState();
                 
-                var players = _world.Players.GetAll();
-                if (players.Count > 0)
-                {
-                    var playerTransforms = _world.Transforms.GetAll();
-                    var transform = playerTransforms[0];
-                    
-                    // Try to move in the input direction
-                    if (_inputX != 0 && IsWalkable(transform.GridX + _inputX, transform.GridY))
-                        transform.GridX += _inputX;
-                    else if (_inputY != 0 && IsWalkable(transform.GridX, transform.GridY + _inputY))
-                        transform.GridY += _inputY;
-                    
-                    playerTransforms[0] = transform;
+                // Collect Input (Poll)
+                Vector2 movement = Vector2.Zero;
+                if (keyboardState.IsKeyDown(Keys.W) || keyboardState.IsKeyDown(Keys.Up)) movement.Y -= 1;
+                if (keyboardState.IsKeyDown(Keys.S) || keyboardState.IsKeyDown(Keys.Down)) movement.Y += 1;
+                if (keyboardState.IsKeyDown(Keys.A) || keyboardState.IsKeyDown(Keys.Left)) movement.X -= 1;
+                if (keyboardState.IsKeyDown(Keys.D) || keyboardState.IsKeyDown(Keys.Right)) movement.X += 1;
 
-                    // Handle bomb placement (grid-snapped)
-                    if (keyboardState.IsKeyDown(Keys.Space) && !_spacePressed)
-                    {
-                        _spacePressed = true;
-                        
-                        // Check if bomb already exists at this location
-                        bool bombExists = false;
-                        var bombs = _world.Bombs.GetAll();
-                        var bombTransforms = _world.Bombs.GetAll(); // This is wrong - we need bomb transforms!
-                        
-                        // FIX: We need to track which transforms belong to bombs
-                        // For now, let's just place the bomb
-                        var bomb = _world.CreateEntity();
-                        _world.Bombs.Add(bomb, new BombComponent { Timer = 180, MaxTimer = 180 });
-                        _world.Transforms.Add(bomb, transform);
-                    }
-                    else if (!keyboardState.IsKeyDown(Keys.Space))
-                    {
-                        _spacePressed = false;
-                    }
+                if (movement != Vector2.Zero) movement.Normalize();
+
+                bool placeBomb = keyboardState.IsKeyDown(Keys.Space) && !_previousKeyboardState.IsKeyDown(Keys.Space);
+
+                var inputs = new InputState[] 
+                {
+                    new InputState { Movement = movement, PlaceBomb = placeBomb }
+                };
+
+                // Fixed Update Loop
+                _accumulator += gameTime.ElapsedGameTime.TotalSeconds;
+
+                while (_accumulator >= FixedTimeStep)
+                {
+                    _simulation.Update(inputs, FixedTimeStep);
+                    _accumulator -= FixedTimeStep;
                 }
-            }
 
-            // Update bomb timers and create explosions
-            var bombList = _world.Bombs.GetAll();
-            var bombTransformList = _world.Transforms.GetAll();
-            
-            // We need to track bomb indices to get their transforms
-            // This is a limitation of the current architecture
-            // For now, we'll iterate through bombs and assume they're in order
-            var bombEntities = _world.Bombs.GetEntities();
-            
-            for (int i = 0; i < bombList.Count; i++)
-            {
-                var bomb = bombList[i];
-                bomb.Timer--;
-                bombList[i] = bomb;
-                
-                if (bomb.Timer <= 0)
-                {
-                    // Find the transform for this bomb
-                    var bombEntity = bombEntities[i];
-                    var transformEntities = _world.Transforms.GetEntities();
-                    var transforms = _world.Transforms.GetAll();
-                    
-                    TransformComponent bombTransform = new TransformComponent { GridX = 0, GridY = 0 };
-                    for (int j = 0; j < transformEntities.Count; j++)
-                    {
-                        if (transformEntities[j].Equals(bombEntity))
-                        {
-                            bombTransform = transforms[j];
-                            break;
-                        }
-                    }
-                    
-                    // Create explosion at bomb location
-                    var explosion = _world.CreateEntity();
-                    _world.Explosions.Add(explosion, new ExplosionComponent { Timer = 30, MaxTimer = 30 });
-                    _world.Transforms.Add(explosion, bombTransform);
-                    
-                    // Remove bomb (by swapping with last)
-                    if (i < bombList.Count - 1)
-                    {
-                        bombList[i] = bombList[bombList.Count - 1];
-                        bombEntities[i] = bombEntities[bombEntities.Count - 1];
-                    }
-                    bombList.RemoveAt(bombList.Count - 1);
-                    bombEntities.RemoveAt(bombEntities.Count - 1);
-                }
+                _previousKeyboardState = keyboardState;
+                base.Update(gameTime);
             }
-
-            // Update explosion timers
-            var explosionList = _world.Explosions.GetAll();
-            var explosionEntities = _world.Explosions.GetEntities();
-            var transformEntities2 = _world.Transforms.GetEntities();
-            var transforms2 = _world.Transforms.GetAll();
-        
-            for (int i = 0; i < explosionList.Count; i++)
+            catch(Exception e)
             {
-                var explosion = explosionList[i];
-                explosion.Timer--;
-                explosionList[i] = explosion;
-            
-                if (explosion.Timer <= 0)
-                {
-                    // Remove explosion
-                    if (i < explosionList.Count - 1)
-                    {
-                        explosionList[i] = explosionList[explosionList.Count - 1];
-                        explosionEntities[i] = explosionEntities[explosionEntities.Count - 1];
-                    }
-                    explosionList.RemoveAt(explosionList.Count - 1);
-                    explosionEntities.RemoveAt(explosionEntities.Count - 1);
-                }       
+                 Console.WriteLine("Update Crash: " + e.ToString());
+                 throw;
             }
-            base.Update(gameTime);
         }
-                    
 
         protected override void Draw(GameTime gameTime)
         {
-            GraphicsDevice.Clear(Color.Black);
-            _spriteBatch.Begin(samplerState: SamplerState.PointClamp);
-
-            const int tileSize = 32;
-
-            // Draw tiles (iterate sequentially through contiguous array)
-            var tiles = _world.Tiles.GetAll();
-            var tileTransforms = _world.Transforms.GetAll();
-            for (int i = 0; i < tiles.Count; i++)
+            try
             {
-                var tile = tiles[i];
-                var transform = tileTransforms[i];
+                // Console.WriteLine("Draw Start");
+                GraphicsDevice.Clear(Color.CornflowerBlue); 
+                _spriteBatch.Begin(samplerState: SamplerState.PointClamp);
         
-                Color color = tile.Type switch
-                {
-                    TileComponent.TileType.Solid => Color.DarkGray,
-                    TileComponent.TileType.Destructible => Color.Brown,
-                    _ => Color.Black
-                };
-                DrawRectangle(transform.GridX * tileSize, transform.GridY * tileSize, tileSize, tileSize, color);
-            }
+                var world = _simulation.World;
+                var transformEntities = world.Transforms.GetEntities();
+                var transforms = world.Transforms.GetAll();
 
-            // Draw bombs
-            var bombs = _world.Bombs.GetAll();
-            var bombEntities = _world.Bombs.GetEntities();
-            var transformEntities = _world.Transforms.GetEntities();
-            var transforms = _world.Transforms.GetAll();
+                // 1. Draw Tiles
+                var tileList = world.Tiles.GetAll();
+                var tileEntities = world.Tiles.GetEntities();
                 
-            for (int i = 0; i < bombs.Count; i++)
-            {
-                var bombEntity = bombEntities[i];
-                // Find the transform for this bomb
-                for (int j = 0; j < transformEntities.Count; j++)
+                for(int i=0; i<tileList.Count; i++)
                 {
-                    if (transformEntities[j].Equals(bombEntity))
-                    {
-                        var transform = transforms[j];
-                        DrawRectangle(transform.GridX * tileSize, transform.GridY * tileSize, tileSize, tileSize, Color.Black);
-                        DrawRectangle(transform.GridX * tileSize + 8, transform.GridY * tileSize + 8, 16, 16, Color.Yellow);
-                        break;
-                    }
-                }
-            }
-                
-            // Draw explosions
-            var explosions = _world.Explosions.GetAll();
-            var explosionEntities = _world.Explosions.GetEntities();
-                
-            for (int i = 0; i < explosions.Count; i++)
-            {
-                var explosionEntity = explosionEntities[i];
-                // Find the transform for this explosion
-                for (int j = 0; j < transformEntities.Count; j++)
-                {
-                    if (transformEntities[j].Equals(explosionEntity))
-                    {
-                        var transform = transforms[j];
-                        DrawRectangle(transform.GridX * tileSize, transform.GridY * tileSize, tileSize, tileSize, Color.OrangeRed);
-                        break;
-                    }
-                }
-            }
-                
-            // Draw player
-            var players = _world.Players.GetAll();
-            var playerEntities = _world.Players.GetEntities();
-                
-            for (int i = 0; i < players.Count; i++)
-            {
-                if (!players[i].Alive)
-                    continue;
+                    var entity = tileEntities[i];
+                    TransformComponent transform = FindTransform(entity, transformEntities, transforms);
                     
-                var playerEntity = playerEntities[i];
-                // Find the transform for this player
-                for (int j = 0; j < transformEntities.Count; j++)
-                {
-                    if (transformEntities[j].Equals(playerEntity))
+                    Color color = tileList[i].Type switch
                     {
-                        var transform = transforms[j];
-                        DrawRectangle(transform.GridX * tileSize, transform.GridY * tileSize, tileSize, tileSize, Color.Red);
-                        break;
+                        TileComponent.TileType.Solid => Color.DarkGray,
+                        TileComponent.TileType.Destructible => tileList[i].Destroyed ? Color.DarkGreen : Color.Brown,
+                        _ => Color.Transparent
+                    };
+                    
+                    if (tileList[i].Type == TileComponent.TileType.Destructible && !tileList[i].Destroyed)
+                    {
+                        DrawRectangle(transform.Position, transform.Size, color);
+                    }
+                    else if (tileList[i].Type == TileComponent.TileType.Solid)
+                    {
+                        DrawRectangle(transform.Position, transform.Size, color);
                     }
                 }
+
+                // 2. Draw Bombs
+                var bombList = world.Bombs.GetAll();
+                var bombEntities = world.Bombs.GetEntities();
+                for(int i=0; i<bombList.Count; i++)
+                {
+                    var entity = bombEntities[i];
+                    TransformComponent transform = FindTransform(entity, transformEntities, transforms);
+                    
+                    DrawRectangle(transform.Position + new Vector2(4,4), transform.Size - new Vector2(8,8), Color.Black);
+                    DrawRectangle(transform.Position + new Vector2(12, 12), new Vector2(8,8), Color.Yellow);
+                }
+
+                // 3. Draw Powerups
+                var powerups = world.Powerups.GetAll();
+                var powerupEntities = world.Powerups.GetEntities();
+                for(int i=0; i<powerups.Count; i++)
+                {
+                     if (i >= powerups.Count) break;
+                     var entity = powerupEntities[i];
+                     TransformComponent transform = FindTransform(entity, transformEntities, transforms);
+                     
+                     Color pColor = Color.White;
+                     if (powerups[i].Type == PowerupComponent.PowerupType.Range) pColor = Color.Yellow;
+                     if (powerups[i].Type == PowerupComponent.PowerupType.Capacity) pColor = Color.Black;
+                     
+                     DrawRectangle(transform.Position, transform.Size, pColor);
+                }
+
+                // 4. Draw Explosions
+                var expList = world.Explosions.GetAll();
+                var expEntities = world.Explosions.GetEntities();
+                for(int i=0; i<expList.Count; i++)
+                {
+                    if (i >= expList.Count) break; // Defensive
+                    var entity = expEntities[i];
+                    TransformComponent transform = FindTransform(entity, transformEntities, transforms);
+                    DrawRectangle(transform.Position, transform.Size, Color.OrangeRed);
+                }
+
+                // 4. Draw Players
+                var playerList = world.Players.GetAll();
+                var playerEntities = world.Players.GetEntities();
+                for(int i=0; i<playerList.Count; i++)
+                {
+                     if (i >= playerList.Count) break; // Defensive
+                    if (!playerList[i].Alive) continue;
+                    
+                    var entity = playerEntities[i];
+                    TransformComponent transform = FindTransform(entity, transformEntities, transforms);
+                    
+                    DrawRectangle(transform.Position, transform.Size, Color.Blue);
+                }
+
+                _spriteBatch.End();
+                base.Draw(gameTime);
             }
-                
-            _spriteBatch.End();
-            base.Draw(gameTime);
+             catch(Exception e)
+            {
+                 Console.WriteLine("Draw Crash: " + e.ToString());
+                 throw;
+            }
+        }
+        
+        private TransformComponent FindTransform(Entity entity, List<Entity> transformEntities, List<TransformComponent> transforms)
+        {
+            for(int i=0; i<transformEntities.Count; i++)
+            {
+                if(transformEntities[i].Equals(entity))
+                    return transforms[i];
+            }
+            return new TransformComponent();
         }
 
-
-        private void DrawRectangle(int x, int y, int width, int height, Color color)
+        private void DrawRectangle(Vector2 position, Vector2 size, Color color)
         {
-            _spriteBatch.Draw(_pixelTexture, new Rectangle(x, y, width, height), color);
-        }
-
-        private bool IsWalkable(int gridX, int gridY)
-        {
-            if (gridX < 0 || gridX >= 13 || gridY < 0 || gridY >= 13)
-                return false;
-            
-            // Check if there's a solid or destructible wall
-            var tiles = _world.Tiles.GetAll();
-            var tileTransforms = _world.Transforms.GetAll();
-            
-            for (int i = 0; i < tiles.Count; i++)
-            {
-                if (tileTransforms[i].GridX == gridX && tileTransforms[i].GridY == gridY)
-                {
-                    if (tiles[i].Type == TileComponent.TileType.Solid || tiles[i].Type == TileComponent.TileType.Destructible)
-                        return false;
-                }
-            }
-            
-            // Check if there's a bomb
-            var bombs = _world.Bombs.GetAll();
-            var bombEntities = _world.Bombs.GetEntities();
-            var transformEntities = _world.Transforms.GetEntities();
-            var transforms = _world.Transforms.GetAll();
-            
-            for (int i = 0; i < bombs.Count; i++)
-            {
-                var bombEntity = bombEntities[i];
-                for (int j = 0; j < transformEntities.Count; j++)
-                {
-                    if (transformEntities[j].Equals(bombEntity))
-                    {
-                        if (transforms[j].GridX == gridX && transforms[j].GridY == gridY)
-                            return false;
-                        break;
-                    }
-                }
-            }
-            
-            return true;
+             _spriteBatch.Draw(_pixelTexture, new Rectangle((int)position.X, (int)position.Y, (int)size.X, (int)size.Y), color);
         }
     }
 
@@ -370,8 +209,16 @@ namespace Bomberman
         [STAThread]
         static void Main()
         {
-            using (var game = new Game1())
-                game.Run();
+            try 
+            {
+                using (var game = new Game1())
+                    game.Run();
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("CRASH: " + e.ToString());
+                throw;
+            }
         }
     }
 }
