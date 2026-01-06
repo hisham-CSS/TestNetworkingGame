@@ -1,22 +1,6 @@
-# Visual Studio
+bin/
+obj/
 .vs/
 *.user
 *.suo
-*.userprefs
-*.sln.docstates
-
-# Build results
-[Bb]in/
-[Oo]bj/
-[Dd]ebug/
-[Rr]elease/
-
-# VS Code
-.vscode/
-
-# System
-Thumbs.db
-.DS_Store
-
-# Misc
-*.log
+Replays/
