@@ -76,160 +76,18 @@ namespace Bomberman
                 // Network Update
                 if (_networkManager != null) _networkManager.Update();
 
-                if (_state == GameState.Menu)
+                switch (_state)
                 {
-                    // Menu Logic
-                    if ((keyboardState.IsKeyDown(Keys.W) || keyboardState.IsKeyDown(Keys.Up)) && 
-                        !(_previousKeyboardState.IsKeyDown(Keys.W) || _previousKeyboardState.IsKeyDown(Keys.Up)))
-                    {
-                        _menuSelection--;
-                        if (_menuSelection < 0) _menuSelection = 3;
-                    }
-                    if ((keyboardState.IsKeyDown(Keys.S) || keyboardState.IsKeyDown(Keys.Down)) && 
-                        !(_previousKeyboardState.IsKeyDown(Keys.S) || _previousKeyboardState.IsKeyDown(Keys.Down)))
-                    {
-                        _menuSelection++;
-                        if (_menuSelection > 3) _menuSelection = 0;
-                    }
-
-                    if (keyboardState.IsKeyDown(Keys.Space) && !_previousKeyboardState.IsKeyDown(Keys.Space) ||
-                        keyboardState.IsKeyDown(Keys.Enter) && !_previousKeyboardState.IsKeyDown(Keys.Enter))
-                    {
-                        if (_menuSelection == 0) // Local Play
-                        {
-                             _state = GameState.Playing;
-                             _isRecording = true;
-                             _isReplaying = false;
-                             _isNetworked = false;
-                             _localPlayerId = 0;
-                             _recorder.Reset();
-                             _simulation = new Simulation(randomSeed, 1);
-                        }
-                        else if (_menuSelection == 1) // Host
-                        {
-                            _state = GameState.Lobby;
-                            _isRecording = false; 
-                            _isReplaying = false;
-                            _isNetworked = true;
-                            _localPlayerId = 0;
-                            _currentFrame = 0;
-                            _remoteInputBuffer.Clear();
-                            _networkSeed = new Random().Next();
-                            _connectedPlayerCount = 1;
-                            _totalPlayersForGame = 2; // Default 2P
-
-                            _networkManager = new NetworkManager(5000); // Host on 5000
-                            _networkManager.OnPacketReceived += OnNetworkPacket;
-                            
-                            Console.WriteLine("Hosting on Port 5000...");
-                        }
-                        else if (_menuSelection == 2) // Join
-                        {
-                            _state = GameState.Lobby;
-                            _isRecording = false;
-                            _isReplaying = false;
-                            _isNetworked = true;
-                            _localPlayerId = -1; // Unknown yet
-                            _currentFrame = 0;
-                            _remoteInputBuffer.Clear();
-
-                            _networkManager = new NetworkManager(0); // Client on Ephemeral Port
-                            _networkManager.Connect("127.0.0.1", 5000); 
-                            _networkManager.OnPacketReceived += OnNetworkPacket;
-
-                            // Send Join Request (Initial)
-                            _networkManager.Send(NetworkProtocol.CreateJoinRequest());
-                             Console.WriteLine("Sent Join Request...");
-                             _joinRetryTimer = 1.0f; // Seconds
-                        }
-                        else if (_menuSelection == 3) // Replay
-                        {
-                            _state = GameState.Replaying;
-                            _isRecording = false;
-                            _isReplaying = true;
-                            _isNetworked = false;
-                            _replayFrame = 0;
-                            _recorder.Load(Path.Combine("Replays", "replay.json"));
-                            _simulation = new Simulation(randomSeed, 2); // Assume 2P replay for now
-                        }
-                    }
-                }
-                else if (_state == GameState.Lobby)
-                {
-                    if (keyboardState.IsKeyDown(Keys.Escape))
-                    {
-                        _state = GameState.Menu;
-                        _networkManager?.Close();
-                        _networkManager = null;
-                    }
-
-                    // Client: Retry Join Request
-                    if (_localPlayerId == -1 && _networkManager != null)
-                    {
-                        _joinRetryTimer -= (float)gameTime.ElapsedGameTime.TotalSeconds;
-                        if (_joinRetryTimer <= 0)
-                        {
-                            _networkManager.Send(NetworkProtocol.CreateJoinRequest());
-                             Console.WriteLine("Resending Join Request...");
-                             _joinRetryTimer = 1.0f;
-                        }
-                    }
-
-                    if (_localPlayerId == 0) // HOST
-                    {
-                         // Configure Players
-                         int prevPlayers = _totalPlayersForGame;
-                         if (keyboardState.IsKeyDown(Keys.D2)) _totalPlayersForGame = 2;
-                         if (keyboardState.IsKeyDown(Keys.D3)) _totalPlayersForGame = 3;
-                         if (keyboardState.IsKeyDown(Keys.D4)) _totalPlayersForGame = 4;
-                         
-                         if (prevPlayers != _totalPlayersForGame)
-                         {
-                             // Broadcast Update
-                             byte[] update = NetworkProtocol.CreateLobbyUpdate(_connectedPlayerCount, _totalPlayersForGame);
-                             _networkManager.Broadcast(update);
-                         }
-
-                         // Start Game
-                         if (keyboardState.IsKeyDown(Keys.Enter) && !_previousKeyboardState.IsKeyDown(Keys.Enter))
-                         {
-                             // Check if we have enough connected players match the required count
-                             if (_connectedPlayerCount >= _totalPlayersForGame) 
-                             {
-                                 _networkManager.Broadcast(NetworkProtocol.CreateStartGame(_networkSeed, _totalPlayersForGame));
-                                 _state = GameState.Playing;
-                                 _simulation = new Simulation(_networkSeed, _totalPlayersForGame);
-                             }
-                             else
-                             {
-                                 Console.WriteLine($"Cannot start: {_connectedPlayerCount}/{_totalPlayersForGame} players ready.");
-                             }
-                         }
-                    }
-                }
-                else if (_state == GameState.Playing || _state == GameState.Replaying)
-                {
-                    if (keyboardState.IsKeyDown(Keys.Escape) && !_previousKeyboardState.IsKeyDown(Keys.Escape))
-                    {
-                        _state = GameState.Menu;
-                        if (_networkManager != null) { _networkManager.Close(); _networkManager = null; }
-                        if (_isRecording) _recorder.Save(Path.Combine("Replays", "replay.json"));
-                    }
-
-                    // Fixed Update Loop
-                    _accumulator += gameTime.ElapsedGameTime.TotalSeconds;
-
-                    // Input Latching (Capture "Just Pressed" events that happen between steps)
-                    if (keyboardState.IsKeyDown(Keys.Space) && !_previousKeyboardState.IsKeyDown(Keys.Space))
-                    {
-                        _pendingBombInput = true;
-                    }
-
-                    while (_accumulator >= FixedTimeStep)
-                    {
-                        StepSimulation(keyboardState); // Extracted method logic
-                        _accumulator -= FixedTimeStep;
-                    }
+                    case GameState.Menu:
+                        UpdateMenu(keyboardState);
+                        break;
+                    case GameState.Lobby:
+                        UpdateLobby(gameTime, keyboardState);
+                        break;
+                    case GameState.Playing:
+                    case GameState.Replaying:
+                        UpdateGame(gameTime, keyboardState);
+                        break;
                 }
 
                 _previousKeyboardState = keyboardState;
@@ -239,6 +97,163 @@ namespace Bomberman
             {
                  Console.WriteLine("Update Crash: " + e.ToString());
                  throw;
+            }
+        }
+
+        private void UpdateMenu(KeyboardState keyboardState)
+        {
+             if ((keyboardState.IsKeyDown(Keys.W) || keyboardState.IsKeyDown(Keys.Up)) && 
+                !(_previousKeyboardState.IsKeyDown(Keys.W) || _previousKeyboardState.IsKeyDown(Keys.Up)))
+            {
+                _menuSelection--;
+                if (_menuSelection < 0) _menuSelection = 3;
+            }
+            if ((keyboardState.IsKeyDown(Keys.S) || keyboardState.IsKeyDown(Keys.Down)) && 
+                !(_previousKeyboardState.IsKeyDown(Keys.S) || _previousKeyboardState.IsKeyDown(Keys.Down)))
+            {
+                _menuSelection++;
+                if (_menuSelection > 3) _menuSelection = 0;
+            }
+
+            if (keyboardState.IsKeyDown(Keys.Space) && !_previousKeyboardState.IsKeyDown(Keys.Space) ||
+                keyboardState.IsKeyDown(Keys.Enter) && !_previousKeyboardState.IsKeyDown(Keys.Enter))
+            {
+                if (_menuSelection == 0) // Local Play
+                {
+                        _state = GameState.Playing;
+                        _isRecording = true;
+                        _isReplaying = false;
+                        _isNetworked = false;
+                        _localPlayerId = 0;
+                        _recorder.Reset();
+                        _simulation = new Simulation(randomSeed, 1);
+                }
+                else if (_menuSelection == 1) // Host
+                {
+                    _state = GameState.Lobby;
+                    _isRecording = false; 
+                    _isReplaying = false;
+                    _isNetworked = true;
+                    _localPlayerId = 0;
+                    _currentFrame = 0;
+                    _remoteInputBuffer.Clear();
+                    _networkSeed = new Random().Next();
+                    _connectedPlayerCount = 1;
+                    _totalPlayersForGame = 2; // Default 2P
+
+                    _networkManager = new NetworkManager(5000); // Host on 5000
+                    _networkManager.OnPacketReceived += OnNetworkPacket;
+                    
+                    Console.WriteLine("Hosting on Port 5000...");
+                }
+                else if (_menuSelection == 2) // Join
+                {
+                    _state = GameState.Lobby;
+                    _isRecording = false;
+                    _isReplaying = false;
+                    _isNetworked = true;
+                    _localPlayerId = -1; // Unknown yet
+                    _currentFrame = 0;
+                    _remoteInputBuffer.Clear();
+
+                    _networkManager = new NetworkManager(0); // Client on Ephemeral Port
+                    _networkManager.Connect("127.0.0.1", 5000); 
+                    _networkManager.OnPacketReceived += OnNetworkPacket;
+
+                    // Send Join Request (Initial)
+                    _networkManager.Send(NetworkProtocol.CreateJoinRequest());
+                        Console.WriteLine("Sent Join Request...");
+                        _joinRetryTimer = 1.0f; // Seconds
+                }
+                else if (_menuSelection == 3) // Replay
+                {
+                    _state = GameState.Replaying;
+                    _isRecording = false;
+                    _isReplaying = true;
+                    _isNetworked = false;
+                    _replayFrame = 0;
+                    _recorder.Load(Path.Combine("Replays", "replay.json"));
+                    _simulation = new Simulation(randomSeed, 2); // Assume 2P replay for now
+                }
+            }
+        }
+
+        private void UpdateLobby(GameTime gameTime, KeyboardState keyboardState)
+        {
+             if (keyboardState.IsKeyDown(Keys.Escape))
+            {
+                _state = GameState.Menu;
+                _networkManager?.Close();
+                _networkManager = null;
+            }
+
+            // Client: Retry Join Request
+            if (_localPlayerId == -1 && _networkManager != null)
+            {
+                _joinRetryTimer -= (float)gameTime.ElapsedGameTime.TotalSeconds;
+                if (_joinRetryTimer <= 0)
+                {
+                    _networkManager.Send(NetworkProtocol.CreateJoinRequest());
+                        Console.WriteLine("Resending Join Request...");
+                        _joinRetryTimer = 1.0f;
+                }
+            }
+
+            if (_localPlayerId == 0) // HOST
+            {
+                    // Configure Players
+                    int prevPlayers = _totalPlayersForGame;
+                    if (keyboardState.IsKeyDown(Keys.D2)) _totalPlayersForGame = 2;
+                    if (keyboardState.IsKeyDown(Keys.D3)) _totalPlayersForGame = 3;
+                    if (keyboardState.IsKeyDown(Keys.D4)) _totalPlayersForGame = 4;
+                    
+                    if (prevPlayers != _totalPlayersForGame)
+                    {
+                        // Broadcast Update
+                        byte[] update = NetworkProtocol.CreateLobbyUpdate(_connectedPlayerCount, _totalPlayersForGame);
+                        _networkManager.Broadcast(update);
+                    }
+
+                    // Start Game
+                    if (keyboardState.IsKeyDown(Keys.Enter) && !_previousKeyboardState.IsKeyDown(Keys.Enter))
+                    {
+                        // Check if we have enough connected players match the required count
+                        if (_connectedPlayerCount >= _totalPlayersForGame) 
+                        {
+                            _networkManager.Broadcast(NetworkProtocol.CreateStartGame(_networkSeed, _totalPlayersForGame));
+                            _state = GameState.Playing;
+                            _simulation = new Simulation(_networkSeed, _totalPlayersForGame);
+                        }
+                        else
+                        {
+                            Console.WriteLine($"Cannot start: {_connectedPlayerCount}/{_totalPlayersForGame} players ready.");
+                        }
+                    }
+            }
+        }
+
+        private void UpdateGame(GameTime gameTime, KeyboardState keyboardState)
+        {
+             if (keyboardState.IsKeyDown(Keys.Escape) && !_previousKeyboardState.IsKeyDown(Keys.Escape))
+            {
+                _state = GameState.Menu;
+                if (_networkManager != null) { _networkManager.Close(); _networkManager = null; }
+                if (_isRecording) _recorder.Save(Path.Combine("Replays", "replay.json"));
+            }
+
+            // Fixed Update Loop
+            _accumulator += gameTime.ElapsedGameTime.TotalSeconds;
+
+            // Input Latching (Capture "Just Pressed" events that happen between steps)
+            if (keyboardState.IsKeyDown(Keys.Space) && !_previousKeyboardState.IsKeyDown(Keys.Space))
+            {
+                _pendingBombInput = true;
+            }
+
+            while (_accumulator >= FixedTimeStep)
+            {
+                StepSimulation(keyboardState); // Extracted method logic
+                _accumulator -= FixedTimeStep;
             }
         }
 
@@ -460,149 +475,158 @@ namespace Bomberman
         {
             try
             {
-                // Console.WriteLine("Draw Start");
                 GraphicsDevice.Clear(Color.CornflowerBlue); // Background
                 _spriteBatch.Begin(samplerState: SamplerState.PointClamp);
         
-                if (_state == GameState.Menu)
+                switch (_state)
                 {
-                    // Draw Menu
-                    int btnWidth = 200;
-                    int btnHeight = 40;
-                    int centerX = _graphics.PreferredBackBufferWidth / 2 - btnWidth / 2;
-                    int startY = 80;
-                    int spacing = 50;
-
-                    // 0: Play
-                    DrawMenuButton(0, "PLAY", centerX, startY, btnWidth, btnHeight, Color.Green, Color.Lime);
-                    
-                    // 1: Host
-                    DrawMenuButton(1, "HOST", centerX, startY + spacing, btnWidth, btnHeight, Color.Purple, Color.Magenta);
-
-                    // 2: Join
-                    DrawMenuButton(2, "JOIN", centerX, startY + spacing * 2, btnWidth, btnHeight, Color.Goldenrod, Color.Yellow);
-
-                    // 3: Replay
-                    DrawMenuButton(3, "REPLAY", centerX, startY + spacing * 3, btnWidth, btnHeight, Color.Blue, Color.Cyan);
-                }
-                else if (_state == GameState.Lobby)
-                {
-                     int scale = 3;
-                     DrawText("LOBBY", new Vector2(50, 50), scale, Color.White);
-                     
-                     if (_localPlayerId == 0)
-                     {
-                         DrawText($"HOSTING: {_connectedPlayerCount}/{_totalPlayersForGame} Players", new Vector2(50, 100), 2, Color.Yellow);
-                         DrawText("Press 2,3,4 to set Count", new Vector2(50, 140), 1, Color.White);
-                         DrawText("Press ENTER to Start", new Vector2(50, 180), 2, Color.Green);
-                     }
-                     else
-                     {
-                         if (_localPlayerId == -1) DrawText("Connecting...", new Vector2(50, 100), 2, Color.Yellow);
-                         else DrawText($"WAITING FOR HOST... (P{_localPlayerId})", new Vector2(50, 100), 2, Color.Yellow);
-                     }
-                }
-                else
-                {
-                    // Draw Simulation
-                    if (_simulation == null) return;
-                    var world = _simulation.World;
-                    var transformEntities = world.Transforms.GetEntities();
-                    var transforms = world.Transforms.GetAll();
-
-                    // 1. Draw Grid/Floor
-                    var tiles = world.Tiles.GetAll();
-                    var tileEntities = world.Tiles.GetEntities();
-                    for(int i=0; i<tiles.Count; i++)
-                    {
-                        var entity = tileEntities[i]; 
-                        TransformComponent transform = FindTransform(entity, transformEntities, transforms);
-
-                        // Draw Floor for EVERYTHING (or just Empty/Destructible)
-                        // If it's solid, we'll draw over it, but for Destructible, we need a floor underneath when it breaks
-                        DrawRectangle(transform.Position + new Vector2(1,1), transform.Size - new Vector2(2,2), Color.Gray);
-
-                        if (tiles[i].Type == TileComponent.TileType.Solid) 
-                        {
-                            DrawRectangle(transform.Position + new Vector2(1,1), transform.Size - new Vector2(2,2), Color.DarkGray);
-                        }
-                        else if (tiles[i].Type == TileComponent.TileType.Destructible && !tiles[i].Destroyed) 
-                        {
-                            DrawRectangle(transform.Position + new Vector2(1,1), transform.Size - new Vector2(2,2), Color.SaddleBrown);
-                        }
-                    }
-
-                    // 2. Draw Bombs
-                    var bombs = world.Bombs.GetAll();
-                    var bombEntities = world.Bombs.GetEntities();
-                    for(int i=0; i<bombs.Count; i++)
-                    {
-                         if (i >= bombEntities.Count) break;
-                         var entity = bombEntities[i];
-                         TransformComponent transform = FindTransform(entity, transformEntities, transforms);
-                         
-                         // Pulse red based on timer
-                         float pulse = (bombs[i].Timer % 20) / 20f;
-                         Color bColor = Color.Lerp(Color.Red, Color.DarkRed, pulse);
-
-                         DrawRectangle(transform.Position + new Vector2(4, 4), transform.Size - new Vector2(8,8), bColor);
-                    }
-
-                    // 3. Draw Powerups
-                    var powerups = world.Powerups.GetAll();
-                    var powerupEntities = world.Powerups.GetEntities();
-                    for(int i=0; i<powerups.Count; i++)
-                    {
-                         if (i >= powerups.Count) break;
-                         var entity = powerupEntities[i];
-                         TransformComponent transform = FindTransform(entity, transformEntities, transforms);
-                         
-                         Color pColor = Color.White;
-                         if (powerups[i].Type == PowerupComponent.PowerupType.Range) pColor = Color.Yellow;
-                         if (powerups[i].Type == PowerupComponent.PowerupType.Capacity) pColor = Color.Black;
-                         
-                         DrawRectangle(transform.Position, transform.Size, pColor);
-                    }
-
-                    // 4. Draw Explosions
-                    var expList = world.Explosions.GetAll();
-                    var expEntities = world.Explosions.GetEntities();
-                    for(int i=0; i<expList.Count; i++)
-                    {
-                        if (i >= expEntities.Count) break;
-                        var entity = expEntities[i];
-                        TransformComponent transform = FindTransform(entity, transformEntities, transforms);
-                        DrawRectangle(transform.Position, transform.Size, Color.OrangeRed);
-                    }
-
-                    // 5. Draw Players
-                    var players = world.Players.GetAll();
-                    var playerEntities = world.Players.GetEntities();
-                    for (int i = 0; i < players.Count; i++)
-                    {
-                        if (!players[i].Alive) continue; 
-                        var entity = playerEntities[i];
-                        TransformComponent transform = FindTransform(entity, transformEntities, transforms); // Returns 24x24 hitbox
-
-                        // Render Logic:
-                        // Draw at actual hitbox size to prevent clipping
-                        Color pColor = i == 0 ? Color.White : Color.Blue;
-                        DrawRectangle(transform.Position, transform.Size, pColor);
-                        
-                        // Eyes (Adjusted for 24x24)
-                        Vector2 eyeOffset = new Vector2(4, 6);
-                        DrawRectangle(transform.Position + eyeOffset, new Vector2(4, 6), Color.Black);
-                        DrawRectangle(transform.Position + new Vector2(transform.Size.X - eyeOffset.X - 4, eyeOffset.Y), new Vector2(4, 6), Color.Black);
-                    }
+                    case GameState.Menu:
+                        DrawMenu();
+                        break;
+                    case GameState.Lobby:
+                        DrawLobby();
+                        break;
+                    default:
+                        DrawGame();
+                        break;
                 }
 
                 _spriteBatch.End();
                 base.Draw(gameTime);
             }
-             catch(Exception e)
+            catch(Exception e)
             {
                  Console.WriteLine("Draw Crash: " + e.ToString());
                  throw;
+            }
+        }
+
+        private void DrawMenu()
+        {
+            int btnWidth = 200;
+            int btnHeight = 40;
+            int centerX = _graphics.PreferredBackBufferWidth / 2 - btnWidth / 2;
+            int startY = 80;
+            int spacing = 50;
+
+            // 0: Play
+            DrawMenuButton(0, "PLAY", centerX, startY, btnWidth, btnHeight, Color.Green, Color.Lime);
+            
+            // 1: Host
+            DrawMenuButton(1, "HOST", centerX, startY + spacing, btnWidth, btnHeight, Color.Purple, Color.Magenta);
+
+            // 2: Join
+            DrawMenuButton(2, "JOIN", centerX, startY + spacing * 2, btnWidth, btnHeight, Color.Goldenrod, Color.Yellow);
+
+            // 3: Replay
+            DrawMenuButton(3, "REPLAY", centerX, startY + spacing * 3, btnWidth, btnHeight, Color.Blue, Color.Cyan);
+        }
+
+        private void DrawLobby()
+        {
+             int scale = 3;
+             DrawText("LOBBY", new Vector2(50, 50), scale, Color.White);
+             
+             if (_localPlayerId == 0)
+             {
+                 DrawText($"HOSTING: {_connectedPlayerCount}/{_totalPlayersForGame} Players", new Vector2(50, 100), 2, Color.Yellow);
+                 DrawText("Press 2,3,4 to set Count", new Vector2(50, 140), 1, Color.White);
+                 DrawText("Press ENTER to Start", new Vector2(50, 180), 2, Color.Green);
+             }
+             else
+             {
+                 if (_localPlayerId == -1) DrawText("Connecting...", new Vector2(50, 100), 2, Color.Yellow);
+                 else DrawText($"WAITING FOR HOST... (P{_localPlayerId})", new Vector2(50, 100), 2, Color.Yellow);
+             }
+        }
+
+        private void DrawGame()
+        {
+            if (_simulation == null) return;
+            var world = _simulation.World;
+            var transformEntities = world.Transforms.GetEntities();
+            var transforms = world.Transforms.GetAll();
+
+            // 1. Draw Grid/Floor
+            var tiles = world.Tiles.GetAll();
+            var tileEntities = world.Tiles.GetEntities();
+            for(int i=0; i<tiles.Count; i++)
+            {
+                var entity = tileEntities[i]; 
+                TransformComponent transform = FindTransform(entity, transformEntities, transforms);
+
+                // Draw Floor for EVERYTHING (or just Empty/Destructible)
+                DrawRectangle(transform.Position + new Vector2(1,1), transform.Size - new Vector2(2,2), Color.Gray);
+
+                if (tiles[i].Type == TileComponent.TileType.Solid) 
+                {
+                    DrawRectangle(transform.Position + new Vector2(1,1), transform.Size - new Vector2(2,2), Color.DarkGray);
+                }
+                else if (tiles[i].Type == TileComponent.TileType.Destructible && !tiles[i].Destroyed) 
+                {
+                    DrawRectangle(transform.Position + new Vector2(1,1), transform.Size - new Vector2(2,2), Color.SaddleBrown);
+                }
+            }
+
+            // 2. Draw Bombs
+            var bombs = world.Bombs.GetAll();
+            var bombEntities = world.Bombs.GetEntities();
+            for(int i=0; i<bombs.Count; i++)
+            {
+                 if (i >= bombEntities.Count) break;
+                 var entity = bombEntities[i];
+                 TransformComponent transform = FindTransform(entity, transformEntities, transforms);
+                 
+                 // Pulse red based on timer
+                 float pulse = (bombs[i].Timer % 20) / 20f;
+                 Color bColor = Color.Lerp(Color.Red, Color.DarkRed, pulse);
+
+                 DrawRectangle(transform.Position + new Vector2(4, 4), transform.Size - new Vector2(8,8), bColor);
+            }
+
+            // 3. Draw Powerups
+            var powerups = world.Powerups.GetAll();
+            var powerupEntities = world.Powerups.GetEntities();
+            for(int i=0; i<powerups.Count; i++)
+            {
+                 if (i >= powerups.Count) break;
+                 var entity = powerupEntities[i];
+                 TransformComponent transform = FindTransform(entity, transformEntities, transforms);
+                 
+                 Color pColor = Color.White;
+                 if (powerups[i].Type == PowerupComponent.PowerupType.Range) pColor = Color.Yellow;
+                 if (powerups[i].Type == PowerupComponent.PowerupType.Capacity) pColor = Color.Black;
+                 
+                 DrawRectangle(transform.Position, transform.Size, pColor);
+            }
+
+            // 4. Draw Explosions
+            var expList = world.Explosions.GetAll();
+            var expEntities = world.Explosions.GetEntities();
+            for(int i=0; i<expList.Count; i++)
+            {
+                if (i >= expEntities.Count) break;
+                var entity = expEntities[i];
+                TransformComponent transform = FindTransform(entity, transformEntities, transforms);
+                DrawRectangle(transform.Position, transform.Size, Color.OrangeRed);
+            }
+
+            // 5. Draw Players
+            var players = world.Players.GetAll();
+            var playerEntities = world.Players.GetEntities();
+            for (int i = 0; i < players.Count; i++)
+            {
+                if (!players[i].Alive) continue; 
+                var entity = playerEntities[i];
+                TransformComponent transform = FindTransform(entity, transformEntities, transforms); 
+
+                Color pColor = i == 0 ? Color.White : Color.Blue;
+                DrawRectangle(transform.Position, transform.Size, pColor);
+                
+                // Eyes
+                Vector2 eyeOffset = new Vector2(4, 6);
+                DrawRectangle(transform.Position + eyeOffset, new Vector2(4, 6), Color.Black);
+                DrawRectangle(transform.Position + new Vector2(transform.Size.X - eyeOffset.X - 4, eyeOffset.Y), new Vector2(4, 6), Color.Black);
             }
         }
         
