@@ -102,6 +102,71 @@ namespace Bomberman
             UpdatePlayers(inputs, dt);
             UpdateBombs();
             UpdateExplosions();
+            CheckDamage();
+        }
+
+        private void CheckDamage()
+        {
+            var players = World.Players.GetAll();
+            var playerTransforms = World.Transforms.GetAll(); // Assumes aligned with Player Entities (risky if not synced, but current impl syncs them)
+            // Ideally use GetEntities to map correctly
+            var playerEntities = World.Players.GetEntities();
+            var playerTransformEntities = World.Transforms.GetEntities();
+            
+            var explosions = World.Explosions.GetAll();
+            if (explosions.Count == 0) return;
+            var explosionTransforms = World.Transforms.GetAll();
+            var explosionEntities = World.Transforms.GetEntities(); // Need to map explosion ID to Transform
+            var explosionCompEntities = World.Explosions.GetEntities(); 
+
+            // Optimization: Cache explosion rects
+            List<Rectangle> expRects = new List<Rectangle>();
+            for(int i=0; i<explosions.Count; i++) 
+            {
+                 // Find Transform for this explosion
+                 // Linear search again (TODO: Optimize ECS)
+                 var entity = explosionCompEntities[i];
+                 for(int t=0; t<explosionEntities.Count; t++) {
+                     if (explosionEntities[t].Equals(entity)) {
+                         var trans = explosionTransforms[t];
+                         // Shrink slightly to be nice?
+                         expRects.Add(new Rectangle((int)trans.Position.X + 4, (int)trans.Position.Y + 4, (int)trans.Size.X - 8, (int)trans.Size.Y - 8));
+                         break;
+                     }
+                 }
+            }
+
+            for (int i = 0; i < players.Count; i++)
+            {
+                if (!players[i].Alive) continue;
+
+                var pEntity = playerEntities[i];
+                // Find Player Transform
+                TransformComponent pTrans = new TransformComponent();
+                bool found = false;
+                for(int t=0; t<playerTransformEntities.Count; t++) {
+                    if (playerTransformEntities[t].Equals(pEntity)) {
+                        pTrans = playerTransforms[t];
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) continue;
+
+                Rectangle pRect = new Rectangle((int)pTrans.Position.X, (int)pTrans.Position.Y, (int)pTrans.Size.X, (int)pTrans.Size.Y);
+
+                foreach(var eRect in expRects)
+                {
+                    if (pRect.Intersects(eRect))
+                    {
+                        var p = players[i];
+                        p.Alive = false;
+                        World.Players.Set(i, p);
+                        Console.WriteLine($"Player {p.PlayerId} Died!");
+                        break;
+                    }
+                }
+            }
         }
 
         private void UpdatePlayers(InputState[] inputs, float dt)
@@ -111,14 +176,27 @@ namespace Bomberman
             var transforms = World.Transforms.GetAll();
             var transformEntities = World.Transforms.GetEntities();
 
-            for (int i = 0; i < players.Count; i++)
+            // Iterate by Player ID / Input Index to ensure deterministic input mapping
+            // DO NOT iterate by pool index, as that changes with removals!
+            for (int id = 0; id < inputs.Length; id++)
             {
-                if (!players[i].Alive || i >= inputs.Length) continue;
+                // Find the player component with this PlayerId
+                int pIndex = -1;
+                for(int k=0; k<players.Count; k++)
+                {
+                    if (players[k].PlayerId == id && players[k].Alive)
+                    {
+                        pIndex = k;
+                        break;
+                    }
+                }
+                
+                if (pIndex == -1) continue; // Player not found or dead (if checking alive here)
 
-                var input = inputs[i];
-                var playerEntity = playerEntities[i];
+                var input = inputs[id];
+                var playerEntity = playerEntities[pIndex];
 
-                // Find Transform (inefficient linear search, optimize later with a map or cache)
+                // Find Transform 
                 int transformIndex = -1;
                 for(int t=0; t<transformEntities.Count; t++) {
                     if (transformEntities[t].Equals(playerEntity)) {
@@ -142,6 +220,7 @@ namespace Bomberman
                 transforms[transformIndex] = transform;
 
                 // Powerup Pickup Collision
+                // ... (Logic remains same, just scoped to this loop) ...
                 // Naive O(N) check against all powerups
                 var powerups = World.Powerups.GetAll();
                 var powerupEntities = World.Powerups.GetEntities();
@@ -150,19 +229,17 @@ namespace Bomberman
                 
                 Rectangle playerRect = new Rectangle((int)transform.Position.X, (int)transform.Position.Y, (int)transform.Size.X, (int)transform.Size.Y);
 
-                // Collect for removal to avoid concurrent modification
                 List<Entity> eatenPowerups = new List<Entity>();
 
                 for(int p=0; p<powerups.Count; p++)
                 {
                     // Find transform for this powerup
-                    // Optimization: In a real ECS we'd cache this or iterate differently
                     int pTransIdx = -1;
                     for(int pt=0; pt<powerupTransformEntities.Count; pt++) {
-                        if (powerupTransformEntities[pt].Equals(powerupEntities[p])) {
-                            pTransIdx = pt;
-                            break;
-                        }
+                         if (powerupTransformEntities[pt].Equals(powerupEntities[p])) {
+                             pTransIdx = pt;
+                             break;
+                         }
                     }
                     if (pTransIdx == -1) continue;
 
@@ -171,18 +248,11 @@ namespace Bomberman
 
                     if (playerRect.Intersects(pRect))
                     {
-                        // Apply Effect
-                        var playerComp = players[i];
-                        if (powerups[p].Type == PowerupComponent.PowerupType.Range)
-                        {
-                            playerComp.BombRange++;
-                        }
-                        else if (powerups[p].Type == PowerupComponent.PowerupType.Capacity)
-                        {
-                            playerComp.BombCapacity++;
-                        }
-                        World.Players.Set(i, playerComp); // Update player stats
-
+                        var playerComp = players[pIndex];
+                        if (powerups[p].Type == PowerupComponent.PowerupType.Range) playerComp.BombRange++;
+                        else if (powerups[p].Type == PowerupComponent.PowerupType.Capacity) playerComp.BombCapacity++;
+                        
+                        World.Players.Set(pIndex, playerComp); // Update player stats
                         eatenPowerups.Add(powerupEntities[p]);
                     }
                 }
@@ -193,11 +263,10 @@ namespace Bomberman
                      World.Transforms.Remove(ep);
                  }
 
-
                 // Bomb Placement
                 if (input.PlaceBomb)
                 {
-                    TryPlaceBomb(transform.Position, players[i], playerEntity);
+                    TryPlaceBomb(transform.Position, players[pIndex], playerEntity);
                 }
             }
         }
