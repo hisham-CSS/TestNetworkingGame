@@ -29,13 +29,20 @@ namespace Bomberman
         private NetworkManager? _networkManager;
         private bool _isNetworked = false;
         private int _localPlayerId = 0; // 0 = Host, 1 = Client
-        private Dictionary<int, InputState> _remoteInputBuffer = new Dictionary<int, InputState>(); // Frame -> Input
+        private Dictionary<int, Dictionary<int, InputState>> _remoteInputBuffer = new Dictionary<int, Dictionary<int, InputState>>(); // Frame -> PlayerId -> Input
+        private Dictionary<int, InputState> _localInputBuffer = new Dictionary<int, InputState>(); // Frame -> LocalInput
         private int _currentFrame = 0;
 
         // Game State
-        private enum GameState { Menu, Playing, Replaying }
+        private enum GameState { Menu, Lobby, Playing, Replaying }
         private GameState _state = GameState.Menu;
+        private int _connectedPlayerCount = 1; // 1 = Self
+        private int _totalPlayersForGame = 2; // Default
+        private int _networkSeed = 12345;
         private int _menuSelection = 0; // 0 = Play (Local), 1 = Host, 2 = Join, 3 = Replay
+
+        private float _joinRetryTimer = 0f;
+        private bool _pendingBombInput = false;
 
         public Game1()
         {
@@ -100,36 +107,40 @@ namespace Bomberman
                         }
                         else if (_menuSelection == 1) // Host
                         {
-                            _state = GameState.Playing;
-                            _isRecording = false; // Disable recording in net play for now
+                            _state = GameState.Lobby;
+                            _isRecording = false; 
                             _isReplaying = false;
                             _isNetworked = true;
                             _localPlayerId = 0;
                             _currentFrame = 0;
                             _remoteInputBuffer.Clear();
+                            _networkSeed = new Random().Next();
+                            _connectedPlayerCount = 1;
+                            _totalPlayersForGame = 2; // Default 2P
 
                             _networkManager = new NetworkManager(5000); // Host on 5000
                             _networkManager.OnPacketReceived += OnNetworkPacket;
                             
-                            _simulation = new Simulation(randomSeed, 2);
                             Console.WriteLine("Hosting on Port 5000...");
                         }
                         else if (_menuSelection == 2) // Join
                         {
-                            _state = GameState.Playing;
+                            _state = GameState.Lobby;
                             _isRecording = false;
                             _isReplaying = false;
                             _isNetworked = true;
-                            _localPlayerId = 1;
+                            _localPlayerId = -1; // Unknown yet
                             _currentFrame = 0;
                             _remoteInputBuffer.Clear();
 
-                            _networkManager = new NetworkManager(5001); // Client on 5001 (simplified)
-                            _networkManager.Connect("127.0.0.1", 5000); // Connect to localhost host
+                            _networkManager = new NetworkManager(0); // Client on Ephemeral Port
+                            _networkManager.Connect("127.0.0.1", 5000); 
                             _networkManager.OnPacketReceived += OnNetworkPacket;
 
-                            _simulation = new Simulation(randomSeed, 2);
-                             Console.WriteLine("Joining 127.0.0.1:5000...");
+                            // Send Join Request (Initial)
+                            _networkManager.Send(NetworkProtocol.CreateJoinRequest());
+                             Console.WriteLine("Sent Join Request...");
+                             _joinRetryTimer = 1.0f; // Seconds
                         }
                         else if (_menuSelection == 3) // Replay
                         {
@@ -139,8 +150,61 @@ namespace Bomberman
                             _isNetworked = false;
                             _replayFrame = 0;
                             _recorder.Load(Path.Combine("Replays", "replay.json"));
-                            _simulation = new Simulation(randomSeed, 2);
+                            _simulation = new Simulation(randomSeed, 2); // Assume 2P replay for now
                         }
+                    }
+                }
+                else if (_state == GameState.Lobby)
+                {
+                    if (keyboardState.IsKeyDown(Keys.Escape))
+                    {
+                        _state = GameState.Menu;
+                        _networkManager?.Close();
+                        _networkManager = null;
+                    }
+
+                    // Client: Retry Join Request
+                    if (_localPlayerId == -1 && _networkManager != null)
+                    {
+                        _joinRetryTimer -= (float)gameTime.ElapsedGameTime.TotalSeconds;
+                        if (_joinRetryTimer <= 0)
+                        {
+                            _networkManager.Send(NetworkProtocol.CreateJoinRequest());
+                             Console.WriteLine("Resending Join Request...");
+                             _joinRetryTimer = 1.0f;
+                        }
+                    }
+
+                    if (_localPlayerId == 0) // HOST
+                    {
+                         // Configure Players
+                         int prevPlayers = _totalPlayersForGame;
+                         if (keyboardState.IsKeyDown(Keys.D2)) _totalPlayersForGame = 2;
+                         if (keyboardState.IsKeyDown(Keys.D3)) _totalPlayersForGame = 3;
+                         if (keyboardState.IsKeyDown(Keys.D4)) _totalPlayersForGame = 4;
+                         
+                         if (prevPlayers != _totalPlayersForGame)
+                         {
+                             // Broadcast Update
+                             byte[] update = NetworkProtocol.CreateLobbyUpdate(_connectedPlayerCount, _totalPlayersForGame);
+                             _networkManager.Broadcast(update);
+                         }
+
+                         // Start Game
+                         if (keyboardState.IsKeyDown(Keys.Enter) && !_previousKeyboardState.IsKeyDown(Keys.Enter))
+                         {
+                             // Check if we have enough connected players match the required count
+                             if (_connectedPlayerCount >= _totalPlayersForGame) 
+                             {
+                                 _networkManager.Broadcast(NetworkProtocol.CreateStartGame(_networkSeed, _totalPlayersForGame));
+                                 _state = GameState.Playing;
+                                 _simulation = new Simulation(_networkSeed, _totalPlayersForGame);
+                             }
+                             else
+                             {
+                                 Console.WriteLine($"Cannot start: {_connectedPlayerCount}/{_totalPlayersForGame} players ready.");
+                             }
+                         }
                     }
                 }
                 else if (_state == GameState.Playing || _state == GameState.Replaying)
@@ -154,6 +218,12 @@ namespace Bomberman
 
                     // Fixed Update Loop
                     _accumulator += gameTime.ElapsedGameTime.TotalSeconds;
+
+                    // Input Latching (Capture "Just Pressed" events that happen between steps)
+                    if (keyboardState.IsKeyDown(Keys.Space) && !_previousKeyboardState.IsKeyDown(Keys.Space))
+                    {
+                        _pendingBombInput = true;
+                    }
 
                     while (_accumulator >= FixedTimeStep)
                     {
@@ -172,13 +242,96 @@ namespace Bomberman
             }
         }
 
-        private void OnNetworkPacket(byte[] data)
+        private void OnNetworkPacket(byte[] data, System.Net.IPEndPoint sender)
         {
-            var (frame, input) = InputRecorder.DeserializeInput(data);
-            // Console.WriteLine($"Recv Frame {frame}");
-            if (!_remoteInputBuffer.ContainsKey(frame))
+            PacketType type = NetworkProtocol.ReadType(data);
+
+            switch (type)
             {
-                _remoteInputBuffer.Add(frame, input);
+                case PacketType.JoinRequest:
+                    if (_localPlayerId == 0 && _state == GameState.Lobby) // Only Host handles this
+                    {
+                        if (_connectedPlayerCount < _totalPlayersForGame)
+                        {
+                            _networkManager.AddClient(sender);
+                            int newId = _connectedPlayerCount;
+                            _connectedPlayerCount++;
+                            
+                            // Send Welcome
+                            byte[] welcome = NetworkProtocol.CreateWelcome(newId, _networkSeed, _totalPlayersForGame);
+                            _networkManager.SendTo(welcome, sender);
+
+                            // Broadcast Lobby Update to everyone
+                            byte[] update = NetworkProtocol.CreateLobbyUpdate(_connectedPlayerCount, _totalPlayersForGame);
+                            _networkManager.Broadcast(update);
+
+                            Console.WriteLine($"Client {newId} Joined from {sender}");
+                        }
+                    }
+                    break;
+                
+                case PacketType.Welcome:
+                    if (_localPlayerId == -1) // Client waiting for welcome
+                    {
+                        var info = NetworkProtocol.ReadWelcome(data);
+                        _localPlayerId = info.playerId;
+                        _networkSeed = info.seed;
+                        _totalPlayersForGame = info.playerCount;
+                        Console.WriteLine($"Joined as Player {_localPlayerId}. seed={_networkSeed}");
+                    }
+                    break;
+
+                case PacketType.LobbyUpdate:
+                    if (_state == GameState.Lobby)
+                    {
+                        var info = NetworkProtocol.ReadLobbyUpdate(data);
+                        _connectedPlayerCount = info.currentCount;
+                        _totalPlayersForGame = info.totalRequired;
+                    }
+                    break;
+
+                case PacketType.StartGame:
+                    if (_state == GameState.Lobby)
+                    {
+                        var info = NetworkProtocol.ReadStartGame(data);
+                        _networkSeed = info.seed;
+                        _totalPlayersForGame = info.playerCount;
+                        
+                        _state = GameState.Playing;
+                        _simulation = new Simulation(_networkSeed, _totalPlayersForGame);
+                         Console.WriteLine($"Game Started! Seed={_networkSeed}, Players={_totalPlayersForGame}");
+                    }
+                    break;
+
+                case PacketType.Input:
+                     if (_state == GameState.Playing)
+                     {
+                        var (pid, frame, input) = NetworkProtocol.ReadInputPacket(data);
+                        
+                        // Buffer logic: Frame -> Player -> Input
+                        if (!_remoteInputBuffer.ContainsKey(frame))
+                        {
+                            _remoteInputBuffer[frame] = new Dictionary<int, InputState>();
+                        }
+                        
+                        if (!_remoteInputBuffer[frame].ContainsKey(pid))
+                        {
+                            _remoteInputBuffer[frame][pid] = input;
+                        }
+
+                        // Host Relay Logic
+                        if (_localPlayerId == 0)
+                        {
+                            // If we received this from a client, we must broadcast it to everyone else
+                            // data is the exact packet bytes we received. 
+                            // Verify it's not from us? (Host doesn't receive via OnNetworkPacket from itself usually, but check just in case)
+                            if (pid != 0) 
+                            {
+                                _networkManager.Broadcast(data);
+                            }
+                        }
+                     }
+                    break;
             }
         }
 
@@ -205,47 +358,99 @@ namespace Bomberman
 
             if (movement != Vector2.Zero) movement.Normalize();
 
-            bool placeBomb = keyboardState.IsKeyDown(Keys.Space) && !_previousKeyboardState.IsKeyDown(Keys.Space);
-            
-            InputState localInput = new InputState { Movement = movement, PlaceBomb = placeBomb };
+            if (movement != Vector2.Zero) movement.Normalize();
+
+            // Check if we already decided input for this frame?
+            InputState localInput;
+            if (_localInputBuffer.ContainsKey(_currentFrame))
+            {
+                localInput = _localInputBuffer[_currentFrame];
+            }
+            else
+            {
+                // New Frame: Consume Latch
+                bool placeBomb = _pendingBombInput;
+                _pendingBombInput = false; // Reset Latch after consumption
+                localInput = new InputState { Movement = movement, PlaceBomb = placeBomb };
+                _localInputBuffer[_currentFrame] = localInput;
+            }
 
             if (_isNetworked)
             {
                 // Lockstep Logic
                 
                 // 1. Send Local Input for THIS frame
-                byte[] packet = InputRecorder.SerializeInput(_currentFrame, localInput);
-                if (_networkManager != null) _networkManager.Send(packet);
-
-                // 2. Do we have Remote Input for THIS frame?
-                if (_remoteInputBuffer.ContainsKey(_currentFrame))
+                byte[] packet = NetworkProtocol.CreateInputPacket(_localPlayerId, _currentFrame, localInput);
+                if (_networkManager != null) 
                 {
-                    // YES! We have both.
-                    InputState remoteInput = _remoteInputBuffer[_currentFrame];
-                    
-                    // Construct Full Input Array (Player 0, Player 1)
-                    inputs = new InputState[2];
-                    inputs[_localPlayerId] = localInput;
-                    inputs[1 - _localPlayerId] = remoteInput;
+                    if (_localPlayerId == 0) 
+                    {
+                        _networkManager.Broadcast(packet); // Host sends to all
+                        // Host also needs to treat this as received input? 
+                        // Actually StepSimulation uses 'localInput' directly for the local player.
+                        // So we don't need to loopback locally for execution, ONLY for relay (handled in OnNetworkPacket if we did that, but we just Broadcast here).
+                    }
+                    else 
+                    {
+                        _networkManager.Send(packet); // Client sends to Host
+                    }
+                }
 
-                    // Advance
+                // 2. Do we have Remote Input for THIS frame from ALL other players?
+                bool haveAllInputs = true;
+                if (!_remoteInputBuffer.ContainsKey(_currentFrame)) 
+                {
+                    haveAllInputs = false;
+                }
+                else
+                {
+                    var frameInputs = _remoteInputBuffer[_currentFrame];
+                    for (int i = 0; i < _totalPlayersForGame; i++)
+                    {
+                        if (i == _localPlayerId) continue; // Don't need remote input for self
+                        if (!frameInputs.ContainsKey(i))
+                        {
+                            haveAllInputs = false;
+                            break;
+                        }
+                    }
+                }
+
+                if (haveAllInputs)
+                {
+                    // YES! We have everyone.
+                    var frameInputs = _remoteInputBuffer.ContainsKey(_currentFrame) ? _remoteInputBuffer[_currentFrame] : new Dictionary<int, InputState>();
+                    
+                    // Construct Full Input Array
+                    inputs = new InputState[_totalPlayersForGame];
+                    inputs[_localPlayerId] = localInput;
+                    
+                    for (int i = 0; i < _totalPlayersForGame; i++)
+                    {
+                        if (i == _localPlayerId) continue;
+                        if (frameInputs.ContainsKey(i)) 
+                            inputs[i] = frameInputs[i];
+                        else 
+                            inputs[i] = new InputState(); // Should not happen given check above
+                    }
+
                     // Advance
                     if (_simulation != null) _simulation.Update(inputs, (float)FixedTimeStep);
                     _currentFrame++;
-                    // Remove old input to save memory (optional)
+                    // Remove old input to save memory
                     _remoteInputBuffer.Remove(_currentFrame - 100); 
+                    _localInputBuffer.Remove(_currentFrame - 100);
                 }
                 else
                 {
                     // NO. STALL.
-                    // Console.WriteLine($"Stalling Frame {_currentFrame} (Waiting for P{1-_localPlayerId})");
+                    // Console.WriteLine($"Stalling Frame {_currentFrame}");
                 }
             }
             else
             {
                 // Local Single Player
                 inputs = new InputState[] { localInput };
-                if (_isRecording) _recorder.RecordFrame(inputs);
                 if (_isRecording) _recorder.RecordFrame(inputs);
                 if (_simulation != null) _simulation.Update(inputs, (float)FixedTimeStep);
             }
@@ -279,6 +484,23 @@ namespace Bomberman
 
                     // 3: Replay
                     DrawMenuButton(3, "REPLAY", centerX, startY + spacing * 3, btnWidth, btnHeight, Color.Blue, Color.Cyan);
+                }
+                else if (_state == GameState.Lobby)
+                {
+                     int scale = 3;
+                     DrawText("LOBBY", new Vector2(50, 50), scale, Color.White);
+                     
+                     if (_localPlayerId == 0)
+                     {
+                         DrawText($"HOSTING: {_connectedPlayerCount}/{_totalPlayersForGame} Players", new Vector2(50, 100), 2, Color.Yellow);
+                         DrawText("Press 2,3,4 to set Count", new Vector2(50, 140), 1, Color.Gray);
+                         DrawText("Press ENTER to Start", new Vector2(50, 180), 2, Color.Green);
+                     }
+                     else
+                     {
+                         if (_localPlayerId == -1) DrawText("Connecting...", new Vector2(50, 100), 2, Color.Yellow);
+                         else DrawText($"WAITING FOR HOST... (P{_localPlayerId})", new Vector2(50, 100), 2, Color.Yellow);
+                     }
                 }
                 else
                 {

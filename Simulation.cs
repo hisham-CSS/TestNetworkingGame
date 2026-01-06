@@ -356,9 +356,12 @@ namespace Bomberman
         private void TryPlaceBomb(Vector2 playerPosition, PlayerComponent player, Entity playerEntity)
         {
             // Snap center of player to grid
-            Vector2 center = playerPosition + new Vector2(12, 12); // Assuming 24x24 player
-            int gridX = (int)(center.X / TileSize);
-            int gridY = (int)(center.Y / TileSize);
+            // Snap center of player to grid (Deterministic)
+            // Use integer math as much as possible to avoid float differences
+            int centerX = (int)(playerPosition.X + 12);
+            int centerY = (int)(playerPosition.Y + 12);
+            int gridX = centerX / TileSize;
+            int gridY = centerY / TileSize;
             
             Vector2 snapPos = new Vector2(gridX * TileSize, gridY * TileSize);
 

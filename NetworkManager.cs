@@ -8,10 +8,11 @@ namespace Bomberman
     public class NetworkManager
     {
         private UdpClient _udpClient;
-        private IPEndPoint? _remoteEndPoint;
+        private IPEndPoint? _remoteEndPoint; // Usage: For Client, this is the Host.
+        private List<IPEndPoint> _connectedClients = new List<IPEndPoint>(); // Usage: For Host, list of verified clients.
         private int _localPort;
 
-        public event Action<byte[]>? OnPacketReceived;
+        public event Action<byte[], IPEndPoint>? OnPacketReceived;
 
         public NetworkManager(int localPort)
         {
@@ -25,16 +26,38 @@ namespace Bomberman
             _remoteEndPoint = new IPEndPoint(IPAddress.Parse(ip), port);
         }
 
+        public void AddClient(IPEndPoint client)
+        {
+            if (!_connectedClients.Contains(client))
+            {
+                _connectedClients.Add(client);
+                Console.WriteLine($"[Network] Client Added: {client}");
+            }
+        }
+
         public void Send(byte[] data)
         {
             if (_remoteEndPoint == null) return;
+            SendTo(data, _remoteEndPoint);
+        }
+
+        public void SendTo(byte[] data, IPEndPoint target)
+        {
             try
             {
-                _udpClient.Send(data, data.Length, _remoteEndPoint);
+                _udpClient.Send(data, data.Length, target);
             }
             catch (Exception e)
             {
                 Console.WriteLine($"Send Error: {e.Message}");
+            }
+        }
+
+        public void Broadcast(byte[] data)
+        {
+            foreach(var client in _connectedClients)
+            {
+                SendTo(data, client);
             }
         }
 
@@ -47,22 +70,18 @@ namespace Bomberman
                     IPEndPoint sender = new IPEndPoint(IPAddress.Any, 0);
                     byte[] data = _udpClient.Receive(ref sender);
 
-                    // If we haven't officially connected efficiently (e.g. host waiting for join),
-                    // we might want to accept this sender as the remote.
-                    // For now, let's assume explicit Connect() or strict topology for simplicity,
-                    // OR auto-connect on first packet for Host.
-                    if (_remoteEndPoint == null)
+                    // Auto-detect remote (Simple 1v1 legacy support, or initial handshake)
+                    if (_remoteEndPoint == null && _connectedClients.Count == 0)
                     {
-                        _remoteEndPoint = sender;
-                        Console.WriteLine($"[Network] Connected to remote: {sender}");
+                        // _remoteEndPoint = sender; 
+                        // Don't auto-assign in lobby mode, let Protocol handle it.
                     }
 
-                    OnPacketReceived?.Invoke(data);
+                    OnPacketReceived?.Invoke(data, sender);
                 }
             }
             catch (SocketException e)
             {
-                // Ignore "WouldBlock" errors if any, though Available check avoids most
                 Console.WriteLine($"Socket Error: {e.Message}");
             }
         }
