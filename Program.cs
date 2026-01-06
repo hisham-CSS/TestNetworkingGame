@@ -184,6 +184,12 @@ namespace Bomberman
                     // Play Button (Green)
                     Color playColor = _menuSelection == 0 ? Color.Lime : Color.Green;
                     DrawRectangle(new Vector2(centerX, centerY), new Vector2(btnWidth, btnHeight), playColor);
+                    // Text
+                    string playText = "PLAY";
+                    int pScale = 4;
+                    int pTextWidth = playText.Length * (5 * pScale + pScale); // Width + Spacing
+                    DrawText(playText, new Vector2(centerX + btnWidth/2 - pTextWidth/2, centerY + 10), pScale, Color.White);
+
                     // Selection Border
                     if (_menuSelection == 0) DrawHollowRect(new Rectangle(centerX-2, centerY-2, btnWidth+4, btnHeight+4), Color.White);
 
@@ -192,6 +198,11 @@ namespace Bomberman
                     int rY = centerY + 80;
                     Color replayColor = _menuSelection == 1 ? Color.Cyan : Color.Blue;
                     DrawRectangle(new Vector2(rX, rY), new Vector2(btnWidth, btnHeight), replayColor);
+                     // Text
+                    string repText = "REPLAY";
+                    int rTextWidth = repText.Length * (5 * pScale + pScale);
+                    DrawText(repText, new Vector2(rX + btnWidth/2 - rTextWidth/2, rY + 10), pScale, Color.White);
+
                     // Selection Border
                     if (_menuSelection == 1) DrawHollowRect(new Rectangle(rX-2, rY-2, btnWidth+4, btnHeight+4), Color.White);
                 }
@@ -306,6 +317,29 @@ namespace Bomberman
                     return transforms[i];
             }
             return new TransformComponent();
+        }
+
+        private void DrawText(string text, Vector2 position, int scale, Color color)
+        {
+            int spacing = 1 * scale;
+            int charWidth = 5 * scale;
+            
+            for(int i=0; i<text.Length; i++)
+            {
+                bool[,] bitmap = PixelFont.GetBitmap(text[i]);
+                Vector2 charPos = position + new Vector2(i * (charWidth + spacing), 0);
+                
+                for(int x=0; x<5; x++)
+                {
+                    for(int y=0; y<5; y++)
+                    {
+                        if (bitmap[x,y])
+                        {
+                            DrawRectangle(charPos + new Vector2(x * scale, y * scale), new Vector2(scale, scale), color);
+                        }
+                    }
+                }
+            }
         }
 
         private void DrawHollowRect(Rectangle rect, Color color)
