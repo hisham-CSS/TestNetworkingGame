@@ -11,6 +11,7 @@ namespace Bomberman
         private IPEndPoint? _remoteEndPoint; // Usage: For Client, this is the Host.
         private List<IPEndPoint> _connectedClients = new List<IPEndPoint>(); // Usage: For Host, list of verified clients.
         private int _localPort;
+        public int LocalPort => _localPort;
 
         public event Action<byte[], IPEndPoint>? OnPacketReceived;
 
@@ -18,6 +19,7 @@ namespace Bomberman
         {
             _localPort = localPort;
             _udpClient = new UdpClient(localPort);
+            _udpClient.EnableBroadcast = true;
             _udpClient.Client.Blocking = false; // Non-blocking mode
         }
 
@@ -59,6 +61,11 @@ namespace Bomberman
             {
                 SendTo(data, client);
             }
+        }
+        
+        public void BroadcastToPort(byte[] data, int port)
+        {
+            SendTo(data, new IPEndPoint(IPAddress.Broadcast, port));
         }
 
         public void Update()

@@ -8,9 +8,9 @@ namespace Bomberman
 {
     public class Game1 : Game
     {
-        private Texture2D? _pixelTexture;
+        private Texture2D _pixelTexture = null!;
         private GraphicsDeviceManager _graphics;
-        private SpriteBatch? _spriteBatch;
+        private SpriteBatch _spriteBatch = null!;
         
         private Simulation? _simulation;
         private KeyboardState _previousKeyboardState;
@@ -34,12 +34,17 @@ namespace Bomberman
         private int _currentFrame = 0;
 
         // Game State
-        private enum GameState { Menu, Lobby, Playing, Replaying }
+        private enum GameState { Menu, Lobby, Playing, Replaying, ServerBrowser }
         private GameState _state = GameState.Menu;
         private int _connectedPlayerCount = 1; // 1 = Self
         private int _totalPlayersForGame = 2; // Default
         private int _networkSeed = 12345;
         private int _menuSelection = 0; // 0 = Play (Local), 1 = Host, 2 = Join, 3 = Replay
+        
+        // Discovery
+        private Dictionary<System.Net.IPEndPoint, (string name, int current, int max)> _foundServers = new Dictionary<System.Net.IPEndPoint, (string, int, int)>();
+        private float _discoveryTimer = 0f;
+        private int _browserSelection = 0;
 
         private float _joinRetryTimer = 0f;
         private bool _pendingBombInput = false;
@@ -87,6 +92,9 @@ namespace Bomberman
                     case GameState.Playing:
                     case GameState.Replaying:
                         UpdateGame(gameTime, keyboardState);
+                        break;
+                    case GameState.ServerBrowser:
+                        UpdateServerBrowser(gameTime, keyboardState);
                         break;
                 }
 
@@ -141,29 +149,47 @@ namespace Bomberman
                     _connectedPlayerCount = 1;
                     _totalPlayersForGame = 2; // Default 2P
 
-                    _networkManager = new NetworkManager(5000); // Host on 5000
-                    _networkManager.OnPacketReceived += OnNetworkPacket;
-                    
-                    Console.WriteLine("Hosting on Port 5000...");
+                    _networkManager = null;
+                    for(int port = 5000; port < 5010; port++)
+                    {
+                        try 
+                        {
+                            _networkManager = new NetworkManager(port);
+                            _networkManager.OnPacketReceived += OnNetworkPacket;
+                            Console.WriteLine($"Hosting on Port {port}...");
+                            break; 
+                        }
+                        catch(System.Net.Sockets.SocketException)
+                        {
+                            Console.WriteLine($"Port {port} busy, trying next...");
+                            _networkManager = null;
+                        }
+                    }
+
+                    if (_networkManager == null)
+                    {
+                         Console.WriteLine("Failed to bind any port (5000-5009)!");
+                         _state = GameState.Menu; // Abort
+                    }
                 }
-                else if (_menuSelection == 2) // Join
+                else if (_menuSelection == 2) // Join -> Server Browser
                 {
-                    _state = GameState.Lobby;
+                    _state = GameState.ServerBrowser;
                     _isRecording = false;
                     _isReplaying = false;
                     _isNetworked = true;
-                    _localPlayerId = -1; // Unknown yet
-                    _currentFrame = 0;
-                    _remoteInputBuffer.Clear();
+                    _foundServers.Clear();
+                    _discoveryTimer = 0f;
+                    _browserSelection = 0;
+                    
+                    // Start network manager immediately for broadcast
+                    if (_networkManager == null)
+                    {
+                        _networkManager = new NetworkManager(0); // Client on Ephemeral
+                        _networkManager.OnPacketReceived += OnNetworkPacket;
+                    }
 
-                    _networkManager = new NetworkManager(0); // Client on Ephemeral Port
-                    _networkManager.Connect("127.0.0.1", 5000); 
-                    _networkManager.OnPacketReceived += OnNetworkPacket;
-
-                    // Send Join Request (Initial)
-                    _networkManager.Send(NetworkProtocol.CreateJoinRequest());
-                        Console.WriteLine("Sent Join Request...");
-                        _joinRetryTimer = 1.0f; // Seconds
+                    Console.WriteLine("Entered Server Browser...");
                 }
                 else if (_menuSelection == 3) // Replay
                 {
@@ -211,7 +237,7 @@ namespace Bomberman
                     {
                         // Broadcast Update
                         byte[] update = NetworkProtocol.CreateLobbyUpdate(_connectedPlayerCount, _totalPlayersForGame);
-                        _networkManager.Broadcast(update);
+                        _networkManager?.Broadcast(update);
                     }
 
                     // Start Game
@@ -220,7 +246,7 @@ namespace Bomberman
                         // Check if we have enough connected players match the required count
                         if (_connectedPlayerCount >= _totalPlayersForGame) 
                         {
-                            _networkManager.Broadcast(NetworkProtocol.CreateStartGame(_networkSeed, _totalPlayersForGame));
+                            _networkManager?.Broadcast(NetworkProtocol.CreateStartGame(_networkSeed, _totalPlayersForGame));
                             _state = GameState.Playing;
                             _simulation = new Simulation(_networkSeed, _totalPlayersForGame);
                         }
@@ -232,6 +258,64 @@ namespace Bomberman
             }
         }
 
+        private void UpdateServerBrowser(GameTime gameTime, KeyboardState keyboardState)
+        {
+            if (keyboardState.IsKeyDown(Keys.Escape))
+            {
+                 _state = GameState.Menu;
+                 _networkManager?.Close();
+                 _networkManager = null;
+                 return;
+            }
+
+            // Periodic Broadcast
+            _discoveryTimer -= (float)gameTime.ElapsedGameTime.TotalSeconds;
+            if (_discoveryTimer <= 0)
+            {
+                // Broadcast to ALL possible host ports
+                for(int p=5000; p<5010; p++)
+                {
+                    _networkManager?.BroadcastToPort(NetworkProtocol.CreateDiscoveryRequest(), p);
+                }
+                _discoveryTimer = 2.0f; // Retry every 2s
+            }
+
+            // Navigation
+            if ((keyboardState.IsKeyDown(Keys.W) || keyboardState.IsKeyDown(Keys.Up)) && 
+               !(_previousKeyboardState.IsKeyDown(Keys.W) || _previousKeyboardState.IsKeyDown(Keys.Up)))
+            {
+               _browserSelection--;
+               if (_browserSelection < 0) _browserSelection = _foundServers.Count - 1; 
+               if (_browserSelection < 0) _browserSelection = 0;
+            }
+            if ((keyboardState.IsKeyDown(Keys.S) || keyboardState.IsKeyDown(Keys.Down)) && 
+               !(_previousKeyboardState.IsKeyDown(Keys.S) || _previousKeyboardState.IsKeyDown(Keys.Down)))
+            {
+               _browserSelection++;
+               if (_browserSelection >= _foundServers.Count) _browserSelection = 0;
+            }
+
+            // Selection
+            if (keyboardState.IsKeyDown(Keys.Enter) && !_previousKeyboardState.IsKeyDown(Keys.Enter))
+            {
+                if (_foundServers.Count > 0 && _browserSelection < _foundServers.Count)
+                {
+                    // Connect!
+                    var endpoint = new List<System.Net.IPEndPoint>(_foundServers.Keys)[_browserSelection];
+                    _networkManager?.Connect(endpoint.Address.ToString(), endpoint.Port);
+                    
+                    _state = GameState.Lobby;
+                    _localPlayerId = -1;
+                    _currentFrame = 0;
+                    _remoteInputBuffer.Clear();
+                    
+                    // Send Join
+                    _networkManager?.Send(NetworkProtocol.CreateJoinRequest());
+                    Console.WriteLine($"Joining {endpoint}...");
+                    _joinRetryTimer = 1.0f;
+                }
+            }
+        }
         private void UpdateGame(GameTime gameTime, KeyboardState keyboardState)
         {
              if (keyboardState.IsKeyDown(Keys.Escape) && !_previousKeyboardState.IsKeyDown(Keys.Escape))
@@ -268,7 +352,7 @@ namespace Bomberman
                     {
                         if (_connectedPlayerCount < _totalPlayersForGame)
                         {
-                            _networkManager.AddClient(sender);
+                            _networkManager?.AddClient(sender);
                             int newId = _connectedPlayerCount;
                             _connectedPlayerCount++;
                             
@@ -342,10 +426,27 @@ namespace Bomberman
                             // Verify it's not from us? (Host doesn't receive via OnNetworkPacket from itself usually, but check just in case)
                             if (pid != 0) 
                             {
-                                _networkManager.Broadcast(data);
+                                _networkManager?.Broadcast(data);
                             }
                         }
                      }
+                    break;
+
+                case PacketType.DiscoveryRequest:
+                    if (_localPlayerId == 0 && (_state == GameState.Lobby || _state == GameState.Playing))
+                    {
+                        // I am host, reply
+                        var resp = NetworkProtocol.CreateDiscoveryResponse("Local Game", _connectedPlayerCount, _totalPlayersForGame);
+                        _networkManager?.SendTo(resp, sender);
+                    }
+                    break;
+                
+                case PacketType.DiscoveryResponse:
+                    if (_state == GameState.ServerBrowser)
+                    {
+                        var info = NetworkProtocol.ReadDiscoveryResponse(data);
+                        _foundServers[sender] = info;
+                    }
                     break;
             }
         }
@@ -486,6 +587,10 @@ namespace Bomberman
                     case GameState.Lobby:
                         DrawLobby();
                         break;
+
+                    case GameState.ServerBrowser:
+                        DrawServerBrowser();
+                        break;
                     default:
                         DrawGame();
                         break;
@@ -529,7 +634,8 @@ namespace Bomberman
              
              if (_localPlayerId == 0)
              {
-                 DrawText($"HOSTING: {_connectedPlayerCount}/{_totalPlayersForGame} Players", new Vector2(50, 100), 2, Color.Yellow);
+                 int port = _networkManager != null ? _networkManager.LocalPort : 0;
+                 DrawText($"HOSTING (Port {port}): {_connectedPlayerCount}/{_totalPlayersForGame} Players", new Vector2(50, 100), 2, Color.Yellow);
                  DrawText("Press 2,3,4 to set Count", new Vector2(50, 140), 1, Color.White);
                  DrawText("Press ENTER to Start", new Vector2(50, 180), 2, Color.Green);
              }
@@ -538,6 +644,34 @@ namespace Bomberman
                  if (_localPlayerId == -1) DrawText("Connecting...", new Vector2(50, 100), 2, Color.Yellow);
                  else DrawText($"WAITING FOR HOST... (P{_localPlayerId})", new Vector2(50, 100), 2, Color.Yellow);
              }
+        }
+
+        private void DrawServerBrowser()
+        {
+             DrawText("SERVER BROWSER", new Vector2(50, 50), 3, Color.White);
+             DrawText("Scanning...", new Vector2(50, 90), 1, Color.Gray);
+
+             int startY = 130;
+             int index = 0;
+             if (_foundServers.Count == 0)
+             {
+                 DrawText("No servers found.", new Vector2(50, startY), 2, Color.Red);
+             }
+             foreach(var kvp in _foundServers) // Dictionary enumeration order is undefined but stable enough for simple UI usually
+             {
+                 var ep = kvp.Key;
+                 var info = kvp.Value;
+                 bool selected = index == _browserSelection;
+                 
+                 string line = $"{info.name} - {info.current}/{info.max} ({ep.Address})";
+                 DrawText(line, new Vector2(50, startY + index * 40), 2, selected ? Color.Yellow : Color.White);
+                 
+                 if (selected) DrawText(">", new Vector2(20, startY + index * 40), 2, Color.Yellow);
+                 
+                 index++;
+             }
+             
+             DrawText("Press ENTER to Join", new Vector2(50, 380), 2, Color.Green);
         }
 
         private void DrawGame()
@@ -620,7 +754,8 @@ namespace Bomberman
                 var entity = playerEntities[i];
                 TransformComponent transform = FindTransform(entity, transformEntities, transforms); 
 
-                Color pColor = i == 0 ? Color.White : Color.Blue;
+                Color[] playerColors = new Color[] { Color.White, Color.Blue, Color.Red, Color.Green };
+                Color pColor = playerColors[i % playerColors.Length];
                 DrawRectangle(transform.Position, transform.Size, pColor);
                 
                 // Eyes

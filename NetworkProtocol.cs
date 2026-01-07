@@ -9,7 +9,9 @@ namespace Bomberman
         JoinRequest = 1,
         Welcome = 2,
         StartGame = 3,
-        LobbyUpdate = 4
+        LobbyUpdate = 4,
+        DiscoveryRequest = 5,
+        DiscoveryResponse = 6
     }
 
     public static class NetworkProtocol
@@ -130,6 +132,37 @@ namespace Bomberman
         {
              if (data == null || data.Length == 0) return PacketType.Input; // Fallback? Or Error?
              return (PacketType)data[0];
+        }
+
+        public static byte[] CreateDiscoveryRequest()
+        {
+            return new byte[] { (byte)PacketType.DiscoveryRequest };
+        }
+
+        public static byte[] CreateDiscoveryResponse(string serverName, int currentPlayers, int maxPlayers)
+        {
+            using (var ms = new MemoryStream())
+            using (var writer = new BinaryWriter(ms))
+            {
+                writer.Write((byte)PacketType.DiscoveryResponse);
+                writer.Write(serverName); // String length prefixed automatically
+                writer.Write(currentPlayers);
+                writer.Write(maxPlayers);
+                return ms.ToArray();
+            }
+        }
+
+        public static (string serverName, int currentPlayers, int maxPlayers) ReadDiscoveryResponse(byte[] data)
+        {
+            using (var ms = new MemoryStream(data))
+            using (var reader = new BinaryReader(ms))
+            {
+                reader.ReadByte(); // Skip Type
+                string name = reader.ReadString();
+                int current = reader.ReadInt32();
+                int max = reader.ReadInt32();
+                return (name, current, max);
+            }
         }
     }
 }
