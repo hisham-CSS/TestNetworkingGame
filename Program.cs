@@ -12,34 +12,23 @@ namespace Bomberman
         private GraphicsDeviceManager _graphics;
         private SpriteBatch _spriteBatch = null!;
         
-        private Simulation? _simulation;
+        // Rollback System
+        private RollbackSystem? _rollbackSystem;
+        private int _currentFrame => _rollbackSystem != null ? _rollbackSystem.CurrentFrame : 0;
+        
         private KeyboardState _previousKeyboardState;
         
         private double _accumulator = 0.0;
         private const double FixedTimeStep = 1.0 / 60.0;
-
-        // Replay System
-        private InputRecorder _recorder = new InputRecorder();
-        private bool _isRecording = false;
-        private bool _isReplaying = false;
-        private int _replayFrame = 0;
+        
         private int randomSeed = 12345;
 
         // Networking
-        private NetworkManager? _networkManager;
-        private bool _isNetworked = false;
+        private NetworkController? _networkController;
+        // _isNetworked removed
         private int _localPlayerId = 0; // 0 = Host, 1 = Client
-        private Dictionary<int, Dictionary<int, InputState>> _remoteInputBuffer = new Dictionary<int, Dictionary<int, InputState>>(); // Frame -> PlayerId -> Input
-        private Dictionary<int, InputState> _localInputBuffer = new Dictionary<int, InputState>(); // Frame -> LocalInput
 
-        private int _currentFrame = 0;
-
-        // Rollback System
-        private Dictionary<int, GameStateSnapshot> _snapshotBuffer = new Dictionary<int, GameStateSnapshot>();
-        private Dictionary<int, InputState> _lastConfirmedRemoteInputs = new Dictionary<int, InputState>();
-        private Dictionary<int, int> _lastConfirmedRemoteFrame = new Dictionary<int, int>();
-        private const int MaxSnapshotFrames = 120;
-        private const int MaxPredictionFrames = 15; // Limit how far we can drift ahead of others // Keep 2 seconds of history at 60Hz
+        // Rollback System (Extracted)
 
         // Game State
         private enum GameState { Menu, Lobby, Playing, Replaying, ServerBrowser }
@@ -87,7 +76,7 @@ namespace Bomberman
                 var keyboardState = Keyboard.GetState();
                 
                 // Network Update
-                if (_networkManager != null) _networkManager.Update();
+                if (_networkController != null) _networkController.Update();
 
                 switch (_state)
                 {
@@ -137,53 +126,51 @@ namespace Bomberman
                 if (_menuSelection == 0) // Local Play
                 {
                         _state = GameState.Playing;
-                        _isRecording = true;
-                        _isReplaying = false;
-                        _isNetworked = false;
                         _localPlayerId = 0;
-                        _recorder.Reset();
-                        _simulation = new Simulation(randomSeed, 1);
+                        
+                        _rollbackSystem = new RollbackSystem(_localPlayerId, 1);
+                        _rollbackSystem.IsRecording = true;
+                        _rollbackSystem.InitializeSimulation(randomSeed, 1);
+                        
                         string logFile = $"debug_log_player_{_localPlayerId}.txt";
                         File.WriteAllText(logFile, "--- Local Play Start ---\n");
-                        _simulation.Log = (msg) => {
-                            string line = $"[{DateTime.Now:HH:mm:ss.fff}] [Frame {_currentFrame}] {msg}\n";
-                            File.AppendAllText(logFile, line);
-                            Console.Write(line);
-                        };
+                        if (_rollbackSystem.Simulation != null)
+                        {
+                            _rollbackSystem.Simulation.Log = (msg) => {
+                                string line = $"[{DateTime.Now:HH:mm:ss.fff}] [Frame {_currentFrame}] {msg}\n";
+                                File.AppendAllText(logFile, line);
+                                Console.Write(line);
+                            };
+                        }
                 }
                 else if (_menuSelection == 1) // Host
                 {
-                    _state = GameState.Lobby;
-                    _isRecording = true; // REQUIRED FOR ROLLBACK HISTORY
-                    _isReplaying = false;
-                    _isNetworked = true;
-                    _localPlayerId = 0;
-                    _currentFrame = 0;
-                    _remoteInputBuffer.Clear();
+                     _state = GameState.Lobby;
+                     // _isNetworked = true; // Implied by controller existence
+                     _localPlayerId = 0;
+                    // _currentFrame reset handled by RollbackSystem later
                     _networkSeed = new Random().Next();
                     _connectedPlayerCount = 1;
                     _totalPlayersForGame = 2; // Default 2P 
-                    
-                    _recorder.Reset(); // Clear old history
 
-                    _networkManager = null;
+                    _networkController = null;
                     for(int port = 5000; port < 5010; port++)
                     {
                         try 
                         {
-                            _networkManager = new NetworkManager(port);
-                            _networkManager.OnPacketReceived += OnNetworkPacket;
+                            _networkController = new NetworkController(port);
+                            HookNetworkEvents();
                             Console.WriteLine($"Hosting on Port {port}...");
                             break; 
                         }
                         catch(System.Net.Sockets.SocketException)
                         {
                             Console.WriteLine($"Port {port} busy, trying next...");
-                            _networkManager = null;
+                            _networkController = null;
                         }
                     }
 
-                    if (_networkManager == null)
+                    if (_networkController == null)
                     {
                          Console.WriteLine("Failed to bind any port (5000-5009)!");
                          _state = GameState.Menu; // Abort
@@ -192,18 +179,16 @@ namespace Bomberman
                 else if (_menuSelection == 2) // Join -> Server Browser
                 {
                     _state = GameState.ServerBrowser;
-                    _isRecording = false;
-                    _isReplaying = false;
-                    _isNetworked = true;
+                    // _isNetworked = true;
                     _foundServers.Clear();
                     _discoveryTimer = 0f;
                     _browserSelection = 0;
                     
                     // Start network manager immediately for broadcast
-                    if (_networkManager == null)
+                    if (_networkController == null)
                     {
-                        _networkManager = new NetworkManager(0); // Client on Ephemeral
-                        _networkManager.OnPacketReceived += OnNetworkPacket;
+                        _networkController = new NetworkController(0); // Client on Ephemeral
+                        HookNetworkEvents();
                     }
 
                     Console.WriteLine("Entered Server Browser...");
@@ -211,12 +196,11 @@ namespace Bomberman
                 else if (_menuSelection == 3) // Replay
                 {
                     _state = GameState.Replaying;
-                    _isRecording = false;
-                    _isReplaying = true;
-                    _isNetworked = false;
-                    _replayFrame = 0;
-                    _recorder.Load(Path.Combine("Replays", "replay.json"));
-                    _simulation = new Simulation(randomSeed, 2); // Assume 2P replay for now
+                    // _isNetworked = false;
+                    
+                    _rollbackSystem = new RollbackSystem(0, 2); 
+                    _rollbackSystem.LoadReplay(Path.Combine("Replays", "replay.json"));
+                    _rollbackSystem.InitializeSimulation(randomSeed, 2); // TODO: Load seed from replay
                 }
             }
         }
@@ -226,17 +210,17 @@ namespace Bomberman
              if (keyboardState.IsKeyDown(Keys.Escape))
             {
                 _state = GameState.Menu;
-                _networkManager?.Close();
-                _networkManager = null;
+                _networkController?.Close();
+                _networkController = null;
             }
 
             // Client: Retry Join Request
-            if (_localPlayerId == -1 && _networkManager != null)
+            if (_localPlayerId == -1 && _networkController != null)
             {
                 _joinRetryTimer -= (float)gameTime.ElapsedGameTime.TotalSeconds;
                 if (_joinRetryTimer <= 0)
                 {
-                    _networkManager.Send(NetworkProtocol.CreateJoinRequest());
+                    _networkController.Manager.Send(NetworkProtocol.CreateJoinRequest());
                         Console.WriteLine("Resending Join Request...");
                         _joinRetryTimer = 1.0f;
                 }
@@ -254,7 +238,7 @@ namespace Bomberman
                     {
                         // Broadcast Update
                         byte[] update = NetworkProtocol.CreateLobbyUpdate(_connectedPlayerCount, _totalPlayersForGame);
-                        _networkManager?.Broadcast(update);
+                        _networkController?.Manager.Broadcast(update);
                     }
 
                     // Start Game
@@ -263,16 +247,22 @@ namespace Bomberman
                         // Check if we have enough connected players match the required count
                         if (_connectedPlayerCount >= _totalPlayersForGame) 
                         {
-                            _networkManager?.Broadcast(NetworkProtocol.CreateStartGame(_networkSeed, _totalPlayersForGame));
+                            _networkController?.Manager.Broadcast(NetworkProtocol.CreateStartGame(_networkSeed, _totalPlayersForGame));
                             _state = GameState.Playing;
-                            _simulation = new Simulation(_networkSeed, _totalPlayersForGame);
+                            _rollbackSystem = new RollbackSystem(_localPlayerId, _totalPlayersForGame);
+                            _rollbackSystem.IsRecording = true;
+                            _rollbackSystem.InitializeSimulation(_networkSeed, _totalPlayersForGame);
+                            
                             string logFile = $"debug_log_player_{_localPlayerId}.txt";
                              File.WriteAllText(logFile, "--- Host Start ---\n");
-                            _simulation.Log = (msg) => {
-                                string line = $"[{DateTime.Now:HH:mm:ss.fff}] [Frame {_currentFrame}] {msg}\n";
-                                File.AppendAllText(logFile, line);
-                                Console.Write(line);
-                            };
+                             if (_rollbackSystem.Simulation != null)
+                             {
+                                _rollbackSystem.Simulation.Log = (msg) => {
+                                    string line = $"[{DateTime.Now:HH:mm:ss.fff}] [Frame {_currentFrame}] {msg}\n";
+                                    File.AppendAllText(logFile, line);
+                                    Console.Write(line);
+                                };
+                             }
                         }
                         else
                         {
@@ -287,8 +277,8 @@ namespace Bomberman
             if (keyboardState.IsKeyDown(Keys.Escape))
             {
                  _state = GameState.Menu;
-                 _networkManager?.Close();
-                 _networkManager = null;
+                 _networkController?.Close();
+                 _networkController = null;
                  return;
             }
 
@@ -299,7 +289,7 @@ namespace Bomberman
                 // Broadcast to ALL possible host ports
                 for(int p=5000; p<5010; p++)
                 {
-                    _networkManager?.BroadcastToPort(NetworkProtocol.CreateDiscoveryRequest(), p);
+                    _networkController?.Manager.BroadcastToPort(NetworkProtocol.CreateDiscoveryRequest(), p);
                 }
                 _discoveryTimer = 2.0f; // Retry every 2s
             }
@@ -326,15 +316,15 @@ namespace Bomberman
                 {
                     // Connect!
                     var endpoint = new List<System.Net.IPEndPoint>(_foundServers.Keys)[_browserSelection];
-                    _networkManager?.Connect(endpoint.Address.ToString(), endpoint.Port);
+                    _networkController?.Manager.Connect(endpoint.Address.ToString(), endpoint.Port);
                     
                     _state = GameState.Lobby;
                     _localPlayerId = -1;
-                    _currentFrame = 0;
-                    _remoteInputBuffer.Clear();
+                    // _currentFrame = 0; // Not needed
+                    // _remoteInputBuffer.Clear(); // Not needed
                     
                     // Send Join
-                    _networkManager?.Send(NetworkProtocol.CreateJoinRequest());
+                    _networkController?.Manager.Send(NetworkProtocol.CreateJoinRequest());
                     Console.WriteLine($"Joining {endpoint}...");
                     _joinRetryTimer = 1.0f;
                 }
@@ -345,8 +335,8 @@ namespace Bomberman
              if (keyboardState.IsKeyDown(Keys.Escape) && !_previousKeyboardState.IsKeyDown(Keys.Escape))
             {
                 _state = GameState.Menu;
-                if (_networkManager != null) { _networkManager.Close(); _networkManager = null; }
-                if (_isRecording) _recorder.Save(Path.Combine("Replays", "replay.json"));
+                if (_networkController != null) { _networkController.Close(); _networkController = null; }
+                if (_rollbackSystem != null && _rollbackSystem.IsRecording) _rollbackSystem.SaveReplay(Path.Combine("Replays", "replay.json"));
             }
 
             // Fixed Update Loop
@@ -365,269 +355,145 @@ namespace Bomberman
             }
         }
 
-        private void OnNetworkPacket(byte[] data, System.Net.IPEndPoint sender)
+        private void HandleJoinRequest(System.Net.IPEndPoint sender)
         {
-            PacketType type = NetworkProtocol.ReadType(data);
-
-            switch (type)
+             if (_localPlayerId == 0 && _state == GameState.Lobby && _networkController != null) // Only Host handles this
             {
-                case PacketType.JoinRequest:
-                    if (_localPlayerId == 0 && _state == GameState.Lobby) // Only Host handles this
-                    {
-                         // Check if this client is already connected (dedup JoinRequests)
-                         // Note: We need to be careful. If a client crashes and rejoins from same port, we might want to allow it?
-                         // For now, simple strict check.
-                         bool alreadyConnected = false;
-                         foreach(var c in _networkManager.ConnectedClients)
-                         {
-                             if (c.Equals(sender)) 
-                             {
-                                 alreadyConnected = true; 
-                                 break;
-                             }
-                         }
-
-                         if (!alreadyConnected)
-                         {
-                            if (_connectedPlayerCount < _totalPlayersForGame)
-                            {
-                                _networkManager?.AddClient(sender);
-                                int newId = _connectedPlayerCount;
-                                _connectedPlayerCount++;
-                                
-                                // Send Welcome
-                                byte[] welcome = NetworkProtocol.CreateWelcome(newId, _networkSeed, _totalPlayersForGame);
-                                _networkManager?.SendTo(welcome, sender);
-
-                                // Broadcast Lobby Update to everyone
-                                byte[] update = NetworkProtocol.CreateLobbyUpdate(_connectedPlayerCount, _totalPlayersForGame);
-                                _networkManager.Broadcast(update); // Broadcast is now correct for updates since all valid clients are in list
-
-                                Console.WriteLine($"Client {newId} Joined from {sender}");
-                            }
-                         }
-                         else
-                         {
-                             // Already connected? Maybe resend welcome or ignore.
-                             // For robustness against packet loss, we probably SHOULD resend welcome, but NOT increment ID or Count.
-                             // But since we don't track which ID belongs to which IP in a map easily here (without searching), 
-                             // lets just ignore for now to stop the bug. The client retries join anyway.
-                         }
-                    }
-                    break;
-                
-                case PacketType.Welcome:
-                    if (_localPlayerId == -1) // Client waiting for welcome
-                    {
-                        var (assignedId, seed, totalPlayers) = NetworkProtocol.ReadWelcome(data);
-                        _localPlayerId = assignedId;
-                        _networkSeed = seed;
-                        _totalPlayersForGame = totalPlayers;
-                        Console.WriteLine($"Joined as Player {_localPlayerId}. seed={_networkSeed}");
-                    }
-                    break;
-
-                case PacketType.LobbyUpdate:
-                    if (_state == GameState.Lobby)
-                    {
-                        var (connectedCount, totalPlayers) = NetworkProtocol.ReadLobbyUpdate(data);
-                        _connectedPlayerCount = connectedCount;
-                        _totalPlayersForGame = totalPlayers;
-                    }
-                    break;
-
-                case PacketType.StartGame:
-                    if (_state == GameState.Lobby)
-                    {
-                        var (seed, totalPlayers) = NetworkProtocol.ReadStartGame(data);
-                        _networkSeed = seed;
-                        _totalPlayersForGame = totalPlayers;
-                        
-                        _state = GameState.Playing;
-                        _isRecording = true; // REQUIRED FOR ROLLBACK HISTORY
-                        _recorder.Reset(); // Clear old history
-                        _simulation = new Simulation(_networkSeed, _totalPlayersForGame);
-                        string logFile = $"debug_log_player_{_localPlayerId}.txt";
-                        File.WriteAllText(logFile, "--- Client Start ---\n");
-                        _simulation.Log = (msg) => {
-                             string line = $"[{DateTime.Now:HH:mm:ss.fff}] [Frame {_currentFrame}] {msg}\n";
-                             File.AppendAllText(logFile, line);
-                             Console.Write(line);
-                        };
-                         Console.WriteLine($"Game Started! Seed={_networkSeed}, Players={_totalPlayersForGame}");
-                    }
-                    break;
-
-                case PacketType.Input:
-                     if (_state == GameState.Playing)
+                 bool alreadyConnected = false;
+                 foreach(var c in _networkController.Manager.ConnectedClients)
+                 {
+                     if (c.Equals(sender)) 
                      {
-                        var (pid, startFrame, inputs, remotePos, remoteHash) = NetworkProtocol.ReadInputPacket(data);
-                        
-                        int earliestMisprediction = -1;
-
-                        // Process all inputs in the packet (Oldest first)
-                        for (int i = inputs.Length - 1; i >= 0; i--)
-                        {
-                            int frame = startFrame - i;
-                            InputState input = inputs[i];
-
-                            if (frame < 0) continue;
-
-                            // Always store the confirmed input in our buffer
-                            if (!_remoteInputBuffer.ContainsKey(frame))
-                            {
-                                _remoteInputBuffer[frame] = new Dictionary<int, InputState>();
-                            }
-                            _remoteInputBuffer[frame][pid] = input;
-
-                            // CHECK FOR MISPREDICTION (INPUTS)
-                            // If this input is for a past frame that we already simulated...
-                            if (frame < _currentFrame)
-                            {
-                                 // Retrive what we *actually* used for that frame from the recorder
-                                 InputState[] usedInputs = _recorder.GetFrame(frame);
-                                 
-                                 // If we have record of that frame, and the used input differs from the confirmed input...
-                                 if (usedInputs != null && usedInputs.Length > pid && !input.Equals(usedInputs[pid]))
-                                 {
-                                     // MISPREDICTION! Mark for Rollback!
-                                     if (earliestMisprediction == -1 || frame < earliestMisprediction)
-                                     {
-                                         earliestMisprediction = frame;
-                                     }
-                                     
-                                     // FIX THE RECORDER!
-                                     usedInputs[pid] = input; 
-                                     _recorder.UpdateFrame(frame, usedInputs);
-                                 }
-                            }
-                        }
-
-                        // CHECK FOR DESYNC (STATE HASH & POSITION)
-                        if (startFrame < _currentFrame && _snapshotBuffer.ContainsKey(startFrame))
-                        {
-                             var snap = _snapshotBuffer[startFrame];
-                             
-                             // 1. POSITION RECONCILIATION
-                             // Find player entity index in snapshot lists
-                             int pIndex = -1;
-                             for(int k=0; k<snap.Players.Count; k++)
-                             {
-                                 if (snap.Players[k].PlayerId == pid)
-                                 {
-                                     pIndex = k;
-                                     break;
-                                 }
-                             }
-                             
-                             if (pIndex != -1)
-                             {
-                                 Entity pEntity = snap.PlayerEntities[pIndex];
-                                 // Find transform index
-                                 int tIndex = -1;
-                                 for(int k=0; k<snap.TransformEntities.Count; k++)
-                                 {
-                                     if (snap.TransformEntities[k].Index == pEntity.Index)
-                                     {
-                                         tIndex = k;
-                                         break;
-                                     }
-                                 }
-                                 
-                                 if (tIndex != -1)
-                                 {
-                                     Vector2 localPos = snap.Transforms[tIndex].Position;
-                                     if (Vector2.Distance(localPos, remotePos) > 4.0f) 
-                                     {
-                                         Console.WriteLine($"[Sync] Correction! Frame {startFrame} Player {pid}. Local:{localPos} Remote:{remotePos}");
-                                         
-                                         // FIX THE SNAPSHOT
-                                         var tf = snap.Transforms[tIndex];
-                                         tf.Position = remotePos;
-                                         snap.Transforms[tIndex] = tf; 
-                                         
-                                         if (earliestMisprediction == -1 || startFrame < earliestMisprediction)
-                                             earliestMisprediction = startFrame;
-                                     }
-                                 }
-                             }
-
-                             // 2. FULL STATE HASH CHECK
-                             // We compute the hash of our SNAPSHOT for that frame
-                             int localHash = StateHasher.Hash(snap);
-                             if (localHash != remoteHash)
-                             {
-                                 Console.WriteLine($"[Sync] CRITICAL DESYNC! Frame {startFrame} Player {pid}. LocalHash:{localHash} RemoteHash:{remoteHash} -> ROLLBACK");
-                                 if (earliestMisprediction == -1 || startFrame < earliestMisprediction)
-                                     earliestMisprediction = startFrame;
-                             }
-                        }
-
-                        // Update latest known input for prediction of future frames
-                        // We assume inputs[0] is the latest (startFrame)
-                        if (inputs.Length > 0)
-                        {
-                            _lastConfirmedRemoteInputs[pid] = inputs[0];
-                            _lastConfirmedRemoteFrame[pid] = startFrame;
-                        }
-
-                        // Trigger Rollback if needed
-                        if (earliestMisprediction != -1)
-                        {
-                            HandleRollback(earliestMisprediction);
-                        }
-
-                        // Host Relay Logic (Relay the RAW packet to others)
-                        if (_localPlayerId == 0)
-                        {
-                            if (pid != 0) 
-                            {
-                                // Loop through all other clients and send Unicast
-                                foreach(var client in _networkManager.ConnectedClients)
-                                {
-                                    if (!client.Equals(sender)) // Don't echo back to sender
-                                    {
-                                        _networkManager.SendTo(data, client);
-                                    }
-                                }
-                            }
-                        }
+                         alreadyConnected = true; 
+                         break;
                      }
-                    break;
+                 }
 
-                case PacketType.DiscoveryRequest:
-                    if (_localPlayerId == 0 && (_state == GameState.Lobby || _state == GameState.Playing))
+                 if (!alreadyConnected)
+                 {
+                    if (_connectedPlayerCount < _totalPlayersForGame)
                     {
-                        // I am host, reply
-                        var resp = NetworkProtocol.CreateDiscoveryResponse("Local Game", _connectedPlayerCount, _totalPlayersForGame);
-                        _networkManager?.SendTo(resp, sender);
+                        _networkController.Manager.AddClient(sender);
+                        int newId = _connectedPlayerCount;
+                        _connectedPlayerCount++;
+                        
+                        // Send Welcome
+                        byte[] welcome = NetworkProtocol.CreateWelcome(newId, _networkSeed, _totalPlayersForGame);
+                        _networkController.Manager.SendTo(welcome, sender);
+
+                        // Broadcast Lobby Update to everyone
+                        byte[] update = NetworkProtocol.CreateLobbyUpdate(_connectedPlayerCount, _totalPlayersForGame);
+                        _networkController.Manager.Broadcast(update);
+
+                        Console.WriteLine($"Client {newId} Joined from {sender}");
                     }
-                    break;
-                
-                case PacketType.DiscoveryResponse:
-                    if (_state == GameState.ServerBrowser)
-                    {
-                        var info = NetworkProtocol.ReadDiscoveryResponse(data);
-                        _foundServers[sender] = info;
-                    }
-                    break;
+                 }
             }
+        }
+
+        private void HandleWelcome(int assignedId, int seed, int totalPlayers)
+        {
+             if (_localPlayerId == -1) // Client waiting for welcome
+            {
+                _localPlayerId = assignedId;
+                _networkSeed = seed;
+                _totalPlayersForGame = totalPlayers;
+                Console.WriteLine($"Joined as Player {_localPlayerId}. seed={_networkSeed}");
+            }
+        }
+
+        private void HandleLobbyUpdate(int connectedCount, int totalPlayers)
+        {
+            if (_state == GameState.Lobby)
+            {
+                _connectedPlayerCount = connectedCount;
+                _totalPlayersForGame = totalPlayers;
+            }
+        }
+
+        private void HandleStartGame(int seed, int totalPlayers)
+        {
+             if (_state == GameState.Lobby)
+            {
+                _networkSeed = seed;
+                _totalPlayersForGame = totalPlayers;
+                
+                _state = GameState.Playing;
+                _rollbackSystem = new RollbackSystem(_localPlayerId, _totalPlayersForGame);
+                _rollbackSystem.IsRecording = true;
+                _rollbackSystem.InitializeSimulation(_networkSeed, _totalPlayersForGame);
+                
+                string logFile = $"debug_log_player_{_localPlayerId}.txt";
+                File.WriteAllText(logFile, "--- Client Start ---\n");
+                if (_rollbackSystem.Simulation != null)
+                {
+                    _rollbackSystem.Simulation.Log = (msg) => {
+                            string line = $"[{DateTime.Now:HH:mm:ss.fff}] [Frame {_currentFrame}] {msg}\n";
+                            File.AppendAllText(logFile, line);
+                            Console.Write(line);
+                    };
+                }
+                    Console.WriteLine($"Game Started! Seed={_networkSeed}, Players={_totalPlayersForGame}");
+            }
+        }
+
+        private void HandleInputReceived(int pid, int startFrame, InputState[] inputs, Vector2 remotePos, int remoteHash)
+        {
+             if (_state == GameState.Playing && _rollbackSystem != null)
+             {
+                _rollbackSystem.HandleRemoteInput(pid, startFrame, inputs, remotePos, remoteHash);
+
+                // Host Relay Logic (Relay the RAW packet to others)
+                if (_localPlayerId == 0 && _networkController != null)
+                {
+                    if (pid != 0) 
+                    {
+                        // Loop through all other clients and send Unicast
+                        byte[] relayedPacket = NetworkProtocol.CreateInputPacket(pid, startFrame, inputs, remotePos, remoteHash);
+                        foreach(var client in _networkController.Manager.ConnectedClients)
+                        {
+                            _networkController.Manager.SendTo(relayedPacket, client);
+                        }
+                    }
+                }
+             }
+        }
+
+        private void HandleDiscoveryRequest(System.Net.IPEndPoint sender, string header, int cur, int max)
+        {
+            if (_localPlayerId == 0 && (_state == GameState.Lobby || _state == GameState.Playing) && _networkController != null)
+            {
+                // I am host, reply
+                var resp = NetworkProtocol.CreateDiscoveryResponse("Local Game", _connectedPlayerCount, _totalPlayersForGame);
+                _networkController.Manager.SendTo(resp, sender);
+            }
+        }
+
+        private void HandleDiscoveryResponse(System.Net.IPEndPoint sender, string name, int cur, int max)
+        {
+            if (_state == GameState.ServerBrowser)
+            {
+                _foundServers[sender] = (name, cur, max);
+            }
+        }
+
+        private void HookNetworkEvents()
+        {
+            if (_networkController == null) return;
+            _networkController.OnJoinRequestRaw += HandleJoinRequest;
+            _networkController.OnWelcomeReceived += HandleWelcome;
+            _networkController.OnLobbyUpdateReceived += HandleLobbyUpdate;
+            _networkController.OnStartGameReceived += HandleStartGame;
+            _networkController.OnInputReceived += HandleInputReceived;
+            _networkController.OnDiscoveryRequestReceived += HandleDiscoveryRequest;
+            _networkController.OnDiscoveryResponseReceived += HandleDiscoveryResponse;
         }
 
         private void StepSimulation(KeyboardState keyboardState)
         {
-            InputState[] inputs;
+            if (_rollbackSystem == null) return;
 
-            if (_isReplaying)
-            {
-                    inputs = _recorder.GetFrame(_replayFrame);
-                    if (inputs == null || inputs.Length == 0) inputs = new InputState[1];
-                    if (_simulation != null) _simulation.Update(inputs, (float)FixedTimeStep);
-                    _replayFrame++;
-                    return;
-            }
-
-            // Capture Local Input
+             // Capture Local Input
             Vector2 movement = Vector2.Zero;
             if (keyboardState.IsKeyDown(Keys.W) || keyboardState.IsKeyDown(Keys.Up)) movement.Y -= 1;
             if (keyboardState.IsKeyDown(Keys.S) || keyboardState.IsKeyDown(Keys.Down)) movement.Y += 1;
@@ -636,242 +502,41 @@ namespace Bomberman
 
             if (movement != Vector2.Zero) movement.Normalize();
 
-            // Check if we already decided input for this frame?
-            InputState localInput;
-            if (_localInputBuffer.ContainsKey(_currentFrame))
-            {
-                localInput = _localInputBuffer[_currentFrame];
-            }
-            else
-            {
-                // New Frame: Consume Latch
-                bool placeBomb = _pendingBombInput;
-                _pendingBombInput = false; // Reset Latch after consumption
-                
-                // Calculate explicit bomb target based on current local position
-                // This ensures that what the client SEES (and intends) is what gets simulated everywhere
-                Point bombTarget = new Point(0, 0);
-                if (placeBomb)
-                {
-                     // Find local player position (it might be needed before the loop below, but let's grab it now)
-                     // Actually, we need position BEFORE creating InputState.
-                     // The loop below (lines ~670) finds 'currentPos'. We need to move that up?
-                     // Or just iterate quickly here.
-                     
-                     Vector2 myPos = Vector2.Zero;
-                     var pPool = _simulation.World.Players;
+            // Latch Bomb Input
+            bool placeBomb = _pendingBombInput;
+            _pendingBombInput = false; // Reset Latch after consumption
+            
+             // Calculate explicit bomb target based on current local position
+             Point bombTarget = new Point(0, 0);
+             if (placeBomb)
+             {
+                 Vector2 myPos = Vector2.Zero;
+                 if (_rollbackSystem.Simulation != null)
+                 {
+                     var pPool = _rollbackSystem.Simulation.World.Players;
                      for(int i=0; i<pPool.Count; i++)
                      {
                          if (pPool.Get(i).PlayerId == _localPlayerId)
                          {
                              var e = pPool.GetEntity(i);
-                             if (_simulation.World.Transforms.Has(e))
-                                myPos = _simulation.World.Transforms.Get(e).Position;
+                             if (_rollbackSystem.Simulation.World.Transforms.Has(e))
+                                myPos = _rollbackSystem.Simulation.World.Transforms.Get(e).Position;
                              break;
                          }
                      }
-                     
-                     int centerX = (int)(myPos.X + 12);
-                     int centerY = (int)(myPos.Y + 12);
-                     bombTarget = new Point(centerX / 32, centerY / 32);
-                }
+                 }
+                 
+                 int centerX = (int)(myPos.X + 12);
+                 int centerY = (int)(myPos.Y + 12);
+                 bombTarget = new Point(centerX / 32, centerY / 32);
+             }
 
-                localInput = new InputState { Movement = movement, PlaceBomb = placeBomb, BombTarget = bombTarget };
-                _localInputBuffer[_currentFrame] = localInput;
-            }
-
-
-            if (_isNetworked)
-            {
-                // ROLLBACK / PREDICTION LOGIC
-                
-                // FRAME PACING / THROTTLING
-                // Prevent running too far ahead of the slowest client
-                // This ensures we always have a recent enough state to rollback to if a late packet arrives
-                int minConfirmedFrame = _currentFrame;
-                
-                for (int i = 0; i < _totalPlayersForGame; i++)
-                {
-                    if (i == _localPlayerId) continue;
-                    
-                    if (_lastConfirmedRemoteFrame.TryGetValue(i, out int lastFrame))
-                    {
-                        if (lastFrame < minConfirmedFrame) minConfirmedFrame = lastFrame;
-                    }
-                    else
-                    {
-                        // If we haven't heard from a player yet, assume they are at 0
-                        // This might stall start until first packet, which is fine
-                        minConfirmedFrame = 0; 
-                    }
-                }
-
-                int predictionLimit = MaxPredictionFrames; 
-                // Dynamically adjust limit? No, static 15 frames (250ms) is fine.
-                
-                if (_currentFrame > minConfirmedFrame + predictionLimit)
-                {
-                    // Throttle! Wait for inputs to catch up.
-                    // Console.WriteLine($"Throttling: Current={_currentFrame}, MinRemote={minConfirmedFrame}");
-                    return; 
-                }
-
-
-                // 1. Send Local Input for THIS frame (and history)
-
-
-                // 1. Send Local Input for THIS frame (and history)
-                int redundancy = 8;
-                List<InputState> history = new List<InputState>();
-                history.Add(localInput); // Current Frame (0)
-
-                for (int i = 1; i < redundancy; i++)
-                {
-                    int histFrame = _currentFrame - i;
-                    if (histFrame >= 0 && _localInputBuffer.ContainsKey(histFrame))
-                    {
-                        history.Add(_localInputBuffer[histFrame]);
-                    }
-                    else
-                    {
-                        break; // End of valid history
-                    }
-                }
-
-                // Get ID for Local Player Position Lookup
-                Vector2 currentPos = Vector2.Zero;
-                var playerPool = _simulation.World.Players;
-                for (int i = 0; i < playerPool.Count; i++)
-                {
-                    if (playerPool.Get(i).PlayerId == _localPlayerId)
-                    {
-                        var entity = playerPool.GetEntity(i);
-                        if (_simulation.World.Transforms.Has(entity))
-                        {
-                            currentPos = _simulation.World.Transforms.Get(entity).Position;
-                        }
-                        break;
-                    }
-                }
-
-                int localHash = StateHasher.Hash(_simulation.World);
-
-                byte[] packet = NetworkProtocol.CreateInputPacket(_localPlayerId, _currentFrame, history.ToArray(), currentPos, localHash);
-                
-                if (_networkManager != null) 
-                {
-                    if (_localPlayerId == 0) _networkManager.Broadcast(packet);
-                    else _networkManager.Send(packet);
-                }
-
-                // 2. Construct Input Array for THIS frame using PREDICTION
-                inputs = new InputState[_totalPlayersForGame];
-                inputs[_localPlayerId] = localInput;
-
-                for (int i = 0; i < _totalPlayersForGame; i++)
-                {
-                    if (i == _localPlayerId) continue;
-
-                    if (_remoteInputBuffer.ContainsKey(_currentFrame) && _remoteInputBuffer[_currentFrame].ContainsKey(i))
-                    {
-                        // We actually have it (rare, but possible if high pings/low update rate cause buffering)
-                        inputs[i] = _remoteInputBuffer[_currentFrame][i];
-                    }
-                    else
-                    {
-                        // PREDICT IT
-                        inputs[i] = PredictInputForPlayer(i);
-                    }
-                }
-                
-                // 3. Record what we used (for misprediction check later)
-                if (_isRecording) _recorder.RecordFrame(inputs);
-
-                // 4. Run Simulation
-                if (_simulation != null) 
-                {
-                    _simulation.Update(inputs, (float)FixedTimeStep);
-
-                    // 5. Save Snapshot
-                    _snapshotBuffer[_currentFrame] = new GameStateSnapshot(_currentFrame, _simulation.World);
-                    if (_snapshotBuffer.ContainsKey(_currentFrame - MaxSnapshotFrames)) 
-                    {
-                        _snapshotBuffer.Remove(_currentFrame - MaxSnapshotFrames);
-                    }
-                }
-
-                _currentFrame++;
-            }
-            else
-            {
-                // Local Single Player
-                inputs = new InputState[] { localInput };
-                if (_isRecording) _recorder.RecordFrame(inputs);
-                if (_simulation != null) _simulation.Update(inputs, (float)FixedTimeStep);
-            }
-
-        }
-
-        private InputState PredictInputForPlayer(int playerId)
-        {
-            // Simple prediction: repeat the last confirmed input.
-            if (_lastConfirmedRemoteInputs.TryGetValue(playerId, out var lastInput))
-            {
-                return lastInput;
-            }
-            return new InputState(); // Default to zero input if we have nothing.
-        }
-
-        private void HandleRollback(int mispredictedFrame)
-        {
-            Console.WriteLine($"ROLLBACK from frame {_currentFrame} to {mispredictedFrame}");
-
-            // 1. Load the state from the frame *before* the misprediction
-            if (!_snapshotBuffer.TryGetValue(mispredictedFrame - 1, out GameStateSnapshot? snapshot))
-            {
-                Console.WriteLine($"!!! CRITICAL: Cannot rollback, no snapshot for frame {mispredictedFrame - 1} (Current: {_currentFrame})");
-                // This is a fatal error. In a real game, you might request a full state sync from the host.
-                return;
-            }
+            InputState localInput = new InputState { Movement = movement, PlaceBomb = placeBomb, BombTarget = bombTarget };
             
-            if (_simulation == null) return;
-
-            snapshot.Restore(_simulation.World);
-
-            // 2. Resimulate from the mispredicted frame up to the current frame
-            for (int frame = mispredictedFrame; frame < _currentFrame; frame++)
-            {
-                // 3. Construct the full, correct input array for this frame
-                InputState[] inputs = new InputState[_totalPlayersForGame];
-                
-                // Local input
-                if (_localInputBuffer.ContainsKey(frame)) inputs[_localPlayerId] = _localInputBuffer[frame];
-
-                // Remote inputs (use confirmed if available, otherwise predict again)
-                for (int i = 0; i < _totalPlayersForGame; i++)
-                {
-                    if (i == _localPlayerId) continue;
-
-                    if (_remoteInputBuffer.ContainsKey(frame) && _remoteInputBuffer[frame].ContainsKey(i))
-                    {
-                        inputs[i] = _remoteInputBuffer[frame][i]; // Use actual confirmed input
-                    }
-                    else
-                    {
-                        inputs[i] = PredictInputForPlayer(i); // Predict if we still don't have it (cascading rollback/prediction)
-                    }
-                }
-
-                // 4. Resimulate this single frame (no rendering)
-                _simulation.Update(inputs, (float)FixedTimeStep);
-
-                // 5. Save the new, corrected snapshot for this frame
-                _snapshotBuffer[frame] = new GameStateSnapshot(frame, _simulation.World);
-
-                // 6. Update the recorder with the corrected inputs
-                if (_isRecording) _recorder.UpdateFrame(frame, inputs);
-            }
+            _rollbackSystem.Update(localInput, _networkController);
         }
+
+
 
         protected override void Draw(GameTime gameTime)
         {
@@ -935,7 +600,7 @@ namespace Bomberman
              
              if (_localPlayerId == 0)
              {
-                 int port = _networkManager != null ? _networkManager.LocalPort : 0;
+                 int port = _networkController != null ? _networkController.Manager.LocalPort : 0;
                  DrawText($"HOSTING (Port {port}): {_connectedPlayerCount}/{_totalPlayersForGame} Players", new Vector2(50, 100), 2, Color.Yellow);
                  DrawText("Press 2,3,4 to set Count", new Vector2(50, 140), 1, Color.White);
                  DrawText("Press ENTER to Start", new Vector2(50, 180), 2, Color.Green);
@@ -977,8 +642,8 @@ namespace Bomberman
 
         private void DrawGame()
         {
-            if (_simulation == null) return;
-            var world = _simulation.World;
+            if (_rollbackSystem?.Simulation == null) return;
+            var world = _rollbackSystem.Simulation.World;
             var transformEntities = world.Transforms.GetEntities();
             var transforms = world.Transforms.GetAll();
 

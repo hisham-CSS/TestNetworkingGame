@@ -7,7 +7,7 @@ namespace Bomberman
     public class Simulation
     {
         public World World { get; private set; }
-        public Action<string> Log; // Debug Logger
+        public Action<string>? Log; // Debug Logger
 
         private const int MapWidth = 15;
         private const int MapHeight = 13;
