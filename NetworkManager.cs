@@ -12,6 +12,7 @@ namespace Bomberman
         private List<IPEndPoint> _connectedClients = new List<IPEndPoint>(); // Usage: For Host, list of verified clients.
         private int _localPort;
         public int LocalPort => _localPort;
+        public IReadOnlyList<IPEndPoint> ConnectedClients => _connectedClients;
 
         public event Action<byte[], IPEndPoint>? OnPacketReceived;
 

@@ -4,7 +4,7 @@ namespace Bomberman
 {
     public class World
     {
-        private uint _nextEntityId = 0;
+        public uint NextEntityId { get; set; } = 0;
         
         public ComponentPool<TransformComponent> Transforms { get; } = new();
         public ComponentPool<PlayerComponent> Players { get; } = new();
@@ -12,10 +12,20 @@ namespace Bomberman
         public ComponentPool<ExplosionComponent> Explosions { get; } = new();
         public ComponentPool<TileComponent> Tiles { get; } = new();
         public ComponentPool<PowerupComponent> Powerups { get; } = new();
+
+        public void Clear()
+        {
+            Transforms.Clear();
+            Players.Clear();
+            Bombs.Clear();
+            Explosions.Clear();
+            Tiles.Clear();
+            Powerups.Clear();
+        }
         
         public Entity CreateEntity()
         {
-            return new Entity(_nextEntityId++);
+            return new Entity(NextEntityId++);
         }
     }
 }

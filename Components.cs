@@ -15,6 +15,18 @@ public class ComponentPool<T> where T : struct
         _components.Add(component);
     }
     
+    public void Clear()
+    {
+        _components.Clear();
+        _entities.Clear();
+    }
+
+    public void SetAll(List<Entity> entities, List<T> components)
+    {
+        _entities = new List<Entity>(entities);
+        _components = new List<T>(components);
+    }
+    
     public T Get(int index) => _components[index];
     public Entity GetEntity(int index) => _entities[index];
     
@@ -37,6 +49,15 @@ public class ComponentPool<T> where T : struct
             _entities.RemoveAt(_entities.Count - 1);
         }
     }
+
+    public bool Has(Entity entity) => _entities.Contains(entity);
+
+    public T Get(Entity entity)
+    {
+        int index = _entities.IndexOf(entity);
+        if (index == -1) throw new KeyNotFoundException($"Entity {entity.Index} not in pool {typeof(T).Name}");
+        return _components[index];
+    }
 }
 
 public struct TransformComponent
@@ -57,6 +78,12 @@ public struct InputState
 {
     public Vector2 Movement; // Normalized vector
     public bool PlaceBomb;
+    public Point BombTarget; // Explicit Grid Coordinate
+
+    public bool Equals(InputState other)
+    {
+        return Movement == other.Movement && PlaceBomb == other.PlaceBomb && BombTarget == other.BombTarget;
+    }
 }
 
 public struct BombComponent

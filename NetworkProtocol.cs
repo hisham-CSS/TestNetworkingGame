@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using Microsoft.Xna.Framework;
 
 namespace Bomberman
 {
@@ -21,117 +22,130 @@ namespace Bomberman
             return new byte[] { (byte)PacketType.JoinRequest };
         }
 
-        public static byte[] CreateWelcome(int playerId, int seed, int playerCount)
+        public static byte[] CreateWelcome(int assignedId, int seed, int totalPlayers)
         {
             using (var ms = new MemoryStream())
             using (var writer = new BinaryWriter(ms))
             {
                 writer.Write((byte)PacketType.Welcome);
-                writer.Write(playerId);
+                writer.Write(assignedId);
                 writer.Write(seed);
-                writer.Write(playerCount);
+                writer.Write(totalPlayers);
                 return ms.ToArray();
             }
         }
 
-        public static (int playerId, int seed, int playerCount) ReadWelcome(byte[] data)
+        public static (int assignedId, int seed, int totalPlayers) ReadWelcome(byte[] data)
         {
             using (var ms = new MemoryStream(data))
             using (var reader = new BinaryReader(ms))
             {
-                reader.ReadByte(); // Skip Type
-                int pid = reader.ReadInt32();
+                reader.ReadByte(); // type
+                int id = reader.ReadInt32();
                 int seed = reader.ReadInt32();
-                int count = reader.ReadInt32();
-                return (pid, seed, count);
+                int total = reader.ReadInt32();
+                return (id, seed, total);
             }
         }
 
-
-
-        public static byte[] CreateLobbyUpdate(int currentCount, int totalRequired)
+        public static byte[] CreateLobbyUpdate(int connectedCount, int totalPlayers)
         {
             using (var ms = new MemoryStream())
             using (var writer = new BinaryWriter(ms))
             {
                 writer.Write((byte)PacketType.LobbyUpdate);
-                writer.Write(currentCount);
-                writer.Write(totalRequired);
+                writer.Write(connectedCount);
+                writer.Write(totalPlayers);
                 return ms.ToArray();
             }
         }
 
-        public static (int currentCount, int totalRequired) ReadLobbyUpdate(byte[] data)
+        public static (int connectedCount, int totalPlayers) ReadLobbyUpdate(byte[] data)
         {
-            using (var ms = new MemoryStream(data))
+             using (var ms = new MemoryStream(data))
             using (var reader = new BinaryReader(ms))
             {
-                reader.ReadByte(); // Skip
-                int current = reader.ReadInt32();
-                int total = reader.ReadInt32();
-                return (current, total);
+                reader.ReadByte(); 
+                int c = reader.ReadInt32();
+                int t = reader.ReadInt32();
+                return (c, t);
             }
         }
 
-        public static byte[] CreateStartGame(int seed, int playerCount)
+        public static byte[] CreateStartGame(int seed, int totalPlayers)
         {
-            using (var ms = new MemoryStream())
+             using (var ms = new MemoryStream())
             using (var writer = new BinaryWriter(ms))
             {
                 writer.Write((byte)PacketType.StartGame);
                 writer.Write(seed);
-                writer.Write(playerCount);
+                writer.Write(totalPlayers);
                 return ms.ToArray();
             }
         }
 
-        public static (int seed, int playerCount) ReadStartGame(byte[] data)
+        public static (int seed, int totalPlayers) ReadStartGame(byte[] data)
         {
             using (var ms = new MemoryStream(data))
             using (var reader = new BinaryReader(ms))
             {
-                reader.ReadByte(); // Skip
-                int seed = reader.ReadInt32();
-                int playerCount = reader.ReadInt32();
-                return (seed, playerCount);
+                reader.ReadByte(); 
+                int s = reader.ReadInt32();
+                int t = reader.ReadInt32();
+                return (s, t);
             }
         }
 
-        public static byte[] CreateInputPacket(int playerId, int frameId, InputState input)
+        public static byte[] CreateInputPacket(int playerId, int startFrame, InputState[] inputs, Vector2 currentPos, int stateHash)
         {
              using (var ms = new MemoryStream())
             using (var writer = new BinaryWriter(ms))
             {
                 writer.Write((byte)PacketType.Input);
                 writer.Write(playerId);
-                writer.Write(frameId);
-                writer.Write(input.Movement.X);
-                writer.Write(input.Movement.Y);
-                writer.Write(input.PlaceBomb);
+                writer.Write(startFrame);
+                writer.Write(inputs.Length);
+                writer.Write(currentPos.X);
+                writer.Write(currentPos.Y);
+                writer.Write(stateHash); // New: State Hash
+                for (int i = 0; i < inputs.Length; i++)
+                {
+                    writer.Write(inputs[i].Movement.X);
+                    writer.Write(inputs[i].Movement.Y);
+                    writer.Write(inputs[i].PlaceBomb);
+                    // Explicit Bomb Target
+                    writer.Write(inputs[i].BombTarget.X);
+                    writer.Write(inputs[i].BombTarget.Y);
+                }
                 return ms.ToArray();
             }
         }
 
-         public static (int playerId, int frameId, InputState input) ReadInputPacket(byte[] data)
+         public static (int playerId, int startFrame, InputState[] inputs, Vector2 currentPos, int stateHash) ReadInputPacket(byte[] data)
         {
             using (var ms = new MemoryStream(data))
             using (var reader = new BinaryReader(ms))
             {
                 reader.ReadByte(); // Skip Type
                 int playerId = reader.ReadInt32();
-                int frameId = reader.ReadInt32();
-                InputState input = new InputState();
-                input.Movement.X = reader.ReadSingle();
-                input.Movement.Y = reader.ReadSingle();
-                input.PlaceBomb = reader.ReadBoolean();
-                return (playerId, frameId, input);
-            }
-        }
+                int startFrame = reader.ReadInt32();
+                int count = reader.ReadInt32();
+                float x = reader.ReadSingle();
+                float y = reader.ReadSingle();
+                int stateHash = reader.ReadInt32(); // Read Hash
+                Vector2 currentPos = new Vector2(x, y);
+                
+                InputState[] inputs = new InputState[count];
+                for (int i = 0; i < count; i++)
+                {
+                     inputs[i].Movement.X = reader.ReadSingle();
+                     inputs[i].Movement.Y = reader.ReadSingle();
+                     inputs[i].PlaceBomb = reader.ReadBoolean();
+                     inputs[i].BombTarget = new Point(reader.ReadInt32(), reader.ReadInt32());
+                }
 
-        public static PacketType ReadType(byte[] data)
-        {
-             if (data == null || data.Length == 0) return PacketType.Input; // Fallback? Or Error?
-             return (PacketType)data[0];
+                return (playerId, startFrame, inputs, currentPos, stateHash);
+            }
         }
 
         public static byte[] CreateDiscoveryRequest()
@@ -145,7 +159,7 @@ namespace Bomberman
             using (var writer = new BinaryWriter(ms))
             {
                 writer.Write((byte)PacketType.DiscoveryResponse);
-                writer.Write(serverName); // String length prefixed automatically
+                writer.Write(serverName);
                 writer.Write(currentPlayers);
                 writer.Write(maxPlayers);
                 return ms.ToArray();
@@ -157,12 +171,18 @@ namespace Bomberman
             using (var ms = new MemoryStream(data))
             using (var reader = new BinaryReader(ms))
             {
-                reader.ReadByte(); // Skip Type
+                reader.ReadByte(); 
                 string name = reader.ReadString();
-                int current = reader.ReadInt32();
+                int cur = reader.ReadInt32();
                 int max = reader.ReadInt32();
-                return (name, current, max);
+                return (name, cur, max);
             }
+        }
+
+        public static PacketType ReadType(byte[] data)
+        {
+             if (data == null || data.Length == 0) return PacketType.Input; 
+             return (PacketType)data[0];
         }
     }
 }

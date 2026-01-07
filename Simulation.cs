@@ -7,6 +7,8 @@ namespace Bomberman
     public class Simulation
     {
         public World World { get; private set; }
+        public Action<string> Log; // Debug Logger
+
         private const int MapWidth = 15;
         private const int MapHeight = 13;
         private const int TileSize = 32;
@@ -266,7 +268,7 @@ namespace Bomberman
                 // Bomb Placement
                 if (input.PlaceBomb)
                 {
-                    TryPlaceBomb(transform.Position, players[pIndex], playerEntity);
+                    TryPlaceBomb(input.BombTarget, players[pIndex], playerEntity);
                 }
             }
         }
@@ -353,20 +355,19 @@ namespace Bomberman
             return false;
         }
 
-        private void TryPlaceBomb(Vector2 playerPosition, PlayerComponent player, Entity playerEntity)
+        private void TryPlaceBomb(Point targetGrid, PlayerComponent player, Entity playerEntity)
         {
-            // Snap center of player to grid
-            // Snap center of player to grid (Deterministic)
-            // Use integer math as much as possible to avoid float differences
-            int centerX = (int)(playerPosition.X + 12);
-            int centerY = (int)(playerPosition.Y + 12);
-            int gridX = centerX / TileSize;
-            int gridY = centerY / TileSize;
+            // Use Explicit Target
+            int gridX = targetGrid.X;
+            int gridY = targetGrid.Y;
             
             Vector2 snapPos = new Vector2(gridX * TileSize, gridY * TileSize);
 
+            // Check boundaries
+            if (gridX < 0 || gridX >= MapWidth || gridY < 0 || gridY >= MapHeight) return;
+
             // Check if bomb already exists there
-            var bombs = World.Bombs.GetAll();
+             var bombs = World.Bombs.GetAll();
             var bombEntities = World.Bombs.GetEntities();
             var transformEntities = World.Transforms.GetEntities();
             var allTransforms = World.Transforms.GetAll();
@@ -378,7 +379,11 @@ namespace Bomberman
                 if (bombs[i].OwnerId == player.PlayerId) activeBombs++;
             }
 
-            if (activeBombs >= player.BombCapacity) return;
+            if (activeBombs >= player.BombCapacity) 
+            {
+                Log?.Invoke($"[BombFail] Player {player.PlayerId} Capacity Reached. Active: {activeBombs}, Cap: {player.BombCapacity}");
+                return;
+            }
 
             for(int i=0; i<bombs.Count; i++)
             {
@@ -387,7 +392,11 @@ namespace Bomberman
                  {
                      if(transformEntities[t].Equals(bombEntity))
                      {
-                         if(allTransforms[t].Position == snapPos) return; // Bomb exists
+                         if(allTransforms[t].Position == snapPos) 
+                         {
+                             Log?.Invoke($"[BombFail] Player {player.PlayerId} Bomb Exists at {gridX},{gridY}");
+                             return; // Bomb exists
+                         }
                          break;
                      }
                  }
@@ -398,6 +407,7 @@ namespace Bomberman
             // Use Player Stats
             World.Bombs.Add(bomb, new BombComponent { Timer = 180, MaxTimer = 180, Range = player.BombRange, OwnerId = player.PlayerId });
             World.Transforms.Add(bomb, new TransformComponent { Position = snapPos, Size = new Vector2(TileSize, TileSize) });
+            Log?.Invoke($"[BombSuccess] Player {player.PlayerId} Placed at {gridX},{gridY}. New Active: {activeBombs + 1}");
         }
 
         private void UpdateBombs()

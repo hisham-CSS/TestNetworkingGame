@@ -25,6 +25,14 @@ namespace Bomberman
             return _history[frame];
         }
 
+        public void UpdateFrame(int frame, InputState[] inputs)
+        {
+            if (frame >= 0 && frame < _history.Count)
+            {
+                _history[frame] = (InputState[])inputs.Clone();
+            }
+        }
+
         public void Reset()
         {
             _history.Clear();
