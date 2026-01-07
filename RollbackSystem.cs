@@ -8,9 +8,10 @@ namespace Bomberman
     public class RollbackSystem
     {
         public Simulation? Simulation { get; private set; }
-        public int CurrentFrame { get; private set; }
+        public int CurrentFrame => _currentFrame;
         public bool IsRecording { get; set; }
         public bool IsReplaying { get; set; }
+        public bool SimulateNetworked { get; set; }
 
         private InputRecorder _recorder;
         private Dictionary<int, GameStateSnapshot> _snapshotBuffer = new Dictionary<int, GameStateSnapshot>();
@@ -39,6 +40,8 @@ namespace Bomberman
         public void InitializeSimulation(int seed, int totalPlayers)
         {
             Simulation = new Simulation(seed, totalPlayers);
+            // Save initial state (Frame -1) so we can rollback TO Frame 0
+            _snapshotBuffer[-1] = new GameStateSnapshot(-1, Simulation.World);
             // Logger hookup can be done externally or passed in
         }
 
@@ -92,7 +95,7 @@ namespace Bomberman
             // Store Local Input
             _localInputBuffer[_currentFrame] = localInput;
 
-            bool isNetworked = network != null;
+            bool isNetworked = network != null || SimulateNetworked;
 
              if (isNetworked)
             {
@@ -184,7 +187,6 @@ namespace Bomberman
                 // 3. Record what we used
                 if (IsRecording) _recorder.RecordFrame(inputs);
 
-                // 4. Run Simulation
                 if (Simulation != null) 
                 {
                     Simulation.Update(inputs, (float)FixedTimeStep);
@@ -196,7 +198,6 @@ namespace Bomberman
                         _snapshotBuffer.Remove(_currentFrame - MaxSnapshotFrames);
                     }
                 }
-                _currentFrame++;
             }
             else
             {
@@ -205,6 +206,8 @@ namespace Bomberman
                 if (IsRecording) _recorder.RecordFrame(inputs);
                 if (Simulation != null) Simulation.Update(inputs, (float)FixedTimeStep);
             }
+            
+            _currentFrame++;
         }
 
          private InputState PredictInputForPlayer(int playerId)
