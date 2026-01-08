@@ -27,10 +27,9 @@ namespace Bomberman.Core.Rollback
                 Entity e = players.GetEntity(i);
                 if (world.Transforms.Has(e))
                 {
-                    Vector2 pos = world.Transforms.Get(e).Position;
-                    // Quantize to avoid float issues, though strictly we should be deterministic
-                    hash = Combine(hash, (int)(pos.X * 100));
-                    hash = Combine(hash, (int)(pos.Y * 100));
+                    IntVector2 pos = world.Transforms.Get(e).Position;
+                    hash = Combine(hash, pos.X);
+                    hash = Combine(hash, pos.Y);
                 }
             }
 
@@ -46,9 +45,9 @@ namespace Bomberman.Core.Rollback
                 Entity e = bombs.GetEntity(i);
                 if (world.Transforms.Has(e))
                 {
-                    Vector2 pos = world.Transforms.Get(e).Position;
-                    hash = Combine(hash, (int)Math.Round(pos.X)); // Bombs snap to grid usually
-                    hash = Combine(hash, (int)Math.Round(pos.Y));
+                    IntVector2 pos = world.Transforms.Get(e).Position;
+                    hash = Combine(hash, pos.X);
+                    hash = Combine(hash, pos.Y);
                 }
             }
 
@@ -83,9 +82,9 @@ namespace Bomberman.Core.Rollback
             for(int i=0; i<transforms.components.Count; i++)
             {
                 // Hash Position (Bitwise Deterministic)
-                Vector2 pos = transforms.components[i].Position;
-                hash = Combine(hash, BitConverter.SingleToInt32Bits(pos.X));
-                hash = Combine(hash, BitConverter.SingleToInt32Bits(pos.Y));
+                IntVector2 pos = transforms.components[i].Position;
+                hash = Combine(hash, pos.X);
+                hash = Combine(hash, pos.Y);
             }
 
             // 2. Players

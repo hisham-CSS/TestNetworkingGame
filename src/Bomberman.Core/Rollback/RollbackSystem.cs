@@ -110,7 +110,7 @@ namespace Bomberman.Core.Rollback
                  }
 
                  // Get Local Pos
-                 Vector2 currentPos = Vector2.Zero;
+                 IntVector2 currentPos = new IntVector2(0, 0); // Use specific default
                  if (Simulation != null)
                  {
                      var playerPool = Simulation.World.Players;
@@ -242,7 +242,7 @@ namespace Bomberman.Core.Rollback
             return new InputState(); 
         }
 
-        public void HandleRemoteInput(int pid, int startFrame, InputState[] inputs, Vector2 remotePos, int remoteHash)
+        public void HandleRemoteInput(int pid, int startFrame, InputState[] inputs, IntVector2 remotePos, int remoteHash)
         {
              int earliestMisprediction = -1;
 
@@ -304,8 +304,17 @@ namespace Bomberman.Core.Rollback
                         
                         if (tIndex != -1)
                         {
-                            Vector2 localPos = transforms.components[tIndex].Position;
-                            if (Vector2.Distance(localPos, remotePos) > 4.0f) 
+                            IntVector2 localPos = transforms.components[tIndex].Position;
+                            // Distance check using squared distance
+                            // 4 pixels = 400 subpixel units
+                            int curX = localPos.X;
+                            int curY = localPos.Y;
+                            int remX = remotePos.X;
+                            int remY = remotePos.Y;
+                            long distSq = (long)(curX - remX) * (curX - remX) + (long)(curY - remY) * (curY - remY);
+                            long threshold = 400 * 400;
+
+                            if (distSq > threshold) 
                             {
                                 Console.WriteLine($"[Sync] Correction! Frame {startFrame} Player {pid}. Local:{localPos} Remote:{remotePos}");
                                 var tf = transforms.components[tIndex];

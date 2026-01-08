@@ -89,7 +89,7 @@ namespace Bomberman.App.GameHost
                 var keyboardState = Keyboard.GetState();
                 
                 // Network Update
-                if (_networkController != null) _networkController.Transport.Poll();
+                if (_networkController != null) _networkController.Update();
 
                 switch (_state)
                 {
@@ -229,7 +229,7 @@ namespace Bomberman.App.GameHost
                 _joinRetryTimer -= (float)gameTime.ElapsedGameTime.TotalSeconds;
                 if (_joinRetryTimer <= 0)
                 {
-                    _networkController.Transport.Send(NetworkProtocol.CreateJoinRequest());
+                    _networkController.SendJoinRequest();
                         Console.WriteLine("Resending Join Request...");
                         _joinRetryTimer = 1.0f;
                 }
@@ -246,8 +246,7 @@ namespace Bomberman.App.GameHost
                     if (prevPlayers != _totalPlayersForGame)
                     {
                         // Broadcast Update
-                        byte[] update = NetworkProtocol.CreateLobbyUpdate(_connectedPlayerCount, _totalPlayersForGame);
-                        _networkController?.Transport.Broadcast(update);
+                        _networkController?.BroadcastLobbyUpdate(_connectedPlayerCount, _totalPlayersForGame);
                     }
 
                     // Start Game
@@ -256,7 +255,7 @@ namespace Bomberman.App.GameHost
                         // Check if we have enough connected players match the required count
                         if (_connectedPlayerCount >= _totalPlayersForGame) 
                         {
-                            _networkController?.Transport.Broadcast(NetworkProtocol.CreateStartGame(_networkSeed, _totalPlayersForGame));
+                            _networkController?.BroadcastStartGame(_networkSeed, _totalPlayersForGame);
                             _state = GameState.Playing;
                             _gameSession = new GameSession(_localPlayerId, _totalPlayersForGame, _networkSeed);
                             _gameSession.RollbackSystem.SimulateNetworked = true;
@@ -295,10 +294,7 @@ namespace Bomberman.App.GameHost
             if (_discoveryTimer <= 0)
             {
                 // Broadcast to ALL possible host ports
-                for(int p=5000; p<5010; p++)
-                {
-                    _networkController?.Transport.BroadcastToPort(NetworkProtocol.CreateDiscoveryRequest(), p);
-                }
+                _networkController?.BroadcastDiscoveryRequest(5000, 5010);
                 _discoveryTimer = 2.0f; // Retry every 2s
             }
 
@@ -324,7 +320,7 @@ namespace Bomberman.App.GameHost
                 {
                     // Connect!
                     var endpoint = new List<System.Net.IPEndPoint>(_foundServers.Keys)[_browserSelection];
-                    _networkController?.Transport.Connect(endpoint.Address.ToString(), endpoint.Port);
+                    _networkController?.Connect(endpoint.Address.ToString(), endpoint.Port);
                     
                     _state = GameState.Lobby;
                     _localPlayerId = -1;
@@ -332,7 +328,7 @@ namespace Bomberman.App.GameHost
                     // _remoteInputBuffer.Clear(); // Not needed
                     
                     // Send Join
-                    _networkController?.Transport.Send(NetworkProtocol.CreateJoinRequest());
+                    _networkController?.SendJoinRequest();
                     Console.WriteLine($"Joining {endpoint}...");
                     _joinRetryTimer = 1.0f;
                 }
@@ -368,7 +364,7 @@ namespace Bomberman.App.GameHost
              if (_localPlayerId == 0 && _state == GameState.Lobby && _networkController != null) // Only Host handles this
             {
                  bool alreadyConnected = false;
-                 foreach(var c in _networkController.Transport.ConnectedClients)
+                 foreach(var c in _networkController.ConnectedClients)
                  {
                      if (c.Equals(sender)) 
                      {
@@ -381,17 +377,15 @@ namespace Bomberman.App.GameHost
                  {
                     if (_connectedPlayerCount < _totalPlayersForGame)
                     {
-                        _networkController.Transport.AddClient(sender);
+                        _networkController.AddClient(sender);
                         int newId = _connectedPlayerCount;
                         _connectedPlayerCount++;
                         
                         // Send Welcome
-                        byte[] welcome = NetworkProtocol.CreateWelcome(newId, _networkSeed, _totalPlayersForGame);
-                        _networkController.Transport.SendTo(welcome, sender);
+                        _networkController.SendWelcome(sender, newId, _networkSeed, _totalPlayersForGame);
 
                         // Broadcast Lobby Update to everyone
-                        byte[] update = NetworkProtocol.CreateLobbyUpdate(_connectedPlayerCount, _totalPlayersForGame);
-                        _networkController.Transport.Broadcast(update);
+                        _networkController.BroadcastLobbyUpdate(_connectedPlayerCount, _totalPlayersForGame);
 
                         Console.WriteLine($"Client {newId} Joined from {sender}");
                     }
@@ -444,7 +438,7 @@ namespace Bomberman.App.GameHost
             }
         }
 
-        private void HandleInputReceived(int pid, int startFrame, InputState[] inputs, Vector2 remotePos, int remoteHash)
+        private void HandleInputReceived(int pid, int startFrame, InputState[] inputs, IntVector2 remotePos, int remoteHash)
         {
              if (_state == GameState.Playing && _gameSession != null)
              {
@@ -457,9 +451,9 @@ namespace Bomberman.App.GameHost
                     {
                         // Loop through all other clients and send Unicast
                         byte[] relayedPacket = NetworkProtocol.CreateInputPacket(pid, startFrame, inputs, remotePos, remoteHash);
-                        foreach(var client in _networkController.Transport.ConnectedClients)
+                        foreach(var client in _networkController.ConnectedClients)
                         {
-                            _networkController.Transport.SendTo(relayedPacket, client);
+                            _networkController.RelayPacket(client, relayedPacket);
                         }
                     }
                 }
@@ -471,8 +465,7 @@ namespace Bomberman.App.GameHost
             if (_localPlayerId == 0 && (_state == GameState.Lobby || _state == GameState.Playing) && _networkController != null)
             {
                 // I am host, reply
-                var resp = NetworkProtocol.CreateDiscoveryResponse("Local Game", _connectedPlayerCount, _totalPlayersForGame);
-                _networkController.Transport.SendTo(resp, sender);
+                _networkController.SendDiscoveryResponse(sender, "Local Game", _connectedPlayerCount, _totalPlayersForGame);
             }
         }
 
@@ -501,13 +494,14 @@ namespace Bomberman.App.GameHost
             if (_gameSession == null) return;
 
              // Capture Local Input
-            Vector2 movement = Vector2.Zero;
+             // Capture Local Input
+            IntVector2 movement = new IntVector2(0, 0);
             if (keyboardState.IsKeyDown(Keys.W) || keyboardState.IsKeyDown(Keys.Up)) movement.Y -= 1;
             if (keyboardState.IsKeyDown(Keys.S) || keyboardState.IsKeyDown(Keys.Down)) movement.Y += 1;
             if (keyboardState.IsKeyDown(Keys.A) || keyboardState.IsKeyDown(Keys.Left)) movement.X -= 1;
             if (keyboardState.IsKeyDown(Keys.D) || keyboardState.IsKeyDown(Keys.Right)) movement.X += 1;
 
-            if (movement != Vector2.Zero) movement.Normalize();
+            // No normalization needed for IntVector2 -1/0/1 input
 
             // Latch Bomb Input
             bool placeBomb = _pendingBombInput;
@@ -517,7 +511,7 @@ namespace Bomberman.App.GameHost
              Point bombTarget = new Point(0, 0);
              if (placeBomb)
              {
-                 Vector2 myPos = Vector2.Zero;
+                 IntVector2 myPos = new IntVector2(0,0);
                  if (_gameSession.Simulation != null)
                  {
                      var pPool = _gameSession.Simulation.World.Players;
@@ -533,8 +527,12 @@ namespace Bomberman.App.GameHost
                      }
                  }
                  
-                 int centerX = (int)(myPos.X + 12);
-                 int centerY = (int)(myPos.Y + 12);
+                 // Scale down to pixels first, then grid
+                 int pixelX = myPos.X / Simulation.SubpixelScale;
+                 int pixelY = myPos.Y / Simulation.SubpixelScale;
+                 
+                 int centerX = pixelX + 12;
+                 int centerY = pixelY + 12;
                  bombTarget = new Point(centerX / 32, centerY / 32);
              }
 
@@ -676,15 +674,18 @@ namespace Bomberman.App.GameHost
                 TransformComponent transform = FindTransform(entity, transformEntities, transforms);
 
                 // Draw Floor for EVERYTHING (or just Empty/Destructible)
-                DrawRectangle(transform.Position + new Vector2(1,1), transform.Size - new Vector2(2,2), Color.Gray);
+                Vector2 pos = new Vector2(transform.Position.X, transform.Position.Y) / (float)Simulation.SubpixelScale;
+                Vector2 size = new Vector2(transform.Size.X, transform.Size.Y) / (float)Simulation.SubpixelScale;
+
+                DrawRectangle(pos + new Vector2(1,1), size - new Vector2(2,2), Color.Gray);
 
                 if (tiles[i].Type == TileComponent.TileType.Solid) 
                 {
-                    DrawRectangle(transform.Position + new Vector2(1,1), transform.Size - new Vector2(2,2), Color.DarkGray);
+                    DrawRectangle(pos + new Vector2(1,1), size - new Vector2(2,2), Color.DarkGray);
                 }
                 else if (tiles[i].Type == TileComponent.TileType.Destructible && !tiles[i].Destroyed) 
                 {
-                    DrawRectangle(transform.Position + new Vector2(1,1), transform.Size - new Vector2(2,2), Color.SaddleBrown);
+                    DrawRectangle(pos + new Vector2(1,1), size - new Vector2(2,2), Color.SaddleBrown);
                 }
             }
 
@@ -701,7 +702,10 @@ namespace Bomberman.App.GameHost
                  float pulse = (bombs[i].Timer % 20) / 20f;
                  Color bColor = Color.Lerp(Color.Red, Color.DarkRed, pulse);
 
-                 DrawRectangle(transform.Position + new Vector2(4, 4), transform.Size - new Vector2(8,8), bColor);
+                 Vector2 pos = new Vector2(transform.Position.X, transform.Position.Y) / (float)Simulation.SubpixelScale;
+                 Vector2 size = new Vector2(transform.Size.X, transform.Size.Y) / (float)Simulation.SubpixelScale;
+
+                 DrawRectangle(pos + new Vector2(4, 4), size - new Vector2(8,8), bColor);
             }
 
             // 3. Draw Powerups
@@ -718,7 +722,10 @@ namespace Bomberman.App.GameHost
                  if (powerups[i].Type == PowerupComponent.PowerupType.Range) pColor = Color.Yellow;
                  if (powerups[i].Type == PowerupComponent.PowerupType.Capacity) pColor = Color.Black;
                  
-                 DrawRectangle(transform.Position, transform.Size, pColor);
+                 Vector2 pos = new Vector2(transform.Position.X, transform.Position.Y) / (float)Simulation.SubpixelScale;
+                 Vector2 size = new Vector2(transform.Size.X, transform.Size.Y) / (float)Simulation.SubpixelScale;
+
+                 DrawRectangle(pos, size, pColor);
             }
 
             // 4. Draw Explosions
@@ -729,7 +736,11 @@ namespace Bomberman.App.GameHost
                 if (i >= expEntities.Count) break;
                 var entity = expEntities[i];
                 TransformComponent transform = FindTransform(entity, transformEntities, transforms);
-                DrawRectangle(transform.Position, transform.Size, Color.OrangeRed);
+                
+                Vector2 pos = new Vector2(transform.Position.X, transform.Position.Y) / (float)Simulation.SubpixelScale;
+                Vector2 size = new Vector2(transform.Size.X, transform.Size.Y) / (float)Simulation.SubpixelScale;
+
+                DrawRectangle(pos, size, Color.OrangeRed);
             }
 
             // 5. Draw Players
@@ -741,14 +752,17 @@ namespace Bomberman.App.GameHost
                 var entity = playerEntities[i];
                 TransformComponent transform = FindTransform(entity, transformEntities, transforms); 
 
+                Vector2 pos = new Vector2(transform.Position.X, transform.Position.Y) / (float)Simulation.SubpixelScale;
+                Vector2 size = new Vector2(transform.Size.X, transform.Size.Y) / (float)Simulation.SubpixelScale;
+
                 Color[] playerColors = new Color[] { Color.White, Color.Blue, Color.Red, Color.Green };
                 Color pColor = playerColors[i % playerColors.Length];
-                DrawRectangle(transform.Position, transform.Size, pColor);
+                DrawRectangle(pos, size, pColor);
                 
                 // Eyes
                 Vector2 eyeOffset = new Vector2(4, 6);
-                DrawRectangle(transform.Position + eyeOffset, new Vector2(4, 6), Color.Black);
-                DrawRectangle(transform.Position + new Vector2(transform.Size.X - eyeOffset.X - 4, eyeOffset.Y), new Vector2(4, 6), Color.Black);
+                DrawRectangle(pos + eyeOffset, new Vector2(4, 6), Color.Black);
+                DrawRectangle(pos + new Vector2(size.X - eyeOffset.X - 4, eyeOffset.Y), new Vector2(4, 6), Color.Black);
             }
         }
 

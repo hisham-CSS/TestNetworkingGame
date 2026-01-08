@@ -34,7 +34,7 @@ namespace Bomberman.Tests
         public void Update_RecordsLocalInput()
         {
             // Arrange
-            var input = new InputState { Movement = new Vector2(1, 0) };
+            var input = new InputState { Movement = new IntVector2(1, 0) };
 
             // Act
             _rollback.Step(input); // Local update
@@ -51,7 +51,7 @@ namespace Bomberman.Tests
         {
             // 1. Simulate Frame 0 (Local Player 0 moves RIGHT)
             // Implicitly predicts Player 1 does NOTHING
-            var input0 = new InputState { Movement = new Vector2(1, 0) };
+            var input0 = new InputState { Movement = new IntVector2(1, 0) };
             _rollback.Step(input0);
 
             // 2. Simulate Frame 1
@@ -62,7 +62,7 @@ namespace Bomberman.Tests
              // For Player 1 (Remote), we used default inputs (Empty).
 
              // 3. Receive Remote Input for Frame 0 showing Player 1 ACTUALLY moved LEFT
-             var input1_Real = new InputState { Movement = new Vector2(-1, 0) };
+             var input1_Real = new InputState { Movement = new IntVector2(-1, 0) };
              InputState[] packetInputs = new InputState[] { input1_Real };
              
              // This should trigger rollback because what we SIMULATED (Empty) != Received (Left)
@@ -73,7 +73,7 @@ namespace Bomberman.Tests
              // Initial P1 pos
              var p1PosBefore = GetPlayerPosition(1);
 
-             _rollback.HandleRemoteInput(1, 0, packetInputs, Vector2.Zero, 0);
+             _rollback.HandleRemoteInput(1, 0, packetInputs, IntVector2.Zero, 0);
 
              // Assert correctness
              // If rollback happened, P1 should have moved LEFT.
@@ -89,7 +89,7 @@ namespace Bomberman.Tests
              Assert.That(p1PosBefore, Is.Not.EqualTo(p1PosAfter));
         }
 
-        private Vector2 GetPlayerPosition(int pid)
+        private IntVector2 GetPlayerPosition(int pid)
         {
             var pPool = _rollback.Simulation.World.Players;
             for(int i=0; i<pPool.Count; i++)
@@ -100,7 +100,7 @@ namespace Bomberman.Tests
                     return _rollback.Simulation.World.Transforms.Get(e).Position;
                 }
             }
-            return Vector2.Zero;
+            return IntVector2.Zero;
         }
         [Test]
         public void TryBuildOutgoingBundle_ReturnsBundle_AfterStep()

@@ -19,11 +19,11 @@ namespace Bomberman.Tests
             // Add identical entities
             Entity pid = world1.CreateEntity();
             world1.Players.Add(pid, new PlayerComponent { PlayerId = 0 });
-            world1.Transforms.Add(pid, new TransformComponent { Position = new Vector2(100, 100) });
+            world1.Transforms.Add(pid, new TransformComponent { Position = new IntVector2(100, 100) });
 
             Entity pid2 = world2.CreateEntity();
             world2.Players.Add(pid2, new PlayerComponent { PlayerId = 0 });
-            world2.Transforms.Add(pid2, new TransformComponent { Position = new Vector2(100, 100) });
+            world2.Transforms.Add(pid2, new TransformComponent { Position = new IntVector2(100, 100) });
 
             // Act
             int hash1 = StateHasher.Hash(world1);
@@ -42,11 +42,11 @@ namespace Bomberman.Tests
 
             Entity pid = world1.CreateEntity();
             world1.Players.Add(pid, new PlayerComponent { PlayerId = 0 });
-            world1.Transforms.Add(pid, new TransformComponent { Position = new Vector2(100, 100) });
+            world1.Transforms.Add(pid, new TransformComponent { Position = new IntVector2(100, 100) });
 
             Entity pid2 = world2.CreateEntity();
             world2.Players.Add(pid2, new PlayerComponent { PlayerId = 0 });
-            world2.Transforms.Add(pid2, new TransformComponent { Position = new Vector2(100, 101) }); // Slight diff
+            world2.Transforms.Add(pid2, new TransformComponent { Position = new IntVector2(100, 101) }); // Slight diff
 
             // Act
             int hash1 = StateHasher.Hash(world1);
@@ -62,14 +62,14 @@ namespace Bomberman.Tests
             // Arrange
             var world = new World();
             Entity e = world.CreateEntity();
-            world.Transforms.Add(e, new TransformComponent { Position = new Vector2(50, 50) });
+            world.Transforms.Add(e, new TransformComponent { Position = new IntVector2(50, 50) });
             
             // Create Snapshot of state A
             var snapshotA = new GameStateSnapshot(1, world);
 
             // Modify state to B
             var t = world.Transforms.Get(e);
-            t.Position = new Vector2(100, 100);
+            t.Position = new IntVector2(100, 100);
             world.Transforms.Remove(e);
             world.Transforms.Add(e, t);
             

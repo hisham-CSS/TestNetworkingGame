@@ -85,8 +85,8 @@ public class ComponentPool<T> : IComponentPool where T : struct
 
 public struct TransformComponent
 {
-    public Vector2 Position; // Continuous position
-    public Vector2 Size;     // AABB Size
+    public IntVector2 Position; // Continuous position in simulation units (e.g. 1/100th pixel)
+    public IntVector2 Size;     // AABB Size
 }
 
 public struct PlayerComponent
@@ -99,7 +99,7 @@ public struct PlayerComponent
 
 public struct InputState
 {
-    public Vector2 Movement; // Normalized vector
+    public IntVector2 Movement; // Input direction (-1, 0, 1)
     public bool PlaceBomb;
     public Point BombTarget; // Explicit Grid Coordinate
 

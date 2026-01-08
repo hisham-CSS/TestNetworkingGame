@@ -83,8 +83,8 @@ namespace Bomberman.Core.Rollback
             {
                 int frameId = reader.ReadInt32();
                 InputState input = new InputState();
-                input.Movement.X = reader.ReadSingle();
-                input.Movement.Y = reader.ReadSingle();
+                input.Movement.X = reader.ReadInt32();
+                input.Movement.Y = reader.ReadInt32();
                 input.PlaceBomb = reader.ReadBoolean();
                 return (frameId, input);
             }

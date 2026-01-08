@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
+using Bomberman.Core.Game;
 
 namespace Bomberman.Core
 {
@@ -12,6 +13,12 @@ namespace Bomberman.Core
         private const int MapWidth = 15;
         private const int MapHeight = 13;
         private const int TileSize = 32;
+        public const int SubpixelScale = 100; // 1 unit = 0.01 pixel
+        private const int ScaledTileSize = TileSize * SubpixelScale;
+
+        // Speed: 150 pixels/sec -> 15000 units/sec
+        // At 60 FPS: 250 units/frame
+        private const int PlayerSpeedPerFrame = 250; 
 
         public Simulation(int seed, int playerCount)
         {
@@ -22,7 +29,8 @@ namespace Bomberman.Core
 
         private void GenerateMap(int seed)
         {
-            var random = new Random(seed);
+            // Use DeterministicRandom
+            var random = new DeterministicRandom(seed);
 
             for (int y = 0; y < MapHeight; y++)
             {
@@ -31,8 +39,8 @@ namespace Bomberman.Core
                     Entity tile = World.CreateEntity();
                     var transform = new TransformComponent
                     {
-                        Position = new Vector2(x * TileSize, y * TileSize),
-                        Size = new Vector2(TileSize, TileSize)
+                        Position = new IntVector2(x * ScaledTileSize, y * ScaledTileSize),
+                        Size = new IntVector2(ScaledTileSize, ScaledTileSize)
                     };
                     
                     TileComponent.TileType type = TileComponent.TileType.Empty;
@@ -79,29 +87,48 @@ namespace Bomberman.Core
 
         private void SpawnPlayers(int count)
         {
+            // Spawn points in Grid Coordinates
             var spawnPoints = new[]
             {
-                new Vector2(1, 1),
-                new Vector2(MapWidth - 2, 1),
-                new Vector2(1, MapHeight - 2),
-                new Vector2(MapWidth - 2, MapHeight - 2)
+                new Point(1, 1),
+                new Point(MapWidth - 2, 1),
+                new Point(1, MapHeight - 2),
+                new Point(MapWidth - 2, MapHeight - 2)
             };
 
-            for (int i = 0; i < count; i++) // Just 1 player for now, extensible to 4
+            for (int i = 0; i < count; i++) 
             {
                 var player = World.CreateEntity();
                 World.Players.Add(player, new PlayerComponent { PlayerId = (uint)i, Alive = true, BombRange = 1, BombCapacity = 1 });
+                
+                // 24x24 pixels -> 2400x2400 units
+                int playerSize = 24 * SubpixelScale;
+                
+                // Center in tile: TileStart + (TileSize - PlayerSize)/2
+                // But simplified: Just place top-left for now relative to tile?
+                // Old code: spawnPoints[i] * TileSize
+                // That puts (0,0) of player at (0,0) of tile.
+                // If player is smaller (24) and tile is 32, it's top-left aligned in the tile?
+                // Visuals might look offset, but logic was consistent.
+                // Let's keep it simple: Position = Grid * ScaledTileSize.
+                // Centering adjustment: (3200 - 2400) / 2 = 400 offset.
+                
+                int startX = spawnPoints[i].X * ScaledTileSize + (ScaledTileSize - playerSize) / 2;
+                int startY = spawnPoints[i].Y * ScaledTileSize + (ScaledTileSize - playerSize) / 2;
+
                 World.Transforms.Add(player, new TransformComponent 
                 { 
-                    Position = spawnPoints[i] * TileSize, 
-                    Size = new Vector2(24, 24) // Slightly smaller than tile for ease of movement
+                    Position = new IntVector2(startX, startY), 
+                    Size = new IntVector2(playerSize, playerSize)
                 });
             }
         }
 
         public void Update(InputState[] inputs, float dt)
         {
-            UpdatePlayers(inputs, dt);
+            // Ignore dt for movement if we assume fixed step, BUT we should verify.
+            // Just use PlayerSpeedPerFrame.
+            UpdatePlayers(inputs);
             UpdateBombs();
             UpdateExplosions();
             CheckDamage();
@@ -110,29 +137,28 @@ namespace Bomberman.Core
         private void CheckDamage()
         {
             var players = World.Players.GetAll();
-            var playerTransforms = World.Transforms.GetAll(); // Assumes aligned with Player Entities (risky if not synced, but current impl syncs them)
-            // Ideally use GetEntities to map correctly
+            var playerTransforms = World.Transforms.GetAll(); 
             var playerEntities = World.Players.GetEntities();
             var playerTransformEntities = World.Transforms.GetEntities();
             
             var explosions = World.Explosions.GetAll();
             if (explosions.Count == 0) return;
             var explosionTransforms = World.Transforms.GetAll();
-            var explosionEntities = World.Transforms.GetEntities(); // Need to map explosion ID to Transform
+            var explosionEntities = World.Transforms.GetEntities();
             var explosionCompEntities = World.Explosions.GetEntities(); 
 
-            // Optimization: Cache explosion rects
+            // Optimization: Cache explosion rects (in scaled units)
+            // Use MonoGame Rectangle (int based) which fits perfectly!
             List<Rectangle> expRects = new List<Rectangle>();
             for(int i=0; i<explosions.Count; i++) 
             {
-                 // Find Transform for this explosion
-                 // Linear search again (TODO: Optimize ECS)
                  var entity = explosionCompEntities[i];
                  for(int t=0; t<explosionEntities.Count; t++) {
                      if (explosionEntities[t].Equals(entity)) {
                          var trans = explosionTransforms[t];
-                         // Shrink slightly to be nice?
-                         expRects.Add(new Rectangle((int)trans.Position.X + 4, (int)trans.Position.Y + 4, (int)trans.Size.X - 8, (int)trans.Size.Y - 8));
+                         // Shrink 4 pixels = 400 units
+                         int shrink = 4 * SubpixelScale;
+                         expRects.Add(new Rectangle(trans.Position.X + shrink, trans.Position.Y + shrink, trans.Size.X - shrink*2, trans.Size.Y - shrink*2));
                          break;
                      }
                  }
@@ -143,7 +169,6 @@ namespace Bomberman.Core
                 if (!players[i].Alive) continue;
 
                 var pEntity = playerEntities[i];
-                // Find Player Transform
                 TransformComponent pTrans = new TransformComponent();
                 bool found = false;
                 for(int t=0; t<playerTransformEntities.Count; t++) {
@@ -155,7 +180,7 @@ namespace Bomberman.Core
                 }
                 if (!found) continue;
 
-                Rectangle pRect = new Rectangle((int)pTrans.Position.X, (int)pTrans.Position.Y, (int)pTrans.Size.X, (int)pTrans.Size.Y);
+                Rectangle pRect = new Rectangle(pTrans.Position.X, pTrans.Position.Y, pTrans.Size.X, pTrans.Size.Y);
 
                 foreach(var eRect in expRects)
                 {
@@ -171,18 +196,15 @@ namespace Bomberman.Core
             }
         }
 
-        private void UpdatePlayers(InputState[] inputs, float dt)
+        private void UpdatePlayers(InputState[] inputs)
         {
             var players = World.Players.GetAll();
             var playerEntities = World.Players.GetEntities();
             var transforms = World.Transforms.GetAll();
             var transformEntities = World.Transforms.GetEntities();
 
-            // Iterate by Player ID / Input Index to ensure deterministic input mapping
-            // DO NOT iterate by pool index, as that changes with removals!
             for (int id = 0; id < inputs.Length; id++)
             {
-                // Find the player component with this PlayerId
                 int pIndex = -1;
                 for(int k=0; k<players.Count; k++)
                 {
@@ -193,12 +215,11 @@ namespace Bomberman.Core
                     }
                 }
                 
-                if (pIndex == -1) continue; // Player not found or dead (if checking alive here)
+                if (pIndex == -1) continue; 
 
                 var input = inputs[id];
                 var playerEntity = playerEntities[pIndex];
 
-                // Find Transform 
                 int transformIndex = -1;
                 for(int t=0; t<transformEntities.Count; t++) {
                     if (transformEntities[t].Equals(playerEntity)) {
@@ -211,10 +232,9 @@ namespace Bomberman.Core
 
                 var transform = transforms[transformIndex];
 
-                // Movement
-                float speed = 150f;
-                Vector2 velocity = input.Movement * speed * dt;
-                if (velocity != Vector2.Zero)
+                // Movement (Integer)
+                IntVector2 velocity = input.Movement * PlayerSpeedPerFrame;
+                if (velocity != IntVector2.Zero)
                 {
                     transform.Position = MoveWithCollision(transform, velocity);
                 }
@@ -222,20 +242,17 @@ namespace Bomberman.Core
                 transforms[transformIndex] = transform;
 
                 // Powerup Pickup Collision
-                // ... (Logic remains same, just scoped to this loop) ...
-                // Naive O(N) check against all powerups
                 var powerups = World.Powerups.GetAll();
                 var powerupEntities = World.Powerups.GetEntities();
                 var powerupTransforms = World.Transforms.GetAll();
                 var powerupTransformEntities = World.Transforms.GetEntities();
                 
-                Rectangle playerRect = new Rectangle((int)transform.Position.X, (int)transform.Position.Y, (int)transform.Size.X, (int)transform.Size.Y);
+                Rectangle playerRect = new Rectangle(transform.Position.X, transform.Position.Y, transform.Size.X, transform.Size.Y);
 
                 List<Entity> eatenPowerups = new List<Entity>();
 
                 for(int p=0; p<powerups.Count; p++)
                 {
-                    // Find transform for this powerup
                     int pTransIdx = -1;
                     for(int pt=0; pt<powerupTransformEntities.Count; pt++) {
                          if (powerupTransformEntities[pt].Equals(powerupEntities[p])) {
@@ -246,7 +263,7 @@ namespace Bomberman.Core
                     if (pTransIdx == -1) continue;
 
                     var pTrans = powerupTransforms[pTransIdx];
-                    Rectangle pRect = new Rectangle((int)pTrans.Position.X, (int)pTrans.Position.Y, (int)pTrans.Size.X, (int)pTrans.Size.Y);
+                    Rectangle pRect = new Rectangle(pTrans.Position.X, pTrans.Position.Y, pTrans.Size.X, pTrans.Size.Y);
 
                     if (playerRect.Intersects(pRect))
                     {
@@ -254,7 +271,7 @@ namespace Bomberman.Core
                         if (powerups[p].Type == PowerupComponent.PowerupType.Range) playerComp.BombRange++;
                         else if (powerups[p].Type == PowerupComponent.PowerupType.Capacity) playerComp.BombCapacity++;
                         
-                        World.Players.Set(pIndex, playerComp); // Update player stats
+                        World.Players.Set(pIndex, playerComp); 
                         eatenPowerups.Add(powerupEntities[p]);
                     }
                 }
@@ -273,13 +290,12 @@ namespace Bomberman.Core
             }
         }
 
-        private Vector2 MoveWithCollision(TransformComponent transform, Vector2 velocity)
+        private IntVector2 MoveWithCollision(TransformComponent transform, IntVector2 velocity)
         {
-            // Current position rect for "Am I inside a bomb?" check
-            Vector2 currentPos = transform.Position;
+            IntVector2 currentPos = transform.Position;
 
             // Resolve X
-            Vector2 newPos = transform.Position + new Vector2(velocity.X, 0);
+            IntVector2 newPos = transform.Position + new IntVector2(velocity.X, 0);
             if (CheckCollision(newPos, transform.Size, currentPos))
             {
                 // Simple slide
@@ -290,7 +306,7 @@ namespace Bomberman.Core
             }
 
             // Resolve Y
-            newPos = transform.Position + new Vector2(0, velocity.Y);
+            newPos = transform.Position + new IntVector2(0, velocity.Y);
             if (CheckCollision(newPos, transform.Size, currentPos))
             {
                 // Simple slide
@@ -303,10 +319,10 @@ namespace Bomberman.Core
             return transform.Position;
         }
 
-        private bool CheckCollision(Vector2 _pos, Vector2 _size, Vector2 _currentPos)
+        private bool CheckCollision(IntVector2 _pos, IntVector2 _size, IntVector2 _currentPos)
         {
-            Rectangle playerRect = new Rectangle((int)_pos.X, (int)_pos.Y, (int)_size.X, (int)_size.Y);
-            Rectangle currentRect = new Rectangle((int)_currentPos.X, (int)_currentPos.Y, (int)_size.X, (int)_size.Y);
+            Rectangle playerRect = new Rectangle(_pos.X, _pos.Y, _size.X, _size.Y);
+            Rectangle currentRect = new Rectangle(_currentPos.X, _currentPos.Y, _size.X, _size.Y);
             
             var tiles = World.Tiles.GetAll();
             var tileTransforms = World.Transforms.GetAll();
@@ -316,7 +332,7 @@ namespace Bomberman.Core
                 if (tiles[i].Type == TileComponent.TileType.Solid || (tiles[i].Type == TileComponent.TileType.Destructible && !tiles[i].Destroyed))
                 {
                     var tileTrans = tileTransforms[i];
-                    Rectangle tileRect = new Rectangle((int)tileTrans.Position.X, (int)tileTrans.Position.Y, (int)tileTrans.Size.X, (int)tileTrans.Size.Y);
+                    Rectangle tileRect = new Rectangle(tileTrans.Position.X, tileTrans.Position.Y, tileTrans.Size.X, tileTrans.Size.Y);
                     
                     if (playerRect.Intersects(tileRect))
                         return true;
@@ -336,10 +352,9 @@ namespace Bomberman.Core
                      if(transformEntities[t].Equals(bombEntity))
                      {
                          var bombTrans = allTransforms[t];
-                          Rectangle bombRect = new Rectangle((int)bombTrans.Position.X, (int)bombTrans.Position.Y, (int)bombTrans.Size.X, (int)bombTrans.Size.Y);
+                          Rectangle bombRect = new Rectangle(bombTrans.Position.X, bombTrans.Position.Y, bombTrans.Size.X, bombTrans.Size.Y);
                           
-                          // Fix: If we are CURRENTLY intersecting this bomb, ignore collision.
-                          // This allows walking off the bomb, but prevents walking back onto it.
+                          // Walking-off-bomb logic
                           if (currentRect.Intersects(bombRect))
                           {
                               continue; 
@@ -357,16 +372,14 @@ namespace Bomberman.Core
 
         private void TryPlaceBomb(Point targetGrid, PlayerComponent player, Entity playerEntity)
         {
-            // Use Explicit Target
             int gridX = targetGrid.X;
             int gridY = targetGrid.Y;
             
-            Vector2 snapPos = new Vector2(gridX * TileSize, gridY * TileSize);
+            IntVector2 snapPos = new IntVector2(gridX * ScaledTileSize, gridY * ScaledTileSize);
 
             // Check boundaries
             if (gridX < 0 || gridX >= MapWidth || gridY < 0 || gridY >= MapHeight) return;
 
-            // Check if bomb already exists there
              var bombs = World.Bombs.GetAll();
             var bombEntities = World.Bombs.GetEntities();
             var transformEntities = World.Transforms.GetEntities();
@@ -379,11 +392,7 @@ namespace Bomberman.Core
                 if (bombs[i].OwnerId == player.PlayerId) activeBombs++;
             }
 
-            if (activeBombs >= player.BombCapacity) 
-            {
-                Log?.Invoke($"[BombFail] Player {player.PlayerId} Capacity Reached. Active: {activeBombs}, Cap: {player.BombCapacity}");
-                return;
-            }
+            if (activeBombs >= player.BombCapacity) return;
 
             for(int i=0; i<bombs.Count; i++)
             {
@@ -394,7 +403,6 @@ namespace Bomberman.Core
                      {
                          if(allTransforms[t].Position == snapPos) 
                          {
-                             Log?.Invoke($"[BombFail] Player {player.PlayerId} Bomb Exists at {gridX},{gridY}");
                              return; // Bomb exists
                          }
                          break;
@@ -404,10 +412,14 @@ namespace Bomberman.Core
 
             // Spawn Bomb
             Entity bomb = World.CreateEntity();
-            // Use Player Stats
             World.Bombs.Add(bomb, new BombComponent { Timer = 180, MaxTimer = 180, Range = player.BombRange, OwnerId = player.PlayerId });
-            World.Transforms.Add(bomb, new TransformComponent { Position = snapPos, Size = new Vector2(TileSize, TileSize) });
-            Log?.Invoke($"[BombSuccess] Player {player.PlayerId} Placed at {gridX},{gridY}. New Active: {activeBombs + 1}");
+            World.Transforms.Add(bomb, new TransformComponent 
+            { 
+                Position = snapPos, 
+                Size = new IntVector2(ScaledTileSize, ScaledTileSize) 
+            });
+            
+            Log?.Invoke($"[Bomb] P{player.PlayerId} at {gridX},{gridY}");
         }
 
         private void UpdateBombs()
@@ -415,8 +427,6 @@ namespace Bomberman.Core
             var bombList = World.Bombs.GetAll();
             var bombEntities = World.Bombs.GetEntities();
             
-            // Snapshot phase: Collect bombs that need to explode
-            // We store the Component (value type copy) and Entity (ID)
             List<(Entity entity, BombComponent component)> explosions = new List<(Entity, BombComponent)>();
 
             for (int i = 0; i < bombList.Count; i++)
@@ -431,9 +441,6 @@ namespace Bomberman.Core
                 }
             }
 
-            // Action phase: Explode and Remove
-            // Since we extracted the data, we don't care about live indices anymore.
-            // We just ask the world to remove the specific entities.
             foreach (var explosion in explosions)
             {
                 Explode(explosion.entity, explosion.component);
@@ -444,10 +451,9 @@ namespace Bomberman.Core
 
         private void Explode(Entity bombEntity, BombComponent bombComp)
         {
-             // Get Bomb Position
              var transformEntities = World.Transforms.GetEntities();
              var allTransforms = World.Transforms.GetAll();
-             Vector2 bombPos = Vector2.Zero;
+             IntVector2 bombPos = IntVector2.Zero;
              
              for(int t=0; t<transformEntities.Count; t++) {
                  if(transformEntities[t].Equals(bombEntity)) {
@@ -456,73 +462,75 @@ namespace Bomberman.Core
                  }
              }
 
-             // Create Center Explosion
              SpawnExplosion(bombPos);
 
-             // Directions: Up, Down, Left, Right
-             Vector2[] dirs = { new Vector2(0, -1), new Vector2(0, 1), new Vector2(-1, 0), new Vector2(1, 0) };
+             IntVector2[] dirs = { new IntVector2(0, -1), new IntVector2(0, 1), new IntVector2(-1, 0), new IntVector2(1, 0) };
              
              foreach(var dir in dirs)
              {
                  for(int r=1; r<=bombComp.Range; r++)
                  {
-                     Vector2 checkPos = bombPos + (dir * r * TileSize);
-                     if(ExplosionHit(checkPos)) break; // Stop propagation if hit something (wall/block)
+                     IntVector2 checkPos = bombPos + (dir * r * ScaledTileSize);
+                     if(ExplosionHit(checkPos)) break; 
                      SpawnExplosion(checkPos);
                  }
              }
         }
         
-        private bool ExplosionHit(Vector2 pos)
+        private bool ExplosionHit(IntVector2 pos)
         {
-            // Check walls/boxes
-            Rectangle checkRect = new Rectangle((int)pos.X + 2, (int)pos.Y + 2, TileSize - 4, TileSize - 4); // Small shrink to avoid edge cases
+            Rectangle checkRect = new Rectangle(pos.X + 2*SubpixelScale, pos.Y + 2*SubpixelScale, ScaledTileSize - 4*SubpixelScale, ScaledTileSize - 4*SubpixelScale);
             
             var tiles = World.Tiles.GetAll();
             var tileTransforms = World.Transforms.GetAll();
-            var tileEntities = World.Tiles.GetEntities();
 
             for (int i = 0; i < tiles.Count; i++)
             {
                 var tPos = tileTransforms[i].Position;
-                Rectangle tileRect = new Rectangle((int)tPos.X, (int)tPos.Y, TileSize, TileSize);
+                Rectangle tileRect = new Rectangle(tPos.X, tPos.Y, ScaledTileSize, ScaledTileSize);
                 
                 if (checkRect.Intersects(tileRect))
                 {
-                    if (tiles[i].Type == TileComponent.TileType.Solid) return true; // Stop
+                    if (tiles[i].Type == TileComponent.TileType.Solid) return true; 
                     
                     if (tiles[i].Type == TileComponent.TileType.Destructible && !tiles[i].Destroyed)
                     {
                          var tile = tiles[i];
-                        tile.Destroyed = true; // Destroy it
+                        tile.Destroyed = true; 
                         World.Tiles.Set(i, tile);
                         
-                        // Drop Powerup if seeded
                         if (tile.HiddenPowerup != PowerupComponent.PowerupType.None)
                         {
                             SpawnPowerup(tileTransforms[i].Position, tile.HiddenPowerup);
                         }
 
-                        return true; // Stop after destroying one
+                        return true; 
                     }
                 }
             }
             return false;
         }
 
-        private void SpawnPowerup(Vector2 pos, PowerupComponent.PowerupType type)
+        private void SpawnPowerup(IntVector2 pos, PowerupComponent.PowerupType type)
         {
             var p = World.CreateEntity();
             World.Powerups.Add(p, new PowerupComponent { Type = type });
-            // Powerup is slightly smaller than tile
-            World.Transforms.Add(p, new TransformComponent { Position = pos + new Vector2(8, 8), Size = new Vector2(16, 16) });
+            World.Transforms.Add(p, new TransformComponent 
+            { 
+                Position = pos + new IntVector2(8*SubpixelScale, 8*SubpixelScale), 
+                Size = new IntVector2(16*SubpixelScale, 16*SubpixelScale) 
+            });
         }
 
-        private void SpawnExplosion(Vector2 pos)
+        private void SpawnExplosion(IntVector2 pos)
         {
             var exp = World.CreateEntity();
             World.Explosions.Add(exp, new ExplosionComponent { Timer = 30, MaxTimer = 30 });
-            World.Transforms.Add(exp, new TransformComponent { Position = pos, Size = new Vector2(TileSize, TileSize) });
+            World.Transforms.Add(exp, new TransformComponent 
+            { 
+                Position = pos, 
+                Size = new IntVector2(ScaledTileSize, ScaledTileSize) 
+            });
         }
         
         private void UpdateExplosions()

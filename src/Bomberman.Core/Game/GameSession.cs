@@ -55,7 +55,7 @@ namespace Bomberman.Core.Game
                 RollbackSystem.SaveReplay(path);
         }
         
-        public void HandleRemoteInput(int pid, int startFrame, InputState[] inputs, Microsoft.Xna.Framework.Vector2 remotePos, int remoteHash)
+        public void HandleRemoteInput(int pid, int startFrame, InputState[] inputs, Bomberman.Core.IntVector2 remotePos, int remoteHash)
         {
             RollbackSystem.HandleRemoteInput(pid, startFrame, inputs, remotePos, remoteHash);
         }

@@ -9,33 +9,82 @@ namespace Bomberman.Net
 {
     public class NetworkController
     {
-        public UdpTransport Transport { get; private set; }
-        
+        private UdpTransport _transport;
+        public IEnumerable<IPEndPoint> ConnectedClients => _transport.ConnectedClients;
+
         // Events to decouple logic from Program.cs
         public event Action<int, int, int>? OnWelcomeReceived; // assignedId, seed, totalPlayers
         public event Action<int, int>? OnLobbyUpdateReceived; // connectedCount, totalPlayers
         public event Action<int, int>? OnStartGameReceived; // seed, totalPlayers
         public event Action<System.Net.IPEndPoint, string, int, int>? OnDiscoveryRequestReceived; // sender, header, players, max
         public event Action<System.Net.IPEndPoint, string, int, int>? OnDiscoveryResponseReceived; // sender, name, players, max
-        // OnJoinRequestReceived removed
         public event Action<System.Net.IPEndPoint>? OnJoinRequestRaw; // Just notify that someone wants to join
         
-        public event Action<int, int, InputState[], Vector2, int>? OnInputReceived; // pid, frame, history, pos, hash
+        public event Action<int, int, InputState[], IntVector2, int>? OnInputReceived; // pid, frame, history, pos, hash
 
         public NetworkController(int port)
         {
-            Transport = new UdpTransport(port);
-            Transport.OnPacketReceived += HandlePacket;
+            _transport = new UdpTransport(port);
+            _transport.OnPacketReceived += HandlePacket;
+        }
+
+        public void Connect(string ip, int port)
+        {
+            _transport.Connect(ip, port);
+        }
+
+        public void AddClient(IPEndPoint client)
+        {
+            _transport.AddClient(client);
         }
 
         public void Update()
         {
-            Transport.Poll();
+            _transport.Poll();
         }
 
         public void Close()
         {
-            Transport.Close();
+            _transport.Close();
+        }
+
+        public void SendJoinRequest()
+        {
+            _transport.Send(NetworkProtocol.CreateJoinRequest());
+        }
+
+        public void SendWelcome(IPEndPoint target, int assignedId, int seed, int totalPlayers)
+        {
+            _transport.SendTo(NetworkProtocol.CreateWelcome(assignedId, seed, totalPlayers), target);
+        }
+
+        public void BroadcastLobbyUpdate(int connectedCount, int totalPlayers)
+        {
+            _transport.Broadcast(NetworkProtocol.CreateLobbyUpdate(connectedCount, totalPlayers));
+        }
+
+        public void BroadcastStartGame(int seed, int totalPlayers)
+        {
+            _transport.Broadcast(NetworkProtocol.CreateStartGame(seed, totalPlayers));
+        }
+
+        public void BroadcastDiscoveryRequest(int startPort, int endPort)
+        {
+            var packet = NetworkProtocol.CreateDiscoveryRequest();
+            for (int p = startPort; p < endPort; p++)
+            {
+                _transport.BroadcastToPort(packet, p);
+            }
+        }
+
+        public void SendDiscoveryResponse(IPEndPoint target, string serverName, int currentPlayers, int maxPlayers)
+        {
+            _transport.SendTo(NetworkProtocol.CreateDiscoveryResponse(serverName, currentPlayers, maxPlayers), target);
+        }
+
+        public void RelayPacket(IPEndPoint target, byte[] packet)
+        {
+            _transport.SendTo(packet, target);
         }
 
         public void SendInput(OutgoingInputBundle bundle)
@@ -47,31 +96,14 @@ namespace Bomberman.Net
                 bundle.LocalPosition, 
                 bundle.LocalStateHash
             );
-
-            // Logic from RollbackSystem.Update:
-            // if (_localPlayerId == 0) transport.Broadcast(packet);
-            // else transport.Send(packet);
-            
-            // Wait, NetworkController doesn't know "local player id" explicitly? 
-            // It just has Transport.
-            // But usually Host (pid 0) should Broadcast, Client should Send (Unicast to Host).
-            // However, UdpTransport.Broadcast sends to ALL connected clients.
-            // If I am Host (0), I broadcast.
-            // If I am Client, I send to Server.
-            
-            // NetworkController constructor doesn't take PID.
-            // But we can check bundle.PlayerId?
-            // If bundle.PlayerId == 0 -> Broadcast?
-            // Safer: External caller decides? Or we add param to SendInput?
-            // Or assume PID 0 is always Host.
             
             if (bundle.PlayerId == 0) 
             {
-                Transport.Broadcast(packet);
+                _transport.Broadcast(packet);
             }
             else 
             {
-                Transport.Send(packet);
+                _transport.Send(packet);
             }
         }
 

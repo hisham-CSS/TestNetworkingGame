@@ -97,7 +97,7 @@ namespace Bomberman.Net
             }
         }
 
-        public static byte[] CreateInputPacket(int playerId, int startFrame, InputState[] inputs, Vector2 currentPos, int stateHash)
+        public static byte[] CreateInputPacket(int playerId, int startFrame, InputState[] inputs, IntVector2 currentPos, int stateHash)
         {
              using (var ms = new MemoryStream())
             using (var writer = new BinaryWriter(ms))
@@ -122,7 +122,7 @@ namespace Bomberman.Net
             }
         }
 
-         public static (int playerId, int startFrame, InputState[] inputs, Vector2 currentPos, int stateHash) ReadInputPacket(byte[] data)
+         public static (int playerId, int startFrame, InputState[] inputs, IntVector2 currentPos, int stateHash) ReadInputPacket(byte[] data)
         {
             using (var ms = new MemoryStream(data))
             using (var reader = new BinaryReader(ms))
@@ -131,16 +131,16 @@ namespace Bomberman.Net
                 int playerId = reader.ReadInt32();
                 int startFrame = reader.ReadInt32();
                 int count = reader.ReadInt32();
-                float x = reader.ReadSingle();
-                float y = reader.ReadSingle();
+                int x = reader.ReadInt32();
+                int y = reader.ReadInt32();
                 int stateHash = reader.ReadInt32(); // Read Hash
-                Vector2 currentPos = new Vector2(x, y);
+                IntVector2 currentPos = new IntVector2(x, y);
                 
                 InputState[] inputs = new InputState[count];
                 for (int i = 0; i < count; i++)
                 {
-                     inputs[i].Movement.X = reader.ReadSingle();
-                     inputs[i].Movement.Y = reader.ReadSingle();
+                     inputs[i].Movement.X = reader.ReadInt32();
+                     inputs[i].Movement.Y = reader.ReadInt32();
                      inputs[i].PlaceBomb = reader.ReadBoolean();
                      inputs[i].BombTarget = new Point(reader.ReadInt32(), reader.ReadInt32());
                 }
