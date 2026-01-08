@@ -7,7 +7,7 @@ using System.IO;
 
 using Bomberman.Core;
 
-namespace Bomberman.Net
+namespace Bomberman.Core.Rollback
 {
     public class RollbackSystem
     {
@@ -84,9 +84,69 @@ namespace Bomberman.Net
             _remoteInputBuffer[frame][pid] = input;
         }
 
-        public void Update(InputState localInput, ITransport? transport)
+        public bool TryBuildOutgoingBundle(out OutgoingInputBundle bundle)
         {
-            // ... (Replay logic) ...
+            bundle = default;
+            // We want to send the input for the frame we JUST simulated (or the latest available).
+            // Since Step() increments _currentFrame, the latest complete frame is _currentFrame - 1.
+            int frameToSend = _currentFrame - 1;
+            
+            if (frameToSend < 0) return false;
+
+            if (_localInputBuffer.ContainsKey(frameToSend))
+            {
+                 int redundancy = 8;
+                 var history = new List<InputState>();
+                 history.Add(_localInputBuffer[frameToSend]); // Frame To Send Input
+
+                 for (int i = 1; i < redundancy; i++)
+                 {
+                     int histFrame = frameToSend - i;
+                     if (histFrame >= 0 && _localInputBuffer.ContainsKey(histFrame))
+                     {
+                         history.Add(_localInputBuffer[histFrame]);
+                     }
+                     else break;
+                 }
+
+                 // Get Local Pos
+                 Vector2 currentPos = Vector2.Zero;
+                 if (Simulation != null)
+                 {
+                     var playerPool = Simulation.World.Players;
+                     for (int i = 0; i < playerPool.Count; i++)
+                     {
+                         if (playerPool.Get(i).PlayerId == _localPlayerId)
+                         {
+                             var entity = playerPool.GetEntity(i);
+                             if (Simulation.World.Transforms.Has(entity))
+                             {
+                                 currentPos = Simulation.World.Transforms.Get(entity).Position;
+                             }
+                             break;
+                         }
+                     }
+                 }
+
+                 int localHash = Simulation != null ? StateHasher.Hash(Simulation.World) : 0;
+                 
+                 bundle = new OutgoingInputBundle
+                 {
+                     PlayerId = _localPlayerId,
+                     Frame = frameToSend,
+                     RedundantHistory = history.ToArray(),
+                     LocalPosition = currentPos,
+                     LocalStateHash = localHash
+                 };
+                 return true;
+            }
+            return false;
+        }
+
+        // Replaced Update -> Step
+        public void Step(InputState localInput)
+        {
+            // ... (Replay logic - handle separately or keep basic check) ...
             if (IsReplaying)
             {
                  InputState[] replayInputs = _recorder.GetFrame(_replayFrame);
@@ -99,13 +159,14 @@ namespace Bomberman.Net
             // Store Local Input
             _localInputBuffer[_currentFrame] = localInput;
 
-            bool isNetworked = transport != null || SimulateNetworked;
-
-
+            bool isNetworked = SimulateNetworked; // Or controlled externally
 
             if (isNetworked)
             {
-                // FRAME PACING / THROTTLING
+                // FRAME PACING / THROTTLING logic?
+                // For now, removing direct dependency. The NetworkController should check throttling before calling Step?
+                // Or we keep throttling logic here but rely on external "LastConfirmedFrame" inputs.
+                
                 int minConfirmedFrame = _currentFrame;
                 for (int i = 0; i < _totalPlayers; i++)
                 {
@@ -126,51 +187,7 @@ namespace Bomberman.Net
                     return; 
                 }
 
-                // 1. Send Local Input
-                int redundancy = 8;
-                List<InputState> history = new List<InputState>();
-                history.Add(localInput); 
-
-                for (int i = 1; i < redundancy; i++)
-                {
-                    int histFrame = _currentFrame - i;
-                    if (histFrame >= 0 && _localInputBuffer.ContainsKey(histFrame))
-                    {
-                        history.Add(_localInputBuffer[histFrame]);
-                    }
-                    else
-                    {
-                        break; 
-                    }
-                }
-
-                // Get ID for Local Player Position Lookup
-                Vector2 currentPos = Vector2.Zero;
-                if (Simulation != null)
-                {
-                     var playerPool = Simulation.World.Players;
-                    for (int i = 0; i < playerPool.Count; i++)
-                    {
-                        if (playerPool.Get(i).PlayerId == _localPlayerId)
-                        {
-                            var entity = playerPool.GetEntity(i);
-                            if (Simulation.World.Transforms.Has(entity))
-                            {
-                                currentPos = Simulation.World.Transforms.Get(entity).Position;
-                            }
-                            break;
-                        }
-                    }
-                }
-
-                int localHash = Simulation != null ? StateHasher.Hash(Simulation.World) : 0;
-                byte[] packet = NetworkProtocol.CreateInputPacket(_localPlayerId, _currentFrame, history.ToArray(), currentPos, localHash);
-                
-                if (transport != null)
-                {
-                    if (_localPlayerId == 0) transport.Broadcast(packet);
-                    else transport.Send(packet);
-                }
+                // Input Sending logic MOVED to TryBuildOutgoingBundle which caller triggers.
                 
                 // 2. Construct Input Array for THIS frame using PREDICTION
                 InputState[] inputs = new InputState[_totalPlayers];
@@ -213,7 +230,7 @@ namespace Bomberman.Net
                 if (Simulation != null) Simulation.Update(inputs, (float)FixedTimeStep);
             }
             
-            _currentFrame++;
+            _currentFrame++; // Increment AFTER Step
         }
 
          private InputState PredictInputForPlayer(int playerId)

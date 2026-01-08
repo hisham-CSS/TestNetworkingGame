@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 using Bomberman.Core;
 
-namespace Bomberman.Net
+namespace Bomberman.Core.Rollback
 {
     public class GameStateSnapshot
     {

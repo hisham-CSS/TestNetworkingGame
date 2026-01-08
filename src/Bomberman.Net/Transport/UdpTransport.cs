@@ -16,7 +16,12 @@ namespace Bomberman.Net
         public int LocalPort => _localPort;
         public IReadOnlyList<IPEndPoint> ConnectedClients => _connectedClients;
 
-        public event Action<byte[], IPEndPoint>? OnPacketReceived;
+        public event Action<byte[], IPEndPoint>? PacketReceived;
+        // Legacy event alias if needed, or just use PacketReceived.
+        public event Action<byte[], IPEndPoint>? OnPacketReceived {
+            add { PacketReceived += value; }
+            remove { PacketReceived -= value; }
+        }
 
         public UdpTransport(int localPort)
         {
@@ -71,7 +76,7 @@ namespace Bomberman.Net
             SendTo(data, new IPEndPoint(IPAddress.Broadcast, port));
         }
 
-        public void Update()
+        public void Poll()
         {
             try
             {
@@ -80,14 +85,7 @@ namespace Bomberman.Net
                     IPEndPoint sender = new IPEndPoint(IPAddress.Any, 0);
                     byte[] data = _udpClient.Receive(ref sender);
 
-                    // Auto-detect remote (Simple 1v1 legacy support, or initial handshake)
-                    if (_remoteEndPoint == null && _connectedClients.Count == 0)
-                    {
-                        // _remoteEndPoint = sender; 
-                        // Don't auto-assign in lobby mode, let Protocol handle it.
-                    }
-
-                    OnPacketReceived?.Invoke(data, sender);
+                    PacketReceived?.Invoke(data, sender);
                 }
             }
             catch (SocketException e)
@@ -99,6 +97,11 @@ namespace Bomberman.Net
         public void Close()
         {
             _udpClient?.Close();
+        }
+
+        public void Dispose()
+        {
+            Close();
         }
     }
 }

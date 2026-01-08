@@ -1,10 +1,14 @@
+using System;
+using System.Net;
+
 namespace Bomberman.Net
 {
-    public interface ITransport
-{
-    void Send(byte[] data); // Sends to Host (Client usage) or specific target?
-    // UdpTransport.Send sends to _remoteEndPoint (Host).
-    
-    void Broadcast(byte[] data); // Sends to all connected clients (Host usage).
-}
+    public interface ITransport : IDisposable
+    {
+        event Action<byte[], IPEndPoint>? PacketReceived;
+        void Send(byte[] data);
+        void SendTo(byte[] data, IPEndPoint target);
+        void Broadcast(byte[] data);
+        void Poll();
+    }
 }

@@ -3,7 +3,9 @@ using Bomberman.Core;
 
 
 
-namespace Bomberman.Net
+using Bomberman.Core.Rollback;
+
+namespace Bomberman.Core.Game
 {
     public class GameSession
     {
@@ -37,9 +39,14 @@ namespace Bomberman.Net
              // I'll need to replicate that logic or push it into RollbackSystem.
         }
 
-        public void Update(InputState localInput, ITransport? transport)
+        public void Update(InputState localInput)
         {
-            RollbackSystem.Update(localInput, transport);
+            RollbackSystem.Step(localInput);
+        }
+
+        public bool TryBuildOutgoingBundle(out OutgoingInputBundle bundle)
+        {
+            return RollbackSystem.TryBuildOutgoingBundle(out bundle);
         }
         
         public void SaveReplay(string path)

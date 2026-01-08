@@ -6,6 +6,8 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Bomberman.Net;
 using Bomberman.Core;
+using Bomberman.Core.Game;
+using Bomberman.Core.Rollback;
 using Bomberman.App.Rendering; 
 // Note: PixelFont is in Bomberman.App.Rendering, but Program.cs had 'using Bomberman;' which covered basic namespace?
 // Actually Program.cs was namespace Bomberman.
@@ -87,7 +89,7 @@ namespace Bomberman.App.GameHost
                 var keyboardState = Keyboard.GetState();
                 
                 // Network Update
-                if (_networkController != null) _networkController.Transport.Update();
+                if (_networkController != null) _networkController.Transport.Poll();
 
                 switch (_state)
                 {
@@ -257,6 +259,7 @@ namespace Bomberman.App.GameHost
                             _networkController?.Transport.Broadcast(NetworkProtocol.CreateStartGame(_networkSeed, _totalPlayersForGame));
                             _state = GameState.Playing;
                             _gameSession = new GameSession(_localPlayerId, _totalPlayersForGame, _networkSeed);
+                            _gameSession.RollbackSystem.SimulateNetworked = true;
                             
                             string logFile = $"debug_log_player_{_localPlayerId}.txt";
                              File.WriteAllText(logFile, "--- Host Start ---\n");
@@ -425,6 +428,7 @@ namespace Bomberman.App.GameHost
                 
                 _state = GameState.Playing;
                 _gameSession = new GameSession(_localPlayerId, _totalPlayersForGame, _networkSeed);
+                _gameSession.RollbackSystem.SimulateNetworked = true;
                 
                 string logFile = $"debug_log_player_{_localPlayerId}.txt";
                 File.WriteAllText(logFile, "--- Client Start ---\n");
@@ -536,7 +540,12 @@ namespace Bomberman.App.GameHost
 
             InputState localInput = new InputState { Movement = movement, PlaceBomb = placeBomb, BombTarget = bombTarget };
             
-            _gameSession.Update(localInput, _networkController?.Transport);
+            _gameSession.Update(localInput);
+
+            if (_networkController != null && _gameSession.TryBuildOutgoingBundle(out var bundle))
+            {
+                _networkController.SendInput(bundle);
+            }
         }
 
 

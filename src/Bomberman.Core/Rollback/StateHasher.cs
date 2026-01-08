@@ -4,7 +4,7 @@ using Microsoft.Xna.Framework;
 
 using Bomberman.Core;
 
-namespace Bomberman.Net
+namespace Bomberman.Core.Rollback
 {
     public static class StateHasher
     {

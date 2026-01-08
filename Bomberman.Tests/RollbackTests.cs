@@ -1,8 +1,8 @@
 using NUnit.Framework;
-using Bomberman;
 using Microsoft.Xna.Framework;
 using System.Collections.Generic;
 using Bomberman.Core;
+using Bomberman.Core.Rollback;
 using Bomberman.Net;
 
 namespace Bomberman.Tests
@@ -37,7 +37,7 @@ namespace Bomberman.Tests
             var input = new InputState { Movement = new Vector2(1, 0) };
 
             // Act
-            _rollback.Update(input, null); // Local update
+            _rollback.Step(input); // Local update
 
             // Assert
             // We can't access private buffers directly, but we can infer from side effects or exposing internal state if we interpret internals visible to tests?
@@ -52,10 +52,10 @@ namespace Bomberman.Tests
             // 1. Simulate Frame 0 (Local Player 0 moves RIGHT)
             // Implicitly predicts Player 1 does NOTHING
             var input0 = new InputState { Movement = new Vector2(1, 0) };
-            _rollback.Update(input0, null);
+            _rollback.Step(input0);
 
             // 2. Simulate Frame 1
-            _rollback.Update(input0, null);
+            _rollback.Step(input0);
 
              // Current Frame is now 2.
              // We have history for Frame 0 and 1.
@@ -101,6 +101,20 @@ namespace Bomberman.Tests
                 }
             }
             return Vector2.Zero;
+        }
+        [Test]
+        public void TryBuildOutgoingBundle_ReturnsBundle_AfterStep()
+        {
+            // Arrange
+            _rollback.Step(new InputState()); // Frame 0 -> 1
+
+            // Act
+            bool success = _rollback.TryBuildOutgoingBundle(out var bundle);
+
+            // Assert
+            Assert.That(success, Is.True);
+            Assert.That(bundle.Frame, Is.EqualTo(0)); // Should send Frame 0
+            Assert.That(bundle.RedundantHistory.Length, Is.EqualTo(1));
         }
     }
 }

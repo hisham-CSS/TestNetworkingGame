@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Net;
 using Microsoft.Xna.Framework;
 using Bomberman.Core;
+using Bomberman.Core.Rollback;
 
 namespace Bomberman.Net
 {
@@ -29,12 +30,49 @@ namespace Bomberman.Net
 
         public void Update()
         {
-            Transport.Update();
+            Transport.Poll();
         }
 
         public void Close()
         {
             Transport.Close();
+        }
+
+        public void SendInput(OutgoingInputBundle bundle)
+        {
+            byte[] packet = NetworkProtocol.CreateInputPacket(
+                bundle.PlayerId, 
+                bundle.Frame, 
+                bundle.RedundantHistory, 
+                bundle.LocalPosition, 
+                bundle.LocalStateHash
+            );
+
+            // Logic from RollbackSystem.Update:
+            // if (_localPlayerId == 0) transport.Broadcast(packet);
+            // else transport.Send(packet);
+            
+            // Wait, NetworkController doesn't know "local player id" explicitly? 
+            // It just has Transport.
+            // But usually Host (pid 0) should Broadcast, Client should Send (Unicast to Host).
+            // However, UdpTransport.Broadcast sends to ALL connected clients.
+            // If I am Host (0), I broadcast.
+            // If I am Client, I send to Server.
+            
+            // NetworkController constructor doesn't take PID.
+            // But we can check bundle.PlayerId?
+            // If bundle.PlayerId == 0 -> Broadcast?
+            // Safer: External caller decides? Or we add param to SendInput?
+            // Or assume PID 0 is always Host.
+            
+            if (bundle.PlayerId == 0) 
+            {
+                Transport.Broadcast(packet);
+            }
+            else 
+            {
+                Transport.Send(packet);
+            }
         }
 
         private void HandlePacket(byte[] data, IPEndPoint sender)

@@ -5,7 +5,7 @@ using System.Text.Json;
 
 using Bomberman.Core;
 
-namespace Bomberman.Net
+namespace Bomberman.Core.Rollback
 {
     public class InputRecorder
     {
