@@ -1,9 +1,52 @@
 using System.Collections.Generic;
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 
 namespace Bomberman.App.Rendering
 {
-    public static class PixelFont
+    public class PixelFont
     {
+        private Texture2D _pixelTexture;
+
+        public PixelFont(Texture2D pixelTexture)
+        {
+            _pixelTexture = pixelTexture;
+        }
+
+        public void DrawText(SpriteBatch spriteBatch, int x, int y, string text, Color color, int scale)
+        {
+            int spacing = 1 * scale;
+            int charWidth = 5 * scale;
+            
+            int currentX = x;
+            int currentY = y;
+
+            foreach(char c in text)
+            {
+                if (c == '\n')
+                {
+                    currentY += 5 * scale + spacing * 2;
+                    currentX = x;
+                    continue;
+                }
+
+                bool[,] grid = GetBitmap(c);
+                for(int py=0; py<5; py++)
+                {
+                    for(int px=0; px<5; px++)
+                    {
+                        if (grid[px, py])
+                        {
+                            spriteBatch.Draw(_pixelTexture, 
+                                new Rectangle(currentX + px * scale, currentY + py * scale, scale, scale), 
+                                color);
+                        }
+                    }
+                }
+                currentX += charWidth + spacing;
+            }
+        }
+
         // 5x5 Bitmap Font (0 = empty, 1 = filled)
         private static Dictionary<char, string[]> _chars = new Dictionary<char, string[]>
         {
@@ -48,12 +91,20 @@ namespace Bomberman.App.Rendering
             {'7', new[]{ "11111", "00001", "00010", "00100", "00100" }},
             {'8', new[]{ "01110", "10001", "01110", "10001", "01110" }},
             {'9', new[]{ "01110", "10001", "01111", "00001", "01110" }},
+            {'>', new[]{ "10000", "01000", "00100", "01000", "10000" }}, // Added Arrow
+            {'(', new[]{ "00100", "01000", "01000", "01000", "00100" }}, // Added Parens
+            {')', new[]{ "00100", "00010", "00010", "00010", "00100" }},
+            {'.', new[]{ "00000", "00000", "00000", "00000", "00100" }}
         };
 
         public static bool[,] GetBitmap(char c)
         {
             char upper = char.ToUpper(c);
-            if (!_chars.ContainsKey(upper)) return new bool[5,5];
+             if (!_chars.ContainsKey(upper)) 
+             {
+                 // Fallback or space
+                 return new bool[5,5];
+             }
 
             string[] map = _chars[upper];
             bool[,] grid = new bool[5,5];

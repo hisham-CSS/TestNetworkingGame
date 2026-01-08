@@ -15,10 +15,13 @@ namespace Bomberman.Core.Game
 
         public GameSession(int localPlayerId, int totalPlayers, int seed)
         {
+            TotalPlayers = totalPlayers;
             RollbackSystem = new RollbackSystem(localPlayerId, totalPlayers);
             RollbackSystem.IsRecording = true;
             RollbackSystem.InitializeSimulation(seed, totalPlayers);
         }
+
+        public int TotalPlayers { get; private set; }
         
         // Constructor for Replay
         public GameSession(string replayPath)
