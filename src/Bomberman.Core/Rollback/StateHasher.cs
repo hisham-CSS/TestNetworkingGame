@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 
-namespace Bomberman
+namespace Bomberman.Core
 {
     public static class StateHasher
     {
@@ -72,83 +72,55 @@ namespace Bomberman
             return hash;
         }
 
-        // Hash from Snapshot
         public static int Hash(GameStateSnapshot snap)
         {
             int hash = 0;
 
-                // 1. Players
-            for (int i = 0; i < snap.Players.Count; i++)
+            // 1. Transforms
+            var transforms = snap.GetState<TransformComponent>();
+            for(int i=0; i<transforms.components.Count; i++)
             {
-                var p = snap.Players[i];
+                // Hash Position (Bitwise Deterministic)
+                Vector2 pos = transforms.components[i].Position;
+                hash = Combine(hash, BitConverter.SingleToInt32Bits(pos.X));
+                hash = Combine(hash, BitConverter.SingleToInt32Bits(pos.Y));
+            }
+
+            // 2. Players
+            var players = snap.GetState<PlayerComponent>();
+            for(int i=0; i<players.components.Count; i++)
+            {
+                var p = players.components[i];
                 hash = Combine(hash, (int)p.PlayerId);
                 hash = Combine(hash, p.Alive ? 1 : 0);
-                hash = Combine(hash, p.BombRange); // Hash Stats
+                hash = Combine(hash, p.BombRange);
                 hash = Combine(hash, p.BombCapacity);
-                
-                // Need to find transform for this player
-                // Iterate transform entities to find matching ID
-                // Note: Entity struct equality uses Index
-                Entity pEntity = snap.PlayerEntities[i];
-                
-                int tIndex = -1;
-                for(int k=0; k<snap.TransformEntities.Count; k++)
-                {
-                    if (snap.TransformEntities[k].Index == pEntity.Index)
-                    {
-                        tIndex = k;
-                        break;
-                    }
-                }
-                
-                if (tIndex != -1)
-                {
-                   Vector2 pos = snap.Transforms[tIndex].Position;
-                   hash = Combine(hash, (int)(pos.X * 100));
-                   hash = Combine(hash, (int)(pos.Y * 100));
-                }
             }
 
-             // 2. Bombs
-            hash = Combine(hash, snap.Bombs.Count);
-            for (int i = 0; i < snap.Bombs.Count; i++)
+            // 3. Bombs
+            var bombs = snap.GetState<BombComponent>();
+            hash = Combine(hash, bombs.components.Count);
+            for(int i=0; i<bombs.components.Count; i++)
             {
-                var b = snap.Bombs[i];
+                var b = bombs.components[i];
                 hash = Combine(hash, (int)b.OwnerId);
                 hash = Combine(hash, b.Timer);
-                
-                 Entity bEntity = snap.BombEntities[i];
-                 int tIndex = -1;
-                 for(int k=0; k<snap.TransformEntities.Count; k++)
-                 {
-                    if (snap.TransformEntities[k].Index == bEntity.Index)
-                    {
-                        tIndex = k;
-                        break;
-                    }
-                 }
-                
-                 if (tIndex != -1)
-                {
-                   Vector2 pos = snap.Transforms[tIndex].Position;
-                   hash = Combine(hash, (int)Math.Round(pos.X));
-                   hash = Combine(hash, (int)Math.Round(pos.Y));
-                }
             }
-
-            // 3. Tiles
-            hash = Combine(hash, snap.Tiles.Count);
-            // Hash state of tiles (Destroyed) to ensure crate sync
-            for(int i=0; i<snap.Tiles.Count; i++)
+            
+            // 4. Tiles
+            var tiles = snap.GetState<TileComponent>();
+            hash = Combine(hash, tiles.components.Count);
+            for(int i=0; i<tiles.components.Count; i++)
             {
-                if (snap.Tiles[i].Type == TileComponent.TileType.Destructible)
+                if (tiles.components[i].Type == TileComponent.TileType.Destructible)
                 {
-                    hash = Combine(hash, snap.Tiles[i].Destroyed ? 1 : 0);
+                    hash = Combine(hash, tiles.components[i].Destroyed ? 1 : 0);
                 }
             }
             
-            // 4. Explosions
-            hash = Combine(hash, snap.Explosions.Count);
+            // 5. Explosions
+            var explosions = snap.GetState<ExplosionComponent>();
+            hash = Combine(hash, explosions.components.Count);
 
             return hash;
         }

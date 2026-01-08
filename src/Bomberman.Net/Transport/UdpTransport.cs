@@ -3,9 +3,11 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 
-namespace Bomberman
+using Bomberman.Core;
+
+namespace Bomberman.Net
 {
-    public class NetworkManager
+    public class UdpTransport : ITransport
     {
         private UdpClient _udpClient;
         private IPEndPoint? _remoteEndPoint; // Usage: For Client, this is the Host.
@@ -16,7 +18,7 @@ namespace Bomberman
 
         public event Action<byte[], IPEndPoint>? OnPacketReceived;
 
-        public NetworkManager(int localPort)
+        public UdpTransport(int localPort)
         {
             _localPort = localPort;
             _udpClient = new UdpClient(localPort);

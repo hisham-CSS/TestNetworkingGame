@@ -2,6 +2,7 @@ using NUnit.Framework;
 using Bomberman;
 using Microsoft.Xna.Framework;
 using System.Collections.Generic;
+using Bomberman.Core;
 
 namespace Bomberman.Tests
 {

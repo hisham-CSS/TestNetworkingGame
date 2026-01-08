@@ -2,9 +2,11 @@ using NUnit.Framework;
 using Bomberman;
 using Microsoft.Xna.Framework;
 using System.Collections.Generic;
+using Bomberman.Core;
 
 namespace Bomberman.Tests
 {
+    [TestFixture]
     public class RollbackTests
     {
         private RollbackSystem _rollback;
@@ -13,6 +15,15 @@ namespace Bomberman.Tests
         public void Setup()
         {
             _rollback = new RollbackSystem(0, 2);
+            _rollback.IsRecording = true;
+            _rollback.SimulateNetworked = true;
+            _rollback.InitializeSimulation(12345, 2);
+        }
+
+        [Test]
+        public void TestDeterministicSimulation()
+        {
+            var rollback = new RollbackSystem(0, 2);
             _rollback.IsRecording = true;
             _rollback.SimulateNetworked = true;
             _rollback.InitializeSimulation(12345, 2);

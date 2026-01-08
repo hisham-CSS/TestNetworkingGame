@@ -21,7 +21,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Bomberman.csproj" />
+    <ProjectReference Include="..\src\Bomberman.Core\Bomberman.Core.csproj" />
+    <ProjectReference Include="..\src\Bomberman.Net\Bomberman.Net.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,20 +1,31 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using System.IO;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
+using Bomberman.Net;
+using Bomberman.Core;
+using Bomberman.App.Rendering; 
+// Note: PixelFont is in Bomberman.App.Rendering, but Program.cs had 'using Bomberman;' which covered basic namespace?
+// Actually Program.cs was namespace Bomberman.
+// PixelFont.cs namespace was Bomberman (I didn't change it explicitly? I moved it).
+// If I moved PixelFont.cs to src/Bomberman.App/Rendering/, I should check its namespace.
+// I'll assume for now I need to fix namespaces later or add usings.
 
-namespace Bomberman
+namespace Bomberman.App.GameHost
 {
     public class Game1 : Game
     {
-        private Texture2D _pixelTexture = null!;
         private GraphicsDeviceManager _graphics;
-        private SpriteBatch _spriteBatch = null!;
+        private SpriteBatch _spriteBatch;
+        
+        private Texture2D _pixelTexture;
         
         // Rollback System
-        private RollbackSystem? _rollbackSystem;
-        private int _currentFrame => _rollbackSystem != null ? _rollbackSystem.CurrentFrame : 0;
+        // Game Session
+        private GameSession? _gameSession;
+        private int _currentFrame => _gameSession != null ? _gameSession.CurrentFrame : 0;
         
         private KeyboardState _previousKeyboardState;
         
@@ -76,7 +87,7 @@ namespace Bomberman
                 var keyboardState = Keyboard.GetState();
                 
                 // Network Update
-                if (_networkController != null) _networkController.Update();
+                if (_networkController != null) _networkController.Transport.Update();
 
                 switch (_state)
                 {
@@ -128,15 +139,13 @@ namespace Bomberman
                         _state = GameState.Playing;
                         _localPlayerId = 0;
                         
-                        _rollbackSystem = new RollbackSystem(_localPlayerId, 1);
-                        _rollbackSystem.IsRecording = true;
-                        _rollbackSystem.InitializeSimulation(randomSeed, 1);
+                        _gameSession = new GameSession(_localPlayerId, 1, randomSeed);
                         
                         string logFile = $"debug_log_player_{_localPlayerId}.txt";
                         File.WriteAllText(logFile, "--- Local Play Start ---\n");
-                        if (_rollbackSystem.Simulation != null)
+                        if (_gameSession.Simulation != null)
                         {
-                            _rollbackSystem.Simulation.Log = (msg) => {
+                            _gameSession.Simulation.Log = (msg) => {
                                 string line = $"[{DateTime.Now:HH:mm:ss.fff}] [Frame {_currentFrame}] {msg}\n";
                                 File.AppendAllText(logFile, line);
                                 Console.Write(line);
@@ -198,9 +207,7 @@ namespace Bomberman
                     _state = GameState.Replaying;
                     // _isNetworked = false;
                     
-                    _rollbackSystem = new RollbackSystem(0, 2); 
-                    _rollbackSystem.LoadReplay(Path.Combine("Replays", "replay.json"));
-                    _rollbackSystem.InitializeSimulation(randomSeed, 2); // TODO: Load seed from replay
+                    _gameSession = new GameSession(Path.Combine("Replays", "replay.json"));
                 }
             }
         }
@@ -220,7 +227,7 @@ namespace Bomberman
                 _joinRetryTimer -= (float)gameTime.ElapsedGameTime.TotalSeconds;
                 if (_joinRetryTimer <= 0)
                 {
-                    _networkController.Manager.Send(NetworkProtocol.CreateJoinRequest());
+                    _networkController.Transport.Send(NetworkProtocol.CreateJoinRequest());
                         Console.WriteLine("Resending Join Request...");
                         _joinRetryTimer = 1.0f;
                 }
@@ -238,7 +245,7 @@ namespace Bomberman
                     {
                         // Broadcast Update
                         byte[] update = NetworkProtocol.CreateLobbyUpdate(_connectedPlayerCount, _totalPlayersForGame);
-                        _networkController?.Manager.Broadcast(update);
+                        _networkController?.Transport.Broadcast(update);
                     }
 
                     // Start Game
@@ -247,17 +254,15 @@ namespace Bomberman
                         // Check if we have enough connected players match the required count
                         if (_connectedPlayerCount >= _totalPlayersForGame) 
                         {
-                            _networkController?.Manager.Broadcast(NetworkProtocol.CreateStartGame(_networkSeed, _totalPlayersForGame));
+                            _networkController?.Transport.Broadcast(NetworkProtocol.CreateStartGame(_networkSeed, _totalPlayersForGame));
                             _state = GameState.Playing;
-                            _rollbackSystem = new RollbackSystem(_localPlayerId, _totalPlayersForGame);
-                            _rollbackSystem.IsRecording = true;
-                            _rollbackSystem.InitializeSimulation(_networkSeed, _totalPlayersForGame);
+                            _gameSession = new GameSession(_localPlayerId, _totalPlayersForGame, _networkSeed);
                             
                             string logFile = $"debug_log_player_{_localPlayerId}.txt";
                              File.WriteAllText(logFile, "--- Host Start ---\n");
-                             if (_rollbackSystem.Simulation != null)
+                             if (_gameSession.Simulation != null)
                              {
-                                _rollbackSystem.Simulation.Log = (msg) => {
+                                _gameSession.Simulation.Log = (msg) => {
                                     string line = $"[{DateTime.Now:HH:mm:ss.fff}] [Frame {_currentFrame}] {msg}\n";
                                     File.AppendAllText(logFile, line);
                                     Console.Write(line);
@@ -289,7 +294,7 @@ namespace Bomberman
                 // Broadcast to ALL possible host ports
                 for(int p=5000; p<5010; p++)
                 {
-                    _networkController?.Manager.BroadcastToPort(NetworkProtocol.CreateDiscoveryRequest(), p);
+                    _networkController?.Transport.BroadcastToPort(NetworkProtocol.CreateDiscoveryRequest(), p);
                 }
                 _discoveryTimer = 2.0f; // Retry every 2s
             }
@@ -316,7 +321,7 @@ namespace Bomberman
                 {
                     // Connect!
                     var endpoint = new List<System.Net.IPEndPoint>(_foundServers.Keys)[_browserSelection];
-                    _networkController?.Manager.Connect(endpoint.Address.ToString(), endpoint.Port);
+                    _networkController?.Transport.Connect(endpoint.Address.ToString(), endpoint.Port);
                     
                     _state = GameState.Lobby;
                     _localPlayerId = -1;
@@ -324,7 +329,7 @@ namespace Bomberman
                     // _remoteInputBuffer.Clear(); // Not needed
                     
                     // Send Join
-                    _networkController?.Manager.Send(NetworkProtocol.CreateJoinRequest());
+                    _networkController?.Transport.Send(NetworkProtocol.CreateJoinRequest());
                     Console.WriteLine($"Joining {endpoint}...");
                     _joinRetryTimer = 1.0f;
                 }
@@ -336,7 +341,7 @@ namespace Bomberman
             {
                 _state = GameState.Menu;
                 if (_networkController != null) { _networkController.Close(); _networkController = null; }
-                if (_rollbackSystem != null && _rollbackSystem.IsRecording) _rollbackSystem.SaveReplay(Path.Combine("Replays", "replay.json"));
+                if (_gameSession != null) _gameSession.SaveReplay(Path.Combine("Replays", "replay.json"));
             }
 
             // Fixed Update Loop
@@ -360,7 +365,7 @@ namespace Bomberman
              if (_localPlayerId == 0 && _state == GameState.Lobby && _networkController != null) // Only Host handles this
             {
                  bool alreadyConnected = false;
-                 foreach(var c in _networkController.Manager.ConnectedClients)
+                 foreach(var c in _networkController.Transport.ConnectedClients)
                  {
                      if (c.Equals(sender)) 
                      {
@@ -373,17 +378,17 @@ namespace Bomberman
                  {
                     if (_connectedPlayerCount < _totalPlayersForGame)
                     {
-                        _networkController.Manager.AddClient(sender);
+                        _networkController.Transport.AddClient(sender);
                         int newId = _connectedPlayerCount;
                         _connectedPlayerCount++;
                         
                         // Send Welcome
                         byte[] welcome = NetworkProtocol.CreateWelcome(newId, _networkSeed, _totalPlayersForGame);
-                        _networkController.Manager.SendTo(welcome, sender);
+                        _networkController.Transport.SendTo(welcome, sender);
 
                         // Broadcast Lobby Update to everyone
                         byte[] update = NetworkProtocol.CreateLobbyUpdate(_connectedPlayerCount, _totalPlayersForGame);
-                        _networkController.Manager.Broadcast(update);
+                        _networkController.Transport.Broadcast(update);
 
                         Console.WriteLine($"Client {newId} Joined from {sender}");
                     }
@@ -419,15 +424,13 @@ namespace Bomberman
                 _totalPlayersForGame = totalPlayers;
                 
                 _state = GameState.Playing;
-                _rollbackSystem = new RollbackSystem(_localPlayerId, _totalPlayersForGame);
-                _rollbackSystem.IsRecording = true;
-                _rollbackSystem.InitializeSimulation(_networkSeed, _totalPlayersForGame);
+                _gameSession = new GameSession(_localPlayerId, _totalPlayersForGame, _networkSeed);
                 
                 string logFile = $"debug_log_player_{_localPlayerId}.txt";
                 File.WriteAllText(logFile, "--- Client Start ---\n");
-                if (_rollbackSystem.Simulation != null)
+                if (_gameSession.Simulation != null)
                 {
-                    _rollbackSystem.Simulation.Log = (msg) => {
+                    _gameSession.Simulation.Log = (msg) => {
                             string line = $"[{DateTime.Now:HH:mm:ss.fff}] [Frame {_currentFrame}] {msg}\n";
                             File.AppendAllText(logFile, line);
                             Console.Write(line);
@@ -439,9 +442,9 @@ namespace Bomberman
 
         private void HandleInputReceived(int pid, int startFrame, InputState[] inputs, Vector2 remotePos, int remoteHash)
         {
-             if (_state == GameState.Playing && _rollbackSystem != null)
+             if (_state == GameState.Playing && _gameSession != null)
              {
-                _rollbackSystem.HandleRemoteInput(pid, startFrame, inputs, remotePos, remoteHash);
+                _gameSession.HandleRemoteInput(pid, startFrame, inputs, remotePos, remoteHash);
 
                 // Host Relay Logic (Relay the RAW packet to others)
                 if (_localPlayerId == 0 && _networkController != null)
@@ -450,9 +453,9 @@ namespace Bomberman
                     {
                         // Loop through all other clients and send Unicast
                         byte[] relayedPacket = NetworkProtocol.CreateInputPacket(pid, startFrame, inputs, remotePos, remoteHash);
-                        foreach(var client in _networkController.Manager.ConnectedClients)
+                        foreach(var client in _networkController.Transport.ConnectedClients)
                         {
-                            _networkController.Manager.SendTo(relayedPacket, client);
+                            _networkController.Transport.SendTo(relayedPacket, client);
                         }
                     }
                 }
@@ -465,7 +468,7 @@ namespace Bomberman
             {
                 // I am host, reply
                 var resp = NetworkProtocol.CreateDiscoveryResponse("Local Game", _connectedPlayerCount, _totalPlayersForGame);
-                _networkController.Manager.SendTo(resp, sender);
+                _networkController.Transport.SendTo(resp, sender);
             }
         }
 
@@ -491,7 +494,7 @@ namespace Bomberman
 
         private void StepSimulation(KeyboardState keyboardState)
         {
-            if (_rollbackSystem == null) return;
+            if (_gameSession == null) return;
 
              // Capture Local Input
             Vector2 movement = Vector2.Zero;
@@ -511,16 +514,16 @@ namespace Bomberman
              if (placeBomb)
              {
                  Vector2 myPos = Vector2.Zero;
-                 if (_rollbackSystem.Simulation != null)
+                 if (_gameSession.Simulation != null)
                  {
-                     var pPool = _rollbackSystem.Simulation.World.Players;
+                     var pPool = _gameSession.Simulation.World.Players;
                      for(int i=0; i<pPool.Count; i++)
                      {
                          if (pPool.Get(i).PlayerId == _localPlayerId)
                          {
                              var e = pPool.GetEntity(i);
-                             if (_rollbackSystem.Simulation.World.Transforms.Has(e))
-                                myPos = _rollbackSystem.Simulation.World.Transforms.Get(e).Position;
+                             if (_gameSession.Simulation.World.Transforms.Has(e))
+                                myPos = _gameSession.Simulation.World.Transforms.Get(e).Position;
                              break;
                          }
                      }
@@ -533,7 +536,7 @@ namespace Bomberman
 
             InputState localInput = new InputState { Movement = movement, PlaceBomb = placeBomb, BombTarget = bombTarget };
             
-            _rollbackSystem.Update(localInput, _networkController);
+            _gameSession.Update(localInput, _networkController?.Transport);
         }
 
 
@@ -598,17 +601,25 @@ namespace Bomberman
              int scale = 3;
              DrawText("LOBBY", new Vector2(50, 50), scale, Color.White);
              
-             if (_localPlayerId == 0)
+             DrawText($"Players: {_connectedPlayerCount} / {_totalPlayersForGame}", new Vector2(50, 100), 2, Color.Yellow);
+             
+             if (_localPlayerId == 0) // HOST
              {
-                 int port = _networkController != null ? _networkController.Manager.LocalPort : 0;
-                 DrawText($"HOSTING (Port {port}): {_connectedPlayerCount}/{_totalPlayersForGame} Players", new Vector2(50, 100), 2, Color.Yellow);
-                 DrawText("Press 2,3,4 to set Count", new Vector2(50, 140), 1, Color.White);
-                 DrawText("Press ENTER to Start", new Vector2(50, 180), 2, Color.Green);
+                 DrawText("HOST CONTROLS:", new Vector2(50, 150), 2, Color.LightGray);
+                 DrawText("[2] 2 Players", new Vector2(50, 180), 1, _totalPlayersForGame == 2 ? Color.Green : Color.White);
+                 DrawText("[3] 3 Players", new Vector2(50, 200), 1, _totalPlayersForGame == 3 ? Color.Green : Color.White);
+                 DrawText("[4] 4 Players", new Vector2(50, 220), 1, _totalPlayersForGame == 4 ? Color.Green : Color.White);
+                 
+                 DrawText("Press ENTER to Start Game", new Vector2(50, 260), 2, Color.Cyan);
              }
-             else
+             else // CLIENT
              {
-                 if (_localPlayerId == -1) DrawText("Connecting...", new Vector2(50, 100), 2, Color.Yellow);
-                 else DrawText($"WAITING FOR HOST... (P{_localPlayerId})", new Vector2(50, 100), 2, Color.Yellow);
+                 DrawText("Waiting for Host...", new Vector2(50, 150), 2, Color.LightGray);
+                 
+                 if (_localPlayerId == -1)
+                     DrawText("Connecting...", new Vector2(50, 180), 2, Color.Orange);
+                 else
+                     DrawText($"Assigned Player {_localPlayerId + 1}", new Vector2(50, 180), 2, Color.Green);
              }
         }
 
@@ -642,8 +653,8 @@ namespace Bomberman
 
         private void DrawGame()
         {
-            if (_rollbackSystem?.Simulation == null) return;
-            var world = _rollbackSystem.Simulation.World;
+            if (_gameSession?.Simulation == null) return;
+            var world = _gameSession.Simulation.World;
             var transformEntities = world.Transforms.GetEntities();
             var transforms = world.Transforms.GetAll();
 
@@ -693,6 +704,7 @@ namespace Bomberman
                  var entity = powerupEntities[i];
                  TransformComponent transform = FindTransform(entity, transformEntities, transforms);
                  
+                 // Pulse red based on timer (wait, powerup logic?)
                  Color pColor = Color.White;
                  if (powerups[i].Type == PowerupComponent.PowerupType.Range) pColor = Color.Yellow;
                  if (powerups[i].Type == PowerupComponent.PowerupType.Capacity) pColor = Color.Black;
@@ -730,7 +742,7 @@ namespace Bomberman
                 DrawRectangle(transform.Position + new Vector2(transform.Size.X - eyeOffset.X - 4, eyeOffset.Y), new Vector2(4, 6), Color.Black);
             }
         }
-        
+
         private TransformComponent FindTransform(Entity entity, List<Entity> transformEntities, List<TransformComponent> transforms)
         {
             for(int i=0; i<transformEntities.Count; i++)
@@ -754,6 +766,7 @@ namespace Bomberman
             // Selection Border
             if (_menuSelection == index) DrawHollowRect(new Rectangle(x-2, y-2, width+4, height+4), Color.White);
         }
+
 
         private void DrawText(string text, Vector2 position, int scale, Color color)
         {
@@ -791,23 +804,6 @@ namespace Bomberman
         {
              _spriteBatch.Draw(_pixelTexture, new Rectangle((int)position.X, (int)position.Y, (int)size.X, (int)size.Y), color);
         }
-    }
 
-    public static class Program
-    {
-        [STAThread]
-        static void Main()
-        {
-            try 
-            {
-                using (var game = new Game1())
-                    game.Run();
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine("CRASH: " + e.ToString());
-                throw;
-            }
-        }
     }
 }

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 
-namespace Bomberman
+namespace Bomberman.Core
 {
     public class Simulation
     {

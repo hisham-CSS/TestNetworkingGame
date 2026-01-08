@@ -1,13 +1,36 @@
+namespace Bomberman.Core;
+
 using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 
-public class ComponentPool<T> where T : struct
+public interface IComponentPool
+{
+    Type ComponentType { get; }
+    object CaptureState();
+    void RestoreState(object state);
+    void Clear();
+}
+
+public class ComponentPool<T> : IComponentPool where T : struct
 {
     private List<T> _components = new();
     private List<Entity> _entities = new();
     
     public int Count => _components.Count;
+    public Type ComponentType => typeof(T);
+
+    public object CaptureState()
+    {
+        return (new List<Entity>(_entities), new List<T>(_components));
+    }
+
+    public void RestoreState(object state)
+    {
+        var tuple = ((List<Entity>, List<T>))state;
+        _entities = new List<Entity>(tuple.Item1);
+        _components = new List<T>(tuple.Item2);
+    }
     
     public void Add(Entity entity, T component)
     {

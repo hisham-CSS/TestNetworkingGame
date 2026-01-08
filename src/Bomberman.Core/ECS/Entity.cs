@@ -1,3 +1,5 @@
+namespace Bomberman.Core;
+
 using System;
 
 public struct Entity : IEquatable<Entity>

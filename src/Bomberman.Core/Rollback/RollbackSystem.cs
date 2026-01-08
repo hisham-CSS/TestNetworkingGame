@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using System.IO;
 
-namespace Bomberman
+
+
+namespace Bomberman.Core
 {
     public class RollbackSystem
     {
@@ -80,9 +82,9 @@ namespace Bomberman
             _remoteInputBuffer[frame][pid] = input;
         }
 
-        public void Update(InputState localInput, NetworkController? network)
+        public void Update(InputState localInput, ITransport? transport)
         {
-            // Replay Mode
+            // ... (Replay logic) ...
             if (IsReplaying)
             {
                  InputState[] replayInputs = _recorder.GetFrame(_replayFrame);
@@ -95,9 +97,11 @@ namespace Bomberman
             // Store Local Input
             _localInputBuffer[_currentFrame] = localInput;
 
-            bool isNetworked = network != null || SimulateNetworked;
+            bool isNetworked = transport != null || SimulateNetworked;
 
-             if (isNetworked)
+
+
+            if (isNetworked)
             {
                 // FRAME PACING / THROTTLING
                 int minConfirmedFrame = _currentFrame;
@@ -160,10 +164,10 @@ namespace Bomberman
                 int localHash = Simulation != null ? StateHasher.Hash(Simulation.World) : 0;
                 byte[] packet = NetworkProtocol.CreateInputPacket(_localPlayerId, _currentFrame, history.ToArray(), currentPos, localHash);
                 
-                if (network != null)
+                if (transport != null)
                 {
-                    if (_localPlayerId == 0) network.Manager.Broadcast(packet);
-                    else network.Manager.Send(packet);
+                    if (_localPlayerId == 0) transport.Broadcast(packet);
+                    else transport.Send(packet);
                 }
                 
                 // 2. Construct Input Array for THIS frame using PREDICTION
@@ -254,32 +258,40 @@ namespace Bomberman
             // CHECK FOR DESYNC (STATE HASH & POSITION)
             if (startFrame < _currentFrame && _snapshotBuffer.ContainsKey(startFrame))
             {
+                    // Correction Logic: Check if Player Position matches remote (rough check)
+                    // We need to look up the player in the snapshot by ID (pid)
                     var snap = _snapshotBuffer[startFrame];
+                    var players = snap.GetState<PlayerComponent>();
+                    var transforms = snap.GetState<TransformComponent>();
                     
                     int pIndex = -1;
-                    for(int k=0; k<snap.Players.Count; k++)
+                    for(int i=0; i<players.components.Count; i++)
                     {
-                        if (snap.Players[k].PlayerId == pid) { pIndex = k; break; }
+                        if (players.components[i].PlayerId == pid) 
+                        {
+                            pIndex = i; 
+                            break; 
+                        }
                     }
                     
                     if (pIndex != -1)
                     {
-                        Entity pEntity = snap.PlayerEntities[pIndex];
+                        Entity pEntity = players.entities[pIndex];
                         int tIndex = -1;
-                        for(int k=0; k<snap.TransformEntities.Count; k++)
+                        for(int k=0; k<transforms.entities.Count; k++)
                         {
-                            if (snap.TransformEntities[k].Index == pEntity.Index) { tIndex = k; break; }
+                            if (transforms.entities[k].Index == pEntity.Index) { tIndex = k; break; }
                         }
                         
                         if (tIndex != -1)
                         {
-                            Vector2 localPos = snap.Transforms[tIndex].Position;
+                            Vector2 localPos = transforms.components[tIndex].Position;
                             if (Vector2.Distance(localPos, remotePos) > 4.0f) 
                             {
                                 Console.WriteLine($"[Sync] Correction! Frame {startFrame} Player {pid}. Local:{localPos} Remote:{remotePos}");
-                                var tf = snap.Transforms[tIndex];
+                                var tf = transforms.components[tIndex];
                                 tf.Position = remotePos;
-                                snap.Transforms[tIndex] = tf; 
+                                transforms.components[tIndex] = tf; 
                                 
                                 if (earliestMisprediction == -1 || startFrame < earliestMisprediction)
                                     earliestMisprediction = startFrame;

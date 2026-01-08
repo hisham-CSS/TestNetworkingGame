@@ -1,8 +1,9 @@
 using System;
 using System.IO;
 using Microsoft.Xna.Framework;
+using Bomberman.Core;
 
-namespace Bomberman
+namespace Bomberman.Core
 {
     public enum PacketType : byte
     {

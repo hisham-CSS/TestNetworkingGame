@@ -4,3 +4,6 @@ obj/
 *.user
 *.suo
 Replays/
+*.log
+build_output.txt
+msbuild.log

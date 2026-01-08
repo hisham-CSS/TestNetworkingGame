@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace Bomberman
+namespace Bomberman.App.Rendering
 {
     public static class PixelFont
     {

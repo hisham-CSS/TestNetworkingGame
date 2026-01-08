@@ -1,0 +1,17 @@
+--- Local Play Start ---
+[01:12:03.178] [Frame 54] [BombSuccess] Player 0 Placed at 2,1. New Active: 1
+[01:12:04.243] [Frame 118] [BombFail] Player 0 Capacity Reached. Active: 1, Cap: 1
+[01:12:06.577] [Frame 258] [BombSuccess] Player 0 Placed at 1,3. New Active: 1
+[01:12:12.743] [Frame 628] [BombSuccess] Player 0 Placed at 1,4. New Active: 1
+[01:12:13.477] [Frame 672] [BombSuccess] Player 0 Placed at 2,3. New Active: 2
+[01:12:17.727] [Frame 927] [BombSuccess] Player 0 Placed at 3,3. New Active: 1
+[01:12:19.677] [Frame 1044] [BombSuccess] Player 0 Placed at 3,5. New Active: 2
+[01:12:26.860] [Frame 1475] [BombSuccess] Player 0 Placed at 4,3. New Active: 1
+[01:12:29.160] [Frame 1613] [BombSuccess] Player 0 Placed at 3,1. New Active: 2
+[01:12:32.543] [Frame 1816] [BombSuccess] Player 0 Placed at 1,5. New Active: 1
+[01:12:34.810] [Frame 1952] [BombSuccess] Player 0 Placed at 5,1. New Active: 2
+[01:12:40.777] [Frame 2310] [BombSuccess] Player 0 Placed at 5,3. New Active: 1
+[01:12:41.677] [Frame 2364] [BombSuccess] Player 0 Placed at 6,1. New Active: 2
+[01:12:46.260] [Frame 2639] [BombSuccess] Player 0 Placed at 5,5. New Active: 1
+[01:12:47.943] [Frame 2740] [BombSuccess] Player 0 Placed at 7,3. New Active: 2
+[01:12:48.977] [Frame 2802] [BombSuccess] Player 0 Placed at 7,5. New Active: 3
