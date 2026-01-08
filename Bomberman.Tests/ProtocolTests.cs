@@ -1,5 +1,5 @@
 using NUnit.Framework;
-using Microsoft.Xna.Framework;
+
 using System.Collections.Generic;
 using Bomberman.Core;
 using Bomberman.Net;
@@ -17,8 +17,8 @@ namespace Bomberman.Tests
             IntVector2 position = new IntVector2(50, 60);
             int hash = 9999;
             
-            var input1 = new InputState { Movement = new IntVector2(1, 0), PlaceBomb = true, BombTarget = new Point(5, 5) };
-            var input2 = new InputState { Movement = new IntVector2(0, -1), PlaceBomb = false, BombTarget = new Point(0, 0) };
+            var input1 = new InputState { Movement = new IntVector2(1, 0), PlaceBomb = true, BombTarget = new IntVector2(5, 5) };
+            var input2 = new InputState { Movement = new IntVector2(0, -1), PlaceBomb = false, BombTarget = new IntVector2(0, 0) };
             InputState[] history = new InputState[] { input1, input2 };
 
             // Act

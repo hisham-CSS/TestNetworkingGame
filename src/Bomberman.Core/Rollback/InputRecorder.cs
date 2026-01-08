@@ -10,8 +10,17 @@ namespace Bomberman.Core.Rollback
     public class InputRecorder
     {
         private List<InputState[]> _history = new List<InputState[]>();
-
+        public int Seed { get; private set; }
+        public int TotalPlayers { get; private set; }
+        
         public int FrameCount => _history.Count;
+
+        private class ReplayData
+        {
+            public int Seed { get; set; }
+            public int TotalPlayers { get; set; }
+            public List<InputState[]> History { get; set; } = new List<InputState[]>();
+        }
 
         public void RecordFrame(InputState[] inputs)
         {
@@ -40,7 +49,7 @@ namespace Bomberman.Core.Rollback
             _history.Clear();
         }
 
-        public void Save(string path)
+        public void Save(string path, int seed, int totalPlayers)
         {
             try 
             {
@@ -51,8 +60,15 @@ namespace Bomberman.Core.Rollback
                     Directory.CreateDirectory(dir);
                 }
 
+                var data = new ReplayData 
+                {
+                    Seed = seed,
+                    TotalPlayers = totalPlayers,
+                    History = _history
+                };
+
                 var options = new JsonSerializerOptions { IncludeFields = true, WriteIndented = true };
-                string json = JsonSerializer.Serialize(_history, options);
+                string json = JsonSerializer.Serialize(data, options);
                 File.WriteAllText(path, json);
                 Console.WriteLine($"Saved replay to {path} ({_history.Count} frames)");
             }
@@ -72,6 +88,8 @@ namespace Bomberman.Core.Rollback
                 writer.Write(input.Movement.X);
                 writer.Write(input.Movement.Y);
                 writer.Write(input.PlaceBomb);
+                writer.Write(input.BombTarget.X);
+                writer.Write(input.BombTarget.Y);
                 return ms.ToArray();
             }
         }
@@ -86,6 +104,7 @@ namespace Bomberman.Core.Rollback
                 input.Movement.X = reader.ReadInt32();
                 input.Movement.Y = reader.ReadInt32();
                 input.PlaceBomb = reader.ReadBoolean();
+                input.BombTarget = new IntVector2(reader.ReadInt32(), reader.ReadInt32());
                 return (frameId, input);
             }
         }
@@ -102,8 +121,31 @@ namespace Bomberman.Core.Rollback
             {
                 var options = new JsonSerializerOptions { IncludeFields = true };
                 string json = File.ReadAllText(path);
+                
+                // Try deserialize as new format
+                try 
+                {
+                     var data = JsonSerializer.Deserialize<ReplayData>(json, options);
+                     if (data != null)
+                     {
+                         _history = data.History ?? new List<InputState[]>();
+                         Seed = data.Seed;
+                         TotalPlayers = data.TotalPlayers;
+                         Console.WriteLine($"Loaded replay from {path} (v2, {_history.Count} frames)");
+                         return;
+                     }
+                }
+                catch
+                {
+                    // Fallback to old list format (optional, or just fail)
+                    // Assuming we want to support old replays minimally or just break them (this is dev phase so break is arguably fine, but clean check is better)
+                }
+
+                // Fallback attempt for raw list
                 _history = JsonSerializer.Deserialize<List<InputState[]>>(json, options) ?? new List<InputState[]>();
-                Console.WriteLine($"Loaded replay from {path} ({_history.Count} frames)");
+                Seed = 0; // Unknown
+                TotalPlayers = 2; // Default?
+                Console.WriteLine($"Loaded replay from {path} (Legacy List, {_history.Count} frames)");
             }
              catch(Exception e)
             {

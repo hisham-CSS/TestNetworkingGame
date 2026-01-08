@@ -26,20 +26,11 @@ namespace Bomberman.Core.Game
         // Constructor for Replay
         public GameSession(string replayPath)
         {
-            // Replay mode (player ID 0 for view, but logic might vary)
-            // RollbackSystem constructor requires localPlayerId. For replay view, maybe 0?
-            RollbackSystem = new RollbackSystem(0, 2); // Default 2? Will be overwritten by LoadReplay?
-            // Wait, LoadReplay sets simulation?
-            // RollbackSystem.LoadReplay reads seed and totalPlayers?
-            // RollbackSystem.LoadReplay implementation needs checking.
-            
-            // For now, I'll expose a method to load replay or just use the same constructor and call logic externally
-            // But GameSession should encapsulate it.
-             RollbackSystem = new RollbackSystem(0, 2); 
-             RollbackSystem.LoadReplay(replayPath);
-             // Note: InitializeSimulation call is needed after LoadReplay?
-             // In Game1.cs it was: LoadReplay -> InitializeSimulation(seed, players).
-             // I'll need to replicate that logic or push it into RollbackSystem.
+            // Dummy LocalPlayerId (0), will be overridden or ignored during replay view?
+            // Actually RollbackSystem needs a valid ID for some checks, but for replay viewing 
+            // we typically just watch. We'll pass 0.
+            RollbackSystem = new RollbackSystem(0, 2); 
+            RollbackSystem.InitializeFromReplay(replayPath);
         }
 
         public void Update(InputState localInput)

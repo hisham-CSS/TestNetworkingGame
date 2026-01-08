@@ -1,6 +1,6 @@
 using System;
 using System.IO;
-using Microsoft.Xna.Framework;
+using System.IO;
 using Bomberman.Core;
 
 namespace Bomberman.Net
@@ -142,7 +142,7 @@ namespace Bomberman.Net
                      inputs[i].Movement.X = reader.ReadInt32();
                      inputs[i].Movement.Y = reader.ReadInt32();
                      inputs[i].PlaceBomb = reader.ReadBoolean();
-                     inputs[i].BombTarget = new Point(reader.ReadInt32(), reader.ReadInt32());
+                     inputs[i].BombTarget = new IntVector2(reader.ReadInt32(), reader.ReadInt32());
                 }
 
                 return (playerId, startFrame, inputs, currentPos, stateHash);

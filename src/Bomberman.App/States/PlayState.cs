@@ -96,7 +96,9 @@ namespace Bomberman.App.States
                 }
                 
                 // Save Replay
-                _gameSession.SaveReplay(Path.Combine("Replays", "replay.json"));
+                string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+                string replayPath = Path.Combine("Replays", $"replay_{timestamp}.json");
+                _gameSession.SaveReplay(replayPath);
 
                 _manager.ChangeState(new MenuState(_context, _manager));
                 return;
@@ -133,7 +135,7 @@ namespace Bomberman.App.States
             _pendingBombInput = false;
 
              // Calculate explicit bomb target
-             Point bombTarget = new Point(0, 0);
+             IntVector2 bombTarget = new IntVector2(0, 0);
              if (placeBomb)
              {
                  IntVector2 myPos = IntVector2.Zero;
@@ -158,7 +160,7 @@ namespace Bomberman.App.States
                  
                  int centerX = pixelX + 12;
                  int centerY = pixelY + 12;
-                 bombTarget = new Point(centerX / 32, centerY / 32);
+                 bombTarget = new IntVector2(centerX / 32, centerY / 32);
              }
 
             InputState localInput = new InputState { Movement = movement, PlaceBomb = placeBomb, BombTarget = bombTarget };

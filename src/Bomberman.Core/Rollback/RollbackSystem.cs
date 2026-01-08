@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using Microsoft.Xna.Framework;
 using System.IO;
 
 
@@ -33,6 +32,7 @@ namespace Bomberman.Core.Rollback
         private int _totalPlayers;
         private int _localPlayerId;
         private int _replayFrame = 0;
+        private int _seed;
 
         public RollbackSystem(int localPlayerId, int totalPlayers)
         {
@@ -43,23 +43,34 @@ namespace Bomberman.Core.Rollback
 
         public void InitializeSimulation(int seed, int totalPlayers)
         {
+            _seed = seed;
+            _totalPlayers = totalPlayers; // Update in case it changed (e.g. from replay)
             Simulation = new Simulation(seed, totalPlayers);
             // Save initial state (Frame -1) so we can rollback TO Frame 0
             _snapshotBuffer[-1] = new GameStateSnapshot(-1, Simulation.World);
             // Logger hookup can be done externally or passed in
         }
 
-        public void LoadReplay(string path)
+        public void InitializeFromReplay(string path)
         {
-            IsReplaying = true;
             _recorder.Load(path);
-            _replayFrame = 0;
-            Console.WriteLine("Replay Loaded.");
+            if (_recorder.FrameCount > 0)
+            {
+                Console.WriteLine($"Initializing Replay: Seed={_recorder.Seed}, Players={_recorder.TotalPlayers}");
+                InitializeSimulation(_recorder.Seed, _recorder.TotalPlayers);
+                IsReplaying = true;
+                IsRecording = false; // Don't record while replaying
+                _replayFrame = 0;
+            }
+            else
+            {
+                Console.WriteLine("Replay failed to load or empty.");
+            }
         }
 
         public void SaveReplay(string path)
         {
-             _recorder.Save(path);
+             _recorder.Save(path, _seed, _totalPlayers);
         }
         
         public void Reset()

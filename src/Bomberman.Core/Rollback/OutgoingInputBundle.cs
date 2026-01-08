@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using Microsoft.Xna.Framework;
 using Bomberman.Core;
 
 namespace Bomberman.Core.Rollback

@@ -1,5 +1,5 @@
 using NUnit.Framework;
-using Microsoft.Xna.Framework;
+
 using System.Collections.Generic;
 using Bomberman.Core;
 using Bomberman.Core.Rollback;

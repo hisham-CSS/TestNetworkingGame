@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using Microsoft.Xna.Framework;
+using System.Collections.Generic;
 using Bomberman.Core.Game;
 
 namespace Bomberman.Core
@@ -90,10 +90,10 @@ namespace Bomberman.Core
             // Spawn points in Grid Coordinates
             var spawnPoints = new[]
             {
-                new Point(1, 1),
-                new Point(MapWidth - 2, 1),
-                new Point(1, MapHeight - 2),
-                new Point(MapWidth - 2, MapHeight - 2)
+                new IntVector2(1, 1),
+                new IntVector2(MapWidth - 2, 1),
+                new IntVector2(1, MapHeight - 2),
+                new IntVector2(MapWidth - 2, MapHeight - 2)
             };
 
             for (int i = 0; i < count; i++) 
@@ -148,8 +148,8 @@ namespace Bomberman.Core
             var explosionCompEntities = World.Explosions.GetEntities(); 
 
             // Optimization: Cache explosion rects (in scaled units)
-            // Use MonoGame Rectangle (int based) which fits perfectly!
-            List<Rectangle> expRects = new List<Rectangle>();
+            // Use IntRect
+            List<IntRect> expRects = new List<IntRect>();
             for(int i=0; i<explosions.Count; i++) 
             {
                  var entity = explosionCompEntities[i];
@@ -158,7 +158,7 @@ namespace Bomberman.Core
                          var trans = explosionTransforms[t];
                          // Shrink 4 pixels = 400 units
                          int shrink = 4 * SubpixelScale;
-                         expRects.Add(new Rectangle(trans.Position.X + shrink, trans.Position.Y + shrink, trans.Size.X - shrink*2, trans.Size.Y - shrink*2));
+                         expRects.Add(new IntRect(trans.Position.X + shrink, trans.Position.Y + shrink, trans.Size.X - shrink*2, trans.Size.Y - shrink*2));
                          break;
                      }
                  }
@@ -180,7 +180,7 @@ namespace Bomberman.Core
                 }
                 if (!found) continue;
 
-                Rectangle pRect = new Rectangle(pTrans.Position.X, pTrans.Position.Y, pTrans.Size.X, pTrans.Size.Y);
+                IntRect pRect = new IntRect(pTrans.Position.X, pTrans.Position.Y, pTrans.Size.X, pTrans.Size.Y);
 
                 foreach(var eRect in expRects)
                 {
@@ -232,8 +232,7 @@ namespace Bomberman.Core
 
                 var transform = transforms[transformIndex];
 
-                // Movement (Integer)
-                IntVector2 velocity = input.Movement * PlayerSpeedPerFrame;
+                 IntVector2 velocity = input.Movement * PlayerSpeedPerFrame;
                 if (velocity != IntVector2.Zero)
                 {
                     transform.Position = MoveWithCollision(transform, velocity);
@@ -247,7 +246,7 @@ namespace Bomberman.Core
                 var powerupTransforms = World.Transforms.GetAll();
                 var powerupTransformEntities = World.Transforms.GetEntities();
                 
-                Rectangle playerRect = new Rectangle(transform.Position.X, transform.Position.Y, transform.Size.X, transform.Size.Y);
+                IntRect playerRect = new IntRect(transform.Position.X, transform.Position.Y, transform.Size.X, transform.Size.Y);
 
                 List<Entity> eatenPowerups = new List<Entity>();
 
@@ -263,7 +262,7 @@ namespace Bomberman.Core
                     if (pTransIdx == -1) continue;
 
                     var pTrans = powerupTransforms[pTransIdx];
-                    Rectangle pRect = new Rectangle(pTrans.Position.X, pTrans.Position.Y, pTrans.Size.X, pTrans.Size.Y);
+                    IntRect pRect = new IntRect(pTrans.Position.X, pTrans.Position.Y, pTrans.Size.X, pTrans.Size.Y);
 
                     if (playerRect.Intersects(pRect))
                     {
@@ -321,8 +320,8 @@ namespace Bomberman.Core
 
         private bool CheckCollision(IntVector2 _pos, IntVector2 _size, IntVector2 _currentPos)
         {
-            Rectangle playerRect = new Rectangle(_pos.X, _pos.Y, _size.X, _size.Y);
-            Rectangle currentRect = new Rectangle(_currentPos.X, _currentPos.Y, _size.X, _size.Y);
+            IntRect playerRect = new IntRect(_pos.X, _pos.Y, _size.X, _size.Y);
+            IntRect currentRect = new IntRect(_currentPos.X, _currentPos.Y, _size.X, _size.Y);
             
             var tiles = World.Tiles.GetAll();
             var tileTransforms = World.Transforms.GetAll();
@@ -332,7 +331,7 @@ namespace Bomberman.Core
                 if (tiles[i].Type == TileComponent.TileType.Solid || (tiles[i].Type == TileComponent.TileType.Destructible && !tiles[i].Destroyed))
                 {
                     var tileTrans = tileTransforms[i];
-                    Rectangle tileRect = new Rectangle(tileTrans.Position.X, tileTrans.Position.Y, tileTrans.Size.X, tileTrans.Size.Y);
+                    IntRect tileRect = new IntRect(tileTrans.Position.X, tileTrans.Position.Y, tileTrans.Size.X, tileTrans.Size.Y);
                     
                     if (playerRect.Intersects(tileRect))
                         return true;
@@ -352,7 +351,7 @@ namespace Bomberman.Core
                      if(transformEntities[t].Equals(bombEntity))
                      {
                          var bombTrans = allTransforms[t];
-                          Rectangle bombRect = new Rectangle(bombTrans.Position.X, bombTrans.Position.Y, bombTrans.Size.X, bombTrans.Size.Y);
+                          IntRect bombRect = new IntRect(bombTrans.Position.X, bombTrans.Position.Y, bombTrans.Size.X, bombTrans.Size.Y);
                           
                           // Walking-off-bomb logic
                           if (currentRect.Intersects(bombRect))
@@ -370,7 +369,7 @@ namespace Bomberman.Core
             return false;
         }
 
-        private void TryPlaceBomb(Point targetGrid, PlayerComponent player, Entity playerEntity)
+        private void TryPlaceBomb(IntVector2 targetGrid, PlayerComponent player, Entity playerEntity)
         {
             int gridX = targetGrid.X;
             int gridY = targetGrid.Y;
@@ -479,7 +478,7 @@ namespace Bomberman.Core
         
         private bool ExplosionHit(IntVector2 pos)
         {
-            Rectangle checkRect = new Rectangle(pos.X + 2*SubpixelScale, pos.Y + 2*SubpixelScale, ScaledTileSize - 4*SubpixelScale, ScaledTileSize - 4*SubpixelScale);
+            IntRect checkRect = new IntRect(pos.X + 2*SubpixelScale, pos.Y + 2*SubpixelScale, ScaledTileSize - 4*SubpixelScale, ScaledTileSize - 4*SubpixelScale);
             
             var tiles = World.Tiles.GetAll();
             var tileTransforms = World.Transforms.GetAll();
@@ -487,7 +486,7 @@ namespace Bomberman.Core
             for (int i = 0; i < tiles.Count; i++)
             {
                 var tPos = tileTransforms[i].Position;
-                Rectangle tileRect = new Rectangle(tPos.X, tPos.Y, ScaledTileSize, ScaledTileSize);
+                IntRect tileRect = new IntRect(tPos.X, tPos.Y, ScaledTileSize, ScaledTileSize);
                 
                 if (checkRect.Intersects(tileRect))
                 {

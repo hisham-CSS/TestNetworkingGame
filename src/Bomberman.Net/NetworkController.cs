@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Net;
-using Microsoft.Xna.Framework;
 using Bomberman.Core;
 using Bomberman.Core.Rollback;
 

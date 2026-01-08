@@ -1,8 +1,8 @@
 namespace Bomberman.Core;
 
 using System;
+
 using System.Collections.Generic;
-using Microsoft.Xna.Framework;
 
 public interface IComponentPool
 {
@@ -101,7 +101,7 @@ public struct InputState
 {
     public IntVector2 Movement; // Input direction (-1, 0, 1)
     public bool PlaceBomb;
-    public Point BombTarget; // Explicit Grid Coordinate
+    public IntVector2 BombTarget; // Explicit Grid Coordinate
 
     public bool Equals(InputState other)
     {

@@ -65,7 +65,7 @@ namespace Bomberman.Tests
                 { 
                     Movement = new IntVector2(x,y), 
                     PlaceBomb = bomb,
-                    BombTarget = new Microsoft.Xna.Framework.Point(0,0) // Simplification
+                    BombTarget = new IntVector2(0,0) // Simplification
                 };
             }
             return result;
