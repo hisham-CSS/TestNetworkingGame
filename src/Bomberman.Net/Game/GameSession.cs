@@ -1,7 +1,9 @@
 using System;
 using Bomberman.Core;
 
-namespace Bomberman.Core
+
+
+namespace Bomberman.Net
 {
     public class GameSession
     {

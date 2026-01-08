@@ -5,7 +5,9 @@ using System.IO;
 
 
 
-namespace Bomberman.Core
+using Bomberman.Core;
+
+namespace Bomberman.Net
 {
     public class RollbackSystem
     {

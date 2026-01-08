@@ -3,7 +3,7 @@ using System.IO;
 using Microsoft.Xna.Framework;
 using Bomberman.Core;
 
-namespace Bomberman.Core
+namespace Bomberman.Net
 {
     public enum PacketType : byte
     {

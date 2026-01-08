@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 
-namespace Bomberman.Core
+using Bomberman.Core;
+
+namespace Bomberman.Net
 {
     public class InputRecorder
     {

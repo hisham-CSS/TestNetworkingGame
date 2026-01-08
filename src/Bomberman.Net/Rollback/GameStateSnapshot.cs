@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 
-namespace Bomberman.Core
+using Bomberman.Core;
+
+namespace Bomberman.Net
 {
     public class GameStateSnapshot
     {

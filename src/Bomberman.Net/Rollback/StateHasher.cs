@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 
-namespace Bomberman.Core
+using Bomberman.Core;
+
+namespace Bomberman.Net
 {
     public static class StateHasher
     {

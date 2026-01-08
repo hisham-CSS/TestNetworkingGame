@@ -3,6 +3,7 @@ using Bomberman;
 using Microsoft.Xna.Framework;
 using System.Collections.Generic;
 using Bomberman.Core;
+using Bomberman.Net;
 
 namespace Bomberman.Tests
 {
