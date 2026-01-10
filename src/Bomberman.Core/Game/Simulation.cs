@@ -124,14 +124,43 @@ namespace Bomberman.Core
             }
         }
 
+        public bool IsGameOver { get; private set; }
+        public int WinnerId { get; private set; } = -1; // -1 = Draw or None yet
+
         public void Update(InputState[] inputs, float dt)
         {
+            if (IsGameOver) return; // Stop simulating if game over? Or continue for replay/visuals? Usually stop logic.
+
             // Ignore dt for movement if we assume fixed step, BUT we should verify.
             // Just use PlayerSpeedPerFrame.
             UpdatePlayers(inputs);
             UpdateBombs();
             UpdateExplosions();
             CheckDamage();
+            CheckWinCondition();
+        }
+
+        private void CheckWinCondition()
+        {
+            var players = World.Players.GetAll();
+            int aliveCount = 0;
+            int lastAliveId = -1;
+
+            for (int i = 0; i < players.Count; i++)
+            {
+                if (players[i].Alive)
+                {
+                    aliveCount++;
+                    lastAliveId = (int)players[i].PlayerId;
+                }
+            }
+
+            if (aliveCount <= 1 && players.Count > 1)
+            {
+                IsGameOver = true;
+                WinnerId = (aliveCount == 1) ? lastAliveId : -1;
+                Console.WriteLine($"[Simulation] Game Over. Winner: {WinnerId}");
+            }
         }
 
         private void CheckDamage()

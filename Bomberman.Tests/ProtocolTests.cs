@@ -74,5 +74,19 @@ namespace Bomberman.Tests
             Assert.That(outSeed, Is.EqualTo(seed));
             Assert.That(outTotal, Is.EqualTo(totalPlayers));
         }
+
+        [Test]
+        public void CreateLobbyReady_SerializeDeserialize_Correctly()
+        {
+            int pid = 2;
+            bool isReady = true;
+
+            byte[] packet = NetworkProtocol.CreateLobbyReady(pid, isReady);
+            
+            var (outPid, outReady) = NetworkProtocol.ReadLobbyReady(packet);
+
+            Assert.That(outPid, Is.EqualTo(pid));
+            Assert.That(outReady, Is.EqualTo(isReady));
+        }
     }
 }

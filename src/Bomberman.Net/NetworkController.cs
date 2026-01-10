@@ -8,48 +8,134 @@ namespace Bomberman.Net
 {
     public class NetworkController
     {
-        private UdpTransport _transport;
-        public IEnumerable<IPEndPoint> ConnectedClients => _transport.ConnectedClients;
+        private ITransport _transport;
+        private List<IPEndPoint> _connectedClients = new List<IPEndPoint>();
+        public IReadOnlyList<IPEndPoint> ConnectedClients => _connectedClients;
 
         // Events to decouple logic from Program.cs
         public event Action<int, int, int>? OnWelcomeReceived; // assignedId, seed, totalPlayers
         public event Action<int, int>? OnLobbyUpdateReceived; // connectedCount, totalPlayers
         public event Action<int, int>? OnStartGameReceived; // seed, totalPlayers
         public event Action<System.Net.IPEndPoint, string, int, int>? OnDiscoveryRequestReceived; // sender, header, players, max
-        public event Action<System.Net.IPEndPoint, string, int, int>? OnDiscoveryResponseReceived; // sender, name, players, max
-        public event Action<System.Net.IPEndPoint>? OnJoinRequestRaw; // Just notify that someone wants to join
-        
-        public event Action<int, int, InputState[], IntVector2, int>? OnInputReceived; // pid, frame, history, pos, hash
+        public event Action<System.Net.IPEndPoint, string, int, int>? OnDiscoveryResponseReceived; 
+        public event Action<System.Net.IPEndPoint>? OnJoinRequestRaw; 
+        public event Action<int, int, InputState[], IntVector2, int>? OnInputReceived; 
+        public event Action<IPEndPoint, string>? OnDisconnected; // sender, reason
+        public event Action<int, bool>? OnLobbyReadyReceived; // pid, isReady
+
+        private Dictionary<IPEndPoint, DateTime> _lastDataReceived = new Dictionary<IPEndPoint, DateTime>();
+        private DateTime _lastHeartbeatSent = DateTime.MinValue;
+        private bool _isClient = false;
+
+        private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(1.0);
+        private static readonly TimeSpan TimeoutThreshold = TimeSpan.FromSeconds(5.0);
 
         public NetworkController(int port)
         {
+            // Default to UdpTransport
             _transport = new UdpTransport(port);
-            _transport.OnPacketReceived += HandlePacket;
+            _transport.PacketReceived += HandlePacket;
+        }
+
+        // Allow injecting mock transport for testing
+        public NetworkController(ITransport transport)
+        {
+            _transport = transport;
+            _transport.PacketReceived += HandlePacket;
         }
 
         public void Connect(string ip, int port)
         {
             _transport.Connect(ip, port);
+            _isClient = true;
         }
 
         public void AddClient(IPEndPoint client)
         {
-            _transport.AddClient(client);
+            if (!_connectedClients.Contains(client))
+            {
+                _connectedClients.Add(client);
+                Console.WriteLine($"[Network] Client Added: {client}");
+                _lastDataReceived[client] = DateTime.Now;
+            }
+        }
+
+        public void RemoveClient(IPEndPoint client)
+        {
+            if (_connectedClients.Contains(client))
+            {
+                _connectedClients.Remove(client);
+                _lastDataReceived.Remove(client);
+                Console.WriteLine($"[Network] Client Removed: {client}");
+            }
         }
 
         public void Update()
         {
             _transport.Poll();
+
+            // Heartbeat Logic
+            if (DateTime.Now - _lastHeartbeatSent > HeartbeatInterval)
+            {
+                var hb = NetworkProtocol.CreateHeartbeat();
+                if (_isClient)
+                {
+                    _transport.SendToConnectedHost(hb);
+                }
+                else
+                {
+                    // Host sends to all clients
+                    Broadcast(hb);
+                }
+                _lastHeartbeatSent = DateTime.Now;
+            }
+
+            // Timeout Logic
+            // If Host: Check all clients
+            // If Client: Check Host (but we don't know Host Endpoint explicitly here easily without UdpTransport exposure)
+            // Actually UdpTransport knows host. But NetworkController receives packets from Host.
+            // We need to track Host Endpoint in NetworkController if we are client.
+            // When we receive ANY packet from Host (or anyone if client only talks to host), we update timestamp.
+            
+            // For now, let's just check ConnectedClients (Host Logic).
+            // Client Timeout Logic: If we haven't received anything for > 5s?
+            
+            var now = DateTime.Now;
+            List<IPEndPoint> timedOut = new List<IPEndPoint>();
+            
+            foreach(var kvp in _lastDataReceived)
+            {
+                if (now - kvp.Value > TimeoutThreshold)
+                {
+                    timedOut.Add(kvp.Key);
+                }
+            }
+
+            foreach(var ep in timedOut)
+            {
+                 Console.WriteLine($"[Network] Timeout: {ep}");
+                 RemoveClient(ep);
+                 OnDisconnected?.Invoke(ep, "Timed Out");
+            }
         }
 
         public void Close()
         {
-            _transport.Close();
+            if (_isClient)
+            {
+                try { _transport.SendToConnectedHost(NetworkProtocol.CreateDisconnect("Quit")); } catch {}
+            }
+            else
+            {
+                // Notify clients?
+                Broadcast(NetworkProtocol.CreateDisconnect("Host Quit"));
+            }
+            _transport.Dispose();
         }
 
         public void SendJoinRequest()
         {
-            _transport.Send(NetworkProtocol.CreateJoinRequest());
+            _transport.SendToConnectedHost(NetworkProtocol.CreateJoinRequest());
         }
 
         public void SendWelcome(IPEndPoint target, int assignedId, int seed, int totalPlayers)
@@ -59,12 +145,12 @@ namespace Bomberman.Net
 
         public void BroadcastLobbyUpdate(int connectedCount, int totalPlayers)
         {
-            _transport.Broadcast(NetworkProtocol.CreateLobbyUpdate(connectedCount, totalPlayers));
+            Broadcast(NetworkProtocol.CreateLobbyUpdate(connectedCount, totalPlayers));
         }
 
         public void BroadcastStartGame(int seed, int totalPlayers)
         {
-            _transport.Broadcast(NetworkProtocol.CreateStartGame(seed, totalPlayers));
+            Broadcast(NetworkProtocol.CreateStartGame(seed, totalPlayers));
         }
 
         public void BroadcastDiscoveryRequest(int startPort, int endPort)
@@ -72,7 +158,13 @@ namespace Bomberman.Net
             var packet = NetworkProtocol.CreateDiscoveryRequest();
             for (int p = startPort; p < endPort; p++)
             {
-                _transport.BroadcastToPort(packet, p);
+                // Note: ITransport doesn't expose BroadcastToPort directly anymore to keep it simple.
+                // We can construct the endpoint manually if we know it's UDP.
+                // But abstraction-wise, maybe ITransport SHOULD handle broadcast logic?
+                // For now, I'll assume Udp behavior: 255.255.255.255
+                
+                // Let's use SendTo with Broadcast IP.
+                _transport.SendTo(packet, new IPEndPoint(IPAddress.Broadcast, p));
             }
         }
 
@@ -98,11 +190,21 @@ namespace Bomberman.Net
             
             if (bundle.PlayerId == 0) 
             {
-                _transport.Broadcast(packet);
+                // Host broadcasting input to all clients
+                Broadcast(packet);
             }
             else 
             {
-                _transport.Send(packet);
+                // Client sending input to Host
+                _transport.SendToConnectedHost(packet);
+            }
+        }
+
+        private void Broadcast(byte[] data)
+        {
+            foreach(var client in _connectedClients)
+            {
+                _transport.SendTo(data, client);
             }
         }
 
@@ -110,10 +212,27 @@ namespace Bomberman.Net
         {
             if (data.Length == 0) return;
 
+             // Update Timestamp
+            _lastDataReceived[sender] = DateTime.Now;
+            
+            // If we are client, we should probably track the sender as "Server" if not already?
+            // UdpTransport handles the socket connection.
+
             PacketType type = (PacketType)data[0];
 
             switch (type)
             {
+                case PacketType.Heartbeat:
+                    // Just timestamp update (done above)
+                    break;
+                
+                case PacketType.Disconnect:
+                    string reason = NetworkProtocol.ReadDisconnect(data);
+                    Console.WriteLine($"[Network] Received Disconnect from {sender}: {reason}");
+                    RemoveClient(sender);
+                    OnDisconnected?.Invoke(sender, reason);
+                    break;
+
                 case PacketType.DiscoveryRequest:
                     OnDiscoveryRequestReceived?.Invoke(sender, "Request", 0, 0); 
                     break;
@@ -124,14 +243,20 @@ namespace Bomberman.Net
                     break;
 
                 case PacketType.JoinRequest:
-                    // logic in Program.cs was: check if not full, add client, send welcome, broadcast update
-                    // We can just expose the Raw Endpoint for the Host to decide
+                    int version = NetworkProtocol.ReadJoinRequest(data);
+                    if (version != NetworkProtocol.ProtocolVersion)
+                    {
+                         // Send Reject?
+                        Console.WriteLine($"[Network] Rejected JoinRequest from {sender}: Protocol Version Mismatch (Incoming: {version}, Local: {NetworkProtocol.ProtocolVersion})");
+                        return;
+                    }
                     OnJoinRequestRaw?.Invoke(sender);
                     break;
 
                 case PacketType.Welcome:
                     var (assignedId, seed, total) = NetworkProtocol.ReadWelcome(data);
                     OnWelcomeReceived?.Invoke(assignedId, seed, total);
+                    // If client, maybe we should explicitly track Host Endpoint here if needed?
                     break;
 
                 case PacketType.LobbyUpdate:
@@ -145,10 +270,33 @@ namespace Bomberman.Net
                     break;
 
                 case PacketType.Input:
-                    var (pid, frame, inputs, pos, hash) = NetworkProtocol.ReadInputPacket(data);
-                    OnInputReceived?.Invoke(pid, frame, inputs, pos, hash);
+                    var (pid, frame, inputs, remotePos, remoteHash) = NetworkProtocol.ReadInputPacket(data);
+                    OnInputReceived?.Invoke(pid, frame, inputs, remotePos, remoteHash);
+                    break;
+
+                case PacketType.LobbyReady:
+                    var (readyPid, isReady) = NetworkProtocol.ReadLobbyReady(data);
+                    OnLobbyReadyReceived?.Invoke(readyPid, isReady);
                     break;
             }
+        }
+
+        public void SendLobbyReady(int pid, bool isReady)
+        {
+             var packet = NetworkProtocol.CreateLobbyReady(pid, isReady);
+             if (_isClient) _transport.SendToConnectedHost(packet);
+             else Broadcast(packet);
+        }
+
+        public void BroadcastLobbyReady(int pid, bool isReady)
+        {
+             // Host broadcasts to all
+             Broadcast(NetworkProtocol.CreateLobbyReady(pid, isReady));
+        }
+
+        public void SendLobbyReadyTo(IPEndPoint target, int pid, bool isReady)
+        {
+            _transport.SendTo(NetworkProtocol.CreateLobbyReady(pid, isReady), target);
         }
     }
 }

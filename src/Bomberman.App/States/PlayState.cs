@@ -25,6 +25,9 @@ namespace Bomberman.App.States
         private bool _pendingBombInput = false;
         private KeyboardState _previousKeyboardState;
 
+        private bool _isReplayView = false;
+        private System.Collections.Generic.List<IPEndPoint> _clients = new System.Collections.Generic.List<IPEndPoint>();
+
         public PlayState(GameContext context, GameStateManager manager, int localPlayerId, int playerCount, int seed)
         {
             _context = context;
@@ -40,6 +43,16 @@ namespace Bomberman.App.States
                 _gameSession.RollbackSystem.SimulateNetworked = true;
                 SetupLogging();
             }
+        }
+
+        public PlayState(GameContext context, GameStateManager manager, GameSession session)
+        {
+            _context = context;
+            _manager = manager;
+            _gameSession = session;
+            _localPlayerId = 0; // Default view for replay
+            _isHost = false; 
+            _isReplayView = true;
         }
 
         private void SetupLogging()
@@ -58,13 +71,23 @@ namespace Bomberman.App.States
              }
         }
 
+
+
         public void Enter()
         {
-            Console.WriteLine($"[PlayState] Enter. P{_localPlayerId}");
+            Console.WriteLine($"[PlayState] Enter. P{_localPlayerId} Replay={_isReplayView}");
             if (_context.Network != null)
             {
                 _context.Network.OnInputReceived += HandleInputReceived;
                 _context.Network.OnDiscoveryRequestReceived += HandleDiscoveryRequest;
+                _context.Network.OnDisconnected += HandleDisconnected;
+                
+                // Host: Snapshot clients to map to PlayerIDs
+                if (_isHost)
+                {
+                    _clients.Clear();
+                    _clients.AddRange(_context.Network.ConnectedClients);
+                }
             }
             _previousKeyboardState = Keyboard.GetState();
         }
@@ -76,9 +99,29 @@ namespace Bomberman.App.States
              {
                  _context.Network.OnInputReceived -= HandleInputReceived;
                  _context.Network.OnDiscoveryRequestReceived -= HandleDiscoveryRequest;
-                 // Don't close network, might go back to Lobby or used here? 
-                 // Actually if we leave PlayState (Escape), we go to Menu, so Close() happens manually or in flow.
+                 _context.Network.OnDisconnected -= HandleDisconnected;
              }
+        }
+        
+        private void HandleDisconnected(IPEndPoint sender, string reason)
+        {
+            if (_isHost)
+            {
+                int index = _clients.IndexOf(sender);
+                if (index != -1)
+                {
+                    int pid = index + 1; // 0 is Host
+                    Console.WriteLine($"[PlayState] Player {pid} Disconnected: {reason}");
+                    _gameSession.DisconnectPlayer(pid);
+                }
+            }
+            else
+            {
+                // Client: If we receive Disconnect, it's likely from Host (or we timed out host)
+                Console.WriteLine($"[PlayState] Disconnected from Host: {reason}");
+                // Force return to menu
+                _manager.ChangeState(new MenuState(_context, _manager));
+            }
         }
 
         public void Update(GameTime gameTime)
@@ -95,10 +138,16 @@ namespace Bomberman.App.States
                     _context.Network = null;
                 }
                 
-                // Save Replay
-                string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-                string replayPath = Path.Combine("Replays", $"replay_{timestamp}.json");
-                _gameSession.SaveReplay(replayPath);
+                // Save Replay only if NOT viewing one
+                if (!_isReplayView)
+                {
+                    string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+                    string replayDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Replays");
+                    if (!Directory.Exists(replayDir)) Directory.CreateDirectory(replayDir);
+                    
+                    string replayPath = Path.Combine(replayDir, $"replay_{timestamp}.json");
+                    _gameSession.SaveReplay(replayPath);
+                }
 
                 _manager.ChangeState(new MenuState(_context, _manager));
                 return;
@@ -117,6 +166,19 @@ namespace Bomberman.App.States
             {
                 StepSimulation(kState);
                 _accumulator -= FixedTimeStep;
+                
+                bool isGameOver = _gameSession.Simulation != null && _gameSession.Simulation.IsGameOver;
+                bool isReplayEnd = _gameSession.RollbackSystem.IsReplayFinished;
+
+                if (isGameOver || isReplayEnd)
+                {
+                    int winner = -1;
+                    if (_gameSession.Simulation != null) winner = _gameSession.Simulation.WinnerId;
+
+                    // Transition to Game Over (Flag replay status)
+                    _manager.ChangeState(new GameOverState(_context, _manager, _gameSession, winner, _isReplayView, isGameOver));
+                    return;
+                }
             }
 
             _previousKeyboardState = kState;

@@ -10,16 +10,17 @@ namespace Bomberman.Core.Rollback
         public int Frame { get; set; }
         public uint NextEntityId { get; set; }
         
-        private Dictionary<Type, object> _componentStates = new Dictionary<Type, object>();
+        private object[] _states;
 
         public GameStateSnapshot(int frame, World world)
         {
             Frame = frame;
             NextEntityId = world.NextEntityId;
-
-            foreach(var pool in world.AllPools)
+            _states = new object[world.AllPools.Count];
+            
+            for(int i = 0; i < world.AllPools.Count; i++)
             {
-                _componentStates[pool.ComponentType] = pool.CaptureState();
+                _states[i] = world.AllPools[i].CaptureState();
             }
         }
 
@@ -28,22 +29,33 @@ namespace Bomberman.Core.Rollback
             world.Clear();
             world.NextEntityId = NextEntityId;
 
-            foreach(var pool in world.AllPools)
+            // Assumes World structure is identical to when Snapshot was created
+            for(int i = 0; i < world.AllPools.Count; i++)
             {
-                if (_componentStates.TryGetValue(pool.ComponentType, out var state))
+                if (i < _states.Length)
                 {
-                    pool.RestoreState(state);
+                    world.AllPools[i].RestoreState(_states[i]);
                 }
             }
         }
 
         public (List<Entity> entities, List<T> components) GetState<T>() where T : struct
         {
-            if (_componentStates.TryGetValue(typeof(T), out var state))
+            if (World.ComponentIndexMap.TryGetValue(typeof(T), out int index))
             {
-                return ((List<Entity>, List<T>))state;
+                if (index < _states.Length)
+                {
+                     return ((List<Entity>, List<T>))_states[index];
+                }
             }
-            return (new List<Entity>(), new List<T>());
+            // Optimization: Return cached empty lists
+            return (EmptyCache<Entity>.List, EmptyCache<T>.List);
         }
     }
+
+    internal static class EmptyCache<T>
+    {
+        public static readonly List<T> List = new List<T>();
+    }
 }
+

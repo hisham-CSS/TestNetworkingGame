@@ -53,5 +53,10 @@ namespace Bomberman.Core.Game
         {
             RollbackSystem.HandleRemoteInput(pid, startFrame, inputs, remotePos, remoteHash);
         }
+
+        public void DisconnectPlayer(int pid)
+        {
+            RollbackSystem.SetPlayerDisconnected(pid);
+        }
     }
 }

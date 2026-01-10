@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Net;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Bomberman.Net;
 using Bomberman.Core.Game;
@@ -20,8 +21,12 @@ namespace Bomberman.App.States
         private int _networkSeed;
         private int _localPlayerId = -1; // -1 for client initially
         private float _joinRetryTimer = 0;
+        private KeyboardState _prevKeyboard;
+        
+        private Dictionary<int, bool> _playerReady = new Dictionary<int, bool>();
+        private bool _amIReady = false;
 
-        public LobbyState(GameContext context, GameStateManager manager, bool isHost)
+        public LobbyState(GameContext context, GameStateManager manager, bool isHost, IPEndPoint? hostEndpoint)
         {
             _context = context;
             _manager = manager;
@@ -33,11 +38,18 @@ namespace Bomberman.App.States
                 _networkSeed = new Random().Next();
                 _connectedPlayerCount = 1; // Host is 1
             }
+            else if (hostEndpoint != null && _context.Network != null)
+            {
+                // Client: Connect to selected host
+                _context.Network.Connect(hostEndpoint.Address.ToString(), hostEndpoint.Port);
+            }
         }
 
         public void Enter()
         {
             Console.WriteLine($"[LobbyState] Enter. Host={_isHost}");
+            _prevKeyboard = Keyboard.GetState();
+
             if (_context.Network != null)
             {
                 _context.Network.OnJoinRequestRaw += HandleJoinRequest;
@@ -45,6 +57,8 @@ namespace Bomberman.App.States
                 _context.Network.OnLobbyUpdateReceived += HandleLobbyUpdate;
                 _context.Network.OnStartGameReceived += HandleStartGame;
                 _context.Network.OnDiscoveryRequestReceived += HandleDiscoveryRequest;
+                _context.Network.OnDisconnected += HandleDisconnected;
+                _context.Network.OnLobbyReadyReceived += HandleLobbyReady;
             }
 
             if (!_isHost)
@@ -66,7 +80,35 @@ namespace Bomberman.App.States
                  _context.Network.OnLobbyUpdateReceived -= HandleLobbyUpdate;
                  _context.Network.OnStartGameReceived -= HandleStartGame;
                  _context.Network.OnDiscoveryRequestReceived -= HandleDiscoveryRequest;
+                 _context.Network.OnDisconnected -= HandleDisconnected;
+                 _context.Network.OnLobbyReadyReceived -= HandleLobbyReady;
              }
+        }
+
+        private void HandleDisconnected(IPEndPoint sender, string reason)
+        {
+             if (!_isHost)
+             {
+                 Console.WriteLine($"[Lobby] Host Disconnected: {reason}");
+                 ReturnToMenu();
+             }
+             else
+             {
+                 Console.WriteLine($"[Lobby] Client {sender} Disconnected: {reason}");
+                 _connectedPlayerCount--;
+                 if (_connectedPlayerCount < 1) _connectedPlayerCount = 1;
+                 _context.Network?.BroadcastLobbyUpdate(_connectedPlayerCount, _totalPlayersForGame);
+             }
+        }
+        
+        private void ReturnToMenu()
+        {
+             if (_context.Network != null)
+            {
+                _context.Network.Close();
+                _context.Network = null;
+            }
+            _manager.ChangeState(new MenuState(_context, _manager));
         }
 
         public void Update(GameTime gameTime)
@@ -120,17 +162,48 @@ namespace Bomberman.App.States
 
                 if (kState.IsKeyDown(Keys.Enter))
                 {
-                    if (_connectedPlayerCount >= _totalPlayersForGame)
+                    bool allReady = true;
+                    // Host is always ready if they press Enter? Or must toggle?
+                    // Let's say Host must toggle too, OR implicitly ready by pressing Enter.
+                    // For safety: Check all clients used slots.
+                    // Actually, let's enforce: Everyone connected must be Ready.
+                    for (int i = 0; i < _connectedPlayerCount; i++)
                     {
-                        // Start!
+                        if (!_playerReady.ContainsKey(i) || !_playerReady[i]) allReady = false;
+                    }
+
+                    if (_connectedPlayerCount >= _totalPlayersForGame && allReady)
+                    {
                          _context.Network?.BroadcastStartGame(_networkSeed, _totalPlayersForGame);
                          StartGame(_networkSeed, _totalPlayersForGame);
                     }
                     else
                     {
-                         // Debounce or log?
+                         // Feedback?
                     }
                 }
+            }
+            
+            // Ready Toggle
+            if (kState.IsKeyDown(Keys.Space) && !_prevKeyboard.IsKeyDown(Keys.Space))
+            {
+                _amIReady = !_amIReady;
+                if (_localPlayerId != -1)
+                {
+                    _playerReady[_localPlayerId] = _amIReady;
+                    _context.Network?.SendLobbyReady(_localPlayerId, _amIReady);
+                }
+            }
+            _prevKeyboard = kState;
+        }
+
+        private void HandleLobbyReady(int pid, bool isReady)
+        {
+            _playerReady[pid] = isReady;
+            if (_isHost)
+            {
+                // Relay to everyone so they see the status
+                _context.Network?.BroadcastLobbyReady(pid, isReady);
             }
         }
 
@@ -167,6 +240,15 @@ namespace Bomberman.App.States
                     
                     _context.Network.SendWelcome(sender, newId, _networkSeed, _totalPlayersForGame);
                     _context.Network.BroadcastLobbyUpdate(_connectedPlayerCount, _totalPlayersForGame);
+
+                    // Sync existing ready states to new client
+                    foreach(var kvp in _playerReady)
+                    {
+                        if (kvp.Value)
+                        {
+                            _context.Network.SendLobbyReadyTo(sender, kvp.Key, true);
+                        }
+                    }
 
                     Console.WriteLine($"Client {newId} Joined from {sender}");
                 }
@@ -215,28 +297,79 @@ namespace Bomberman.App.States
              _context.Game.GraphicsDevice.Clear(Color.CornflowerBlue);
              _context.SpriteBatch.Begin(samplerState: Microsoft.Xna.Framework.Graphics.SamplerState.PointClamp);
 
-             DrawText("LOBBY", new Vector2(50, 50), 3, Color.White);
-             DrawText($"Players: {_connectedPlayerCount} / {_totalPlayersForGame}", new Vector2(50, 100), 2, Color.Yellow);
+             int centerX = _context.Game.GraphicsDevice.Viewport.Width / 2;
+             
+             DrawCenteredText(_context.SpriteBatch, "LOBBY", centerX, 50, Color.Red, 8);
+             
+             DrawCenteredText(_context.SpriteBatch, $"PLAYERS: {_connectedPlayerCount} / {_totalPlayersForGame}", centerX, 150, Color.White, 3);
+             
+             // Instructions
+             if (_isHost)
+             {
+                 DrawCenteredText(_context.SpriteBatch, "ADJUST PLAYER COUNT:  [2]   [3]   [4]", centerX, 200, Color.Yellow, 2);
+             }
+             
+             // Slots
+             int startY = 300;
+             int slotHeight = 35;
+             
+             for(int i=0; i<_totalPlayersForGame; i++)
+             {
+                 string slotInfo = $"SLOT {i+1}:   ";
+                 Color c = Color.DarkGray;
+                 
+                 if (i < _connectedPlayerCount)
+                 {
+                     bool ready = _playerReady.ContainsKey(i) && _playerReady[i];
+                     slotInfo += ready ? "READY" : "NOT READY";
+                     c = ready ? Color.Lime : Color.Orange;
+                     
+                     if (i == _localPlayerId) slotInfo += "  (YOU)";
+                 }
+                 else
+                 {
+                     slotInfo += "EMPTY";
+                 }
+                 
+                 DrawCenteredText(_context.SpriteBatch, slotInfo, centerX, startY + (i*slotHeight), c, 2);
+             }
+
+             // Footer Controls
+             string statusMsg = "";
+             Color statusColor = Color.Gray;
 
              if (_isHost)
              {
-                 DrawText("HOST CONTROLS:", new Vector2(50, 150), 2, Color.LightGray);
-                 DrawText("[2] 2 Players", new Vector2(50, 180), 1, _totalPlayersForGame == 2 ? Color.Green : Color.White);
-                 DrawText("[3] 3 Players", new Vector2(50, 200), 1, _totalPlayersForGame == 3 ? Color.Green : Color.White);
-                 DrawText("[4] 4 Players", new Vector2(50, 220), 1, _totalPlayersForGame == 4 ? Color.Green : Color.White);
-                 
-                 DrawText("Press ENTER to Start Game", new Vector2(50, 260), 2, Color.Cyan);
+                 bool allReady = true; 
+                 for (int i=0; i<_connectedPlayerCount; i++) if (!_playerReady.ContainsKey(i) || !_playerReady[i]) allReady = false;
+
+                 if (_connectedPlayerCount >= _totalPlayersForGame && allReady)
+                 {
+                     statusMsg = "PRESS [ENTER] TO START GAME";
+                     statusColor = Color.Green;
+                 }
+                 else
+                 {
+                     statusMsg = "WAITING FOR PLAYERS TO READY UP...";
+                 }
              }
              else
              {
-                 DrawText("Waiting for Host...", new Vector2(50, 150), 2, Color.LightGray);
-                 if (_localPlayerId == -1)
-                     DrawText("Connecting...", new Vector2(50, 180), 2, Color.Orange);
-                 else
-                     DrawText($"Assigned Player {_localPlayerId + 1}", new Vector2(50, 180), 2, Color.Green);
+                 statusMsg = "WAITING FOR HOST...";
              }
              
+             DrawCenteredText(_context.SpriteBatch, statusMsg, centerX, 500, statusColor, 2);
+
+             string readyMsg = _amIReady ? "PRESS [SPACE] TO UNREADY" : "PRESS [SPACE] TO READY UP";
+             DrawCenteredText(_context.SpriteBatch, readyMsg, centerX, 550, _amIReady ? Color.Cyan : Color.Magenta, 2);
+
              _context.SpriteBatch.End();
+        }
+
+        private void DrawCenteredText(SpriteBatch spriteBatch, string text, int x, int y, Color color, int scale)
+        {
+            var size = _context.Font.MeasureString(text, scale);
+            _context.Font.DrawText(spriteBatch, x - size.X / 2, y - size.Y / 2, text, color, scale);
         }
 
         private void DrawText(string text, Vector2 position, int scale, Color color)

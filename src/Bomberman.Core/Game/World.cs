@@ -15,6 +15,8 @@ namespace Bomberman.Core
         public ComponentPool<TileComponent> Tiles { get; }
         public ComponentPool<PowerupComponent> Powerups { get; }
 
+        public static readonly Dictionary<Type, int> ComponentIndexMap = new();
+
         public World()
         {
             Transforms = Register(new ComponentPool<TransformComponent>());
@@ -27,6 +29,10 @@ namespace Bomberman.Core
 
         private T Register<T>(T pool) where T : IComponentPool
         {
+            if (!ComponentIndexMap.ContainsKey(typeof(T)))
+            {
+                ComponentIndexMap[typeof(T)] = AllPools.Count; // Store index before adding
+            }
             AllPools.Add(pool);
             return pool;
         }

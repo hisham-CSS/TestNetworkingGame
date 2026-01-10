@@ -12,6 +12,7 @@ namespace Bomberman.App.States
         public SpriteBatch SpriteBatch { get; set; }
         public Texture2D PixelTexture { get; set; }
         public PixelFont Font { get; set; }
+        public bool EnableDebugLogs { get; set; } = true;
 
         public GameContext(Game1 game, SpriteBatch spriteBatch, Texture2D pixelTexture, PixelFont font)
         {

@@ -16,6 +16,7 @@ public class ComponentPool<T> : IComponentPool where T : struct
 {
     private List<T> _components = new();
     private List<Entity> _entities = new();
+    private Dictionary<Entity, int> _entityToIndex = new();
     
     public int Count => _components.Count;
     public Type ComponentType => typeof(T);
@@ -30,10 +31,27 @@ public class ComponentPool<T> : IComponentPool where T : struct
         var tuple = ((List<Entity>, List<T>))state;
         _entities = new List<Entity>(tuple.Item1);
         _components = new List<T>(tuple.Item2);
+        
+        // Rebuild Dictionary
+        _entityToIndex.Clear();
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            _entityToIndex[_entities[i]] = i;
+        }
     }
     
     public void Add(Entity entity, T component)
     {
+        if (_entityToIndex.ContainsKey(entity)) 
+        {
+             // Overwrite or error? Usually ECS implies one per entity.
+             // We'll update.
+             int index = _entityToIndex[entity];
+             _components[index] = component;
+             return;
+        }
+        
+        _entityToIndex[entity] = _entities.Count;
         _entities.Add(entity);
         _components.Add(component);
     }
@@ -42,12 +60,20 @@ public class ComponentPool<T> : IComponentPool where T : struct
     {
         _components.Clear();
         _entities.Clear();
+        _entityToIndex.Clear();
     }
 
+    // Used for bulk setting (e.g. initial setup or tests)
     public void SetAll(List<Entity> entities, List<T> components)
     {
         _entities = new List<Entity>(entities);
         _components = new List<T>(components);
+        
+        _entityToIndex.Clear();
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            _entityToIndex[_entities[i]] = i;
+        }
     }
     
     public T Get(int index) => _components[index];
@@ -60,25 +86,34 @@ public class ComponentPool<T> : IComponentPool where T : struct
     
     public void Remove(Entity entity)
     {
-        int index = _entities.IndexOf(entity);
-        if (index != -1)
+        if (_entityToIndex.TryGetValue(entity, out int index))
         {
-            if (index < _components.Count - 1)
+            // Swap with last
+            int lastIndex = _entities.Count - 1;
+            
+            if (index != lastIndex)
             {
-                _components[index] = _components[_components.Count - 1];
-                _entities[index] = _entities[_entities.Count - 1];
+                Entity lastEntity = _entities[lastIndex];
+                T lastComponent = _components[lastIndex];
+                
+                _entities[index] = lastEntity;
+                _components[index] = lastComponent;
+                
+                _entityToIndex[lastEntity] = index;
             }
-            _components.RemoveAt(_components.Count - 1);
-            _entities.RemoveAt(_entities.Count - 1);
+            
+            _entities.RemoveAt(lastIndex);
+            _components.RemoveAt(lastIndex);
+            _entityToIndex.Remove(entity);
         }
     }
 
-    public bool Has(Entity entity) => _entities.Contains(entity);
+    public bool Has(Entity entity) => _entityToIndex.ContainsKey(entity);
 
     public T Get(Entity entity)
     {
-        int index = _entities.IndexOf(entity);
-        if (index == -1) throw new KeyNotFoundException($"Entity {entity.Index} not in pool {typeof(T).Name}");
+        if (!_entityToIndex.TryGetValue(entity, out int index)) 
+            throw new KeyNotFoundException($"Entity {entity.Index} not in pool {typeof(T).Name}");
         return _components[index];
     }
 }

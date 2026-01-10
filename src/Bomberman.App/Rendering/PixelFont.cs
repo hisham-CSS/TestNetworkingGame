@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Bomberman.Core; // For IntVector2
 
 namespace Bomberman.App.Rendering
 {
@@ -45,6 +46,35 @@ namespace Bomberman.App.Rendering
                 }
                 currentX += charWidth + spacing;
             }
+        }
+
+        public IntVector2 MeasureString(string text, int scale)
+        {
+            int spacing = 1 * scale;
+            int charWidth = 5 * scale;
+            int charHeight = 5 * scale;
+            
+            if (string.IsNullOrEmpty(text)) return IntVector2.Zero;
+
+            int width = 0;
+            int height = charHeight;
+            int lineWidth = 0;
+
+            foreach(char c in text)
+            {
+                if (c == '\n')
+                {
+                    width = System.Math.Max(width, lineWidth);
+                    lineWidth = 0;
+                    height += charHeight + spacing * 2;
+                    continue;
+                }
+                lineWidth += charWidth + spacing;
+            }
+            width = System.Math.Max(width, lineWidth);
+            
+            // Remove trailing spacing from width if desired, but simple is fine.
+            return new IntVector2(width, height);
         }
 
         // 5x5 Bitmap Font (0 = empty, 1 = filled)

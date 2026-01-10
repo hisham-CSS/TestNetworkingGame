@@ -14,6 +14,7 @@ namespace Bomberman.Core.Rollback
         public int CurrentFrame => _currentFrame;
         public bool IsRecording { get; set; }
         public bool IsReplaying { get; set; }
+        public bool IsReplayFinished { get; private set; }
         public bool SimulateNetworked { get; set; }
 
         private InputRecorder _recorder;
@@ -155,16 +156,52 @@ namespace Bomberman.Core.Rollback
         }
 
         // Replaced Update -> Step
+        private HashSet<int> _disconnectedPlayers = new HashSet<int>();
+
+        public void SetPlayerDisconnected(int pid)
+        {
+            if (pid >= 0 && pid < _totalPlayers && !_disconnectedPlayers.Contains(pid))
+            {
+                _disconnectedPlayers.Add(pid);
+                Console.WriteLine($"[Rollback] Player {pid} Disconnected. Switching to Auto-Input.");
+            }
+        }
+
         public void Step(InputState localInput)
         {
             // ... (Replay logic - handle separately or keep basic check) ...
             if (IsReplaying)
             {
+                 if (IsReplayFinished) return;
+
                  InputState[] replayInputs = _recorder.GetFrame(_replayFrame);
-                 if (replayInputs == null || replayInputs.Length == 0) replayInputs = new InputState[1];
+                 if (replayInputs == null || replayInputs.Length == 0)
+                 {
+                     IsReplayFinished = true;
+                     Console.WriteLine("[Rollback] Replay Finished (End of Input Stream).");
+                     return;
+                 }
+                 
                  if (Simulation != null) Simulation.Update(replayInputs, (float)FixedTimeStep);
                  _replayFrame++;
                  return;
+            }
+
+            // Synthesize inputs for disconnected players to prevent stall
+            foreach (int pid in _disconnectedPlayers)
+            {
+                int lastFrame = -1;
+                if (_lastConfirmedRemoteFrame.ContainsKey(pid)) lastFrame = _lastConfirmedRemoteFrame[pid];
+                
+                // Fill up to current frame + Buffer?
+                // Just keep them 1 frame ahead of current to avoid throttling
+                int targetFrame = _currentFrame + 1;
+                
+                for (int f = lastFrame + 1; f <= targetFrame; f++)
+                {
+                    AddRemoteInput(pid, f, new InputState()); // Neutral Input
+                    _lastConfirmedRemoteFrame[pid] = f;
+                }
             }
 
             // Store Local Input
