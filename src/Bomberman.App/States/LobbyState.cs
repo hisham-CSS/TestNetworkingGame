@@ -6,6 +6,7 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Bomberman.Net;
 using Bomberman.Core.Game;
+using Bomberman.Core.Rollback;
 
 namespace Bomberman.App.States
 {
@@ -23,6 +24,12 @@ namespace Bomberman.App.States
         private float _joinRetryTimer = 0;
         private KeyboardState _prevKeyboard;
         
+        // Stable Slots: [0]=Host(P0), [1]=P1, [2]=P2, [3]=P3
+        // Host is always implicitly in slot 0 if hosting.
+        // We only really need to track clients for slots 1,2,3.
+        // But let's keep it simple: Size 4.
+        private IPEndPoint?[] _lobbySlots = new IPEndPoint?[4];
+        
         private Dictionary<int, bool> _playerReady = new Dictionary<int, bool>();
         private bool _amIReady = false;
 
@@ -37,6 +44,12 @@ namespace Bomberman.App.States
                 _localPlayerId = 0;
                 _networkSeed = new Random().Next();
                 _connectedPlayerCount = 1; // Host is 1
+                
+                // Reserve Slot 0 for Host
+                // (Host endpoint is null effectively, or Loopback? 
+                // Let's just leave it null and assume Slot 0 is Host)
+                // Actually, HandleDisconnected needs to know endpoints.
+                // But Host never disconnects from themselves.
             }
             else if (hostEndpoint != null && _context.Network != null)
             {
@@ -59,6 +72,7 @@ namespace Bomberman.App.States
                 _context.Network.OnDiscoveryRequestReceived += HandleDiscoveryRequest;
                 _context.Network.OnDisconnected += HandleDisconnected;
                 _context.Network.OnLobbyReadyReceived += HandleLobbyReady;
+                _context.Network.OnStateSyncReceived += HandleStateSync;
             }
 
             if (!_isHost)
@@ -82,6 +96,7 @@ namespace Bomberman.App.States
                  _context.Network.OnDiscoveryRequestReceived -= HandleDiscoveryRequest;
                  _context.Network.OnDisconnected -= HandleDisconnected;
                  _context.Network.OnLobbyReadyReceived -= HandleLobbyReady;
+                 _context.Network.OnStateSyncReceived -= HandleStateSync;
              }
         }
 
@@ -90,25 +105,52 @@ namespace Bomberman.App.States
              if (!_isHost)
              {
                  Console.WriteLine($"[Lobby] Host Disconnected: {reason}");
-                 ReturnToMenu();
+                 ReturnToMenu(reason);
              }
              else
              {
-                 Console.WriteLine($"[Lobby] Client {sender} Disconnected: {reason}");
-                 _connectedPlayerCount--;
-                 if (_connectedPlayerCount < 1) _connectedPlayerCount = 1;
-                 _context.Network?.BroadcastLobbyUpdate(_connectedPlayerCount, _totalPlayersForGame);
+                  Console.WriteLine($"[Lobby] Client {sender} Disconnected: {reason}");
+                  
+                  // Find and remove from slot
+                  for(int i=1; i<4; i++) // Slot 0 is Host, ignore
+                  {
+                      if (_lobbySlots[i] != null && _lobbySlots[i].Equals(sender))
+                      {
+                          _lobbySlots[i] = null;
+                          break;
+                      }
+                  }
+
+                  // Recalculate count
+                  int count = 1; // Host
+                  for(int i=1; i<4; i++) if (_lobbySlots[i] != null) count++;
+                  _connectedPlayerCount = count;
+
+                  int mask = 0;
+                  for(int i=0; i<4; i++) if (i==0 || _lobbySlots[i] != null) mask |= (1 << i);
+                  _context.Network?.BroadcastLobbyUpdate(_connectedPlayerCount, _totalPlayersForGame, mask);
              }
         }
         
-        private void ReturnToMenu()
+        private void ReturnToMenu(string reason = "")
         {
              if (_context.Network != null)
             {
                 _context.Network.Close();
                 _context.Network = null;
             }
-            _manager.ChangeState(new MenuState(_context, _manager));
+            
+            if (!string.IsNullOrEmpty(reason))
+            {
+                _manager.ChangeState(new PromptState(_context, _manager, reason, () => 
+                {
+                    _manager.ChangeState(new MenuState(_context, _manager));
+                }));
+            }
+            else
+            {
+                _manager.ChangeState(new MenuState(_context, _manager));
+            }
         }
 
         public void Update(GameTime gameTime)
@@ -157,7 +199,9 @@ namespace Bomberman.App.States
 
                 if (prevPlayers != _totalPlayersForGame)
                 {
-                    _context.Network?.BroadcastLobbyUpdate(_connectedPlayerCount, _totalPlayersForGame);
+                    int mask = 0;
+                    for(int i=0; i<4; i++) if (i==0 || _lobbySlots[i] != null) mask |= (1 << i);
+                    _context.Network?.BroadcastLobbyUpdate(_connectedPlayerCount, _totalPlayersForGame, mask);
                 }
 
                 if (kState.IsKeyDown(Keys.Enter))
@@ -207,11 +251,39 @@ namespace Bomberman.App.States
             }
         }
 
+        private void HandleStateSync(byte[] data)
+        {
+             if (_isHost) return; // Should not happen
+             
+             try
+             {
+                 Console.WriteLine($"[LobbyState] Received State Sync ({data.Length} bytes). Joining Game...");
+                 
+                 // 1. Create Game Session
+                 var session = new GameSession(_localPlayerId, _totalPlayersForGame, _networkSeed);
+                 
+                 // 2. Restore State (Snapshot + RNG)
+                 int frame = GameStateSnapshot.RestoreFromBytes(session.Simulation!.World, session.Simulation!.Rng, data);
+                 
+                 // 3. Sync Clock
+                 session.RollbackSystem.SyncToFrame(frame);
+                 
+                 // 4. Transition to PlayState
+                 // Use the new constructor for restored sessions
+                 _manager.ChangeState(new PlayState(_context, _manager, session, _localPlayerId));
+             }
+             catch (Exception e)
+             {
+                 Console.WriteLine($"[LobbyState] CRASH during State Sync: {e}");
+                 ReturnToMenu($"Join Failed: {e.Message}");
+             }
+        }
+
         private void StartGame(int seed, int totalPlayers)
         {
              // Transition to PlayState
-             // We need to pass the game session info
-             _manager.ChangeState(new PlayState(_context, _manager, _localPlayerId, totalPlayers, seed));
+             // We need to pass the lobby slots so PlayState knows who is who
+             _manager.ChangeState(new PlayState(_context, _manager, _localPlayerId, totalPlayers, seed, _lobbySlots));
         }
 
         // --- Network Handlers ---
@@ -220,26 +292,64 @@ namespace Bomberman.App.States
         {
             if (!_isHost || _context.Network == null) return;
 
-             bool alreadyConnected = false;
-             foreach(var c in _context.Network.ConnectedClients)
+             int existingSlot = -1;
+             
+             // Check if already in a slot
+             for(int i=1; i<4; i++)
              {
-                 if (c.Equals(sender)) 
+                 if (_lobbySlots[i] != null && _lobbySlots[i].Equals(sender))
                  {
-                     alreadyConnected = true; 
+                     existingSlot = i;
                      break;
                  }
              }
 
-             if (!alreadyConnected)
+             if (existingSlot != -1)
              {
-                if (_connectedPlayerCount < _totalPlayersForGame)
-                {
+                 // Client is already connected (retry)
+                 Console.WriteLine($"[LobbyState] Resending Welcome to existing client in Slot {existingSlot} ({sender})");
+                 
+                 _context.Network.SendWelcome(sender, existingSlot, _networkSeed, _totalPlayersForGame);
+                 _context.Network.SendLobbyReadyTo(sender, 0, _amIReady); 
+                 
+                 // Re-broadcast update just in case
+                 int mask = 0;
+                 for(int i=0; i<4; i++) if (i==0 || _lobbySlots[i] != null) mask |= (1 << i);
+                 _context.Network.BroadcastLobbyUpdate(_connectedPlayerCount, _totalPlayersForGame, mask); 
+                 return;
+             }
+
+             // New Connection
+             // Find Empty Slot
+             int freeSlot = -1;
+             // Limit search to _totalPlayersForGame? 
+             // Yes, we shouldn't fill slots > totalPlayers.
+             for(int i=1; i<_totalPlayersForGame && i < 4; i++)
+             {
+                 if (_lobbySlots[i] == null)
+                 {
+                     freeSlot = i;
+                     break;
+                 }
+             }
+
+             if (freeSlot != -1)
+             {
+                    _lobbySlots[freeSlot] = sender;
                     _context.Network.AddClient(sender);
-                    int newId = _connectedPlayerCount;
-                    _connectedPlayerCount++;
+                    
+                    // Recalculate count
+                    int count = 1; 
+                    for(int i=1; i<4; i++) if (_lobbySlots[i] != null) count++;
+                    _connectedPlayerCount = count;
+
+                    int newId = freeSlot;
                     
                     _context.Network.SendWelcome(sender, newId, _networkSeed, _totalPlayersForGame);
-                    _context.Network.BroadcastLobbyUpdate(_connectedPlayerCount, _totalPlayersForGame);
+                    
+                    int mask = 0;
+                    for(int i=0; i<4; i++) if (i==0 || _lobbySlots[i] != null) mask |= (1 << i);
+                    _context.Network.BroadcastLobbyUpdate(_connectedPlayerCount, _totalPlayersForGame, mask);
 
                     // Sync existing ready states to new client
                     foreach(var kvp in _playerReady)
@@ -250,10 +360,15 @@ namespace Bomberman.App.States
                         }
                     }
 
-                    Console.WriteLine($"Client {newId} Joined from {sender}");
+                    Console.WriteLine($"Client Assigned to Slot {newId} ({sender})");
                 }
-             }
-        }
+                else
+                {
+                    Console.WriteLine($"[LobbyState] Rejecting {sender}. No Slots Available or Lobby Full.");
+                    _context.Network.SendDisconnect(sender, "Lobby is Full");
+                }
+            }
+        
 
         private void HandleWelcome(int assignedId, int seed, int totalPlayers)
         {
@@ -267,11 +382,27 @@ namespace Bomberman.App.States
             }
         }
 
-        private void HandleLobbyUpdate(int connectedCount, int totalPlayers)
+        private void HandleLobbyUpdate(int connectedCount, int totalPlayers, int slotMask)
         {
             if (_isHost) return;
             _connectedPlayerCount = connectedCount;
             _totalPlayersForGame = totalPlayers;
+            
+            // Sync slots from mask
+            for(int i=1; i<4; i++)
+            {
+                bool occupied = (slotMask & (1 << i)) != 0;
+                if (occupied)
+                {
+                    // If null, set dummy (unless it's us? No, even us, we don't track our own IP in _lobbySlots on client)
+                    if (_lobbySlots[i] == null)
+                        _lobbySlots[i] = new IPEndPoint(IPAddress.None, 0); 
+                }
+                else
+                {
+                    _lobbySlots[i] = null;
+                }
+            }
         }
 
         private void HandleStartGame(int seed, int totalPlayers)
@@ -299,26 +430,37 @@ namespace Bomberman.App.States
 
              int centerX = _context.Game.GraphicsDevice.Viewport.Width / 2;
              
-             DrawCenteredText(_context.SpriteBatch, "LOBBY", centerX, 50, Color.Red, 8);
+             // If client and waiting for welcome (local ID -1), show connecting
+             if (!_isHost && _localPlayerId == -1)
+             {
+                 DrawCenteredText(_context.SpriteBatch, "CONNECTING...", centerX, 300, Color.White, 4);
+                 _context.SpriteBatch.End();
+                 return;
+             }
+
+             DrawCenteredText(_context.SpriteBatch, "LOBBY", centerX, 30, Color.Red, 8);
              
-             DrawCenteredText(_context.SpriteBatch, $"PLAYERS: {_connectedPlayerCount} / {_totalPlayersForGame}", centerX, 150, Color.White, 3);
+             DrawCenteredText(_context.SpriteBatch, $"PLAYERS: {_connectedPlayerCount} / {_totalPlayersForGame}", centerX, 70, Color.White, 3);
              
              // Instructions
              if (_isHost)
              {
-                 DrawCenteredText(_context.SpriteBatch, "ADJUST PLAYER COUNT:  [2]   [3]   [4]", centerX, 200, Color.Yellow, 2);
+                 DrawCenteredText(_context.SpriteBatch, "ADJUST PLAYER COUNT:  [2]   [3]   [4]", centerX, 100, Color.Yellow, 2);
              }
              
              // Slots
-             int startY = 300;
-             int slotHeight = 35;
+             int startY = 200;
+             int slotHeight = 15;
              
              for(int i=0; i<_totalPlayersForGame; i++)
              {
                  string slotInfo = $"SLOT {i+1}:   ";
                  Color c = Color.DarkGray;
                  
-                 if (i < _connectedPlayerCount)
+                 // Check occupancy: Host (0) is always occupied if we are here. Others check slots.
+                 bool occupied = (i == 0) || (_lobbySlots[i] != null);
+                 
+                 if (occupied)
                  {
                      bool ready = _playerReady.ContainsKey(i) && _playerReady[i];
                      slotInfo += ready ? "READY" : "NOT READY";
@@ -338,11 +480,11 @@ namespace Bomberman.App.States
              string statusMsg = "";
              Color statusColor = Color.Gray;
 
-             if (_isHost)
-             {
-                 bool allReady = true; 
-                 for (int i=0; i<_connectedPlayerCount; i++) if (!_playerReady.ContainsKey(i) || !_playerReady[i]) allReady = false;
+            bool allReady = true;
+            for (int i = 0; i < _connectedPlayerCount; i++) if (!_playerReady.ContainsKey(i) || !_playerReady[i]) allReady = false;
 
+            if (_isHost)
+            {
                  if (_connectedPlayerCount >= _totalPlayersForGame && allReady)
                  {
                      statusMsg = "PRESS [ENTER] TO START GAME";
@@ -355,13 +497,16 @@ namespace Bomberman.App.States
              }
              else
              {
-                 statusMsg = "WAITING FOR HOST...";
-             }
+                if (_connectedPlayerCount >= _totalPlayersForGame && allReady)
+                    statusMsg = "ALL PLAYERS READY. WAITING FOR HOST TO START...";
+                else
+                    statusMsg = "WAITING FOR PLAYERS TO READY UP...";
+            }
              
-             DrawCenteredText(_context.SpriteBatch, statusMsg, centerX, 500, statusColor, 2);
+             DrawCenteredText(_context.SpriteBatch, statusMsg, centerX, 350, statusColor, 2);
 
              string readyMsg = _amIReady ? "PRESS [SPACE] TO UNREADY" : "PRESS [SPACE] TO READY UP";
-             DrawCenteredText(_context.SpriteBatch, readyMsg, centerX, 550, _amIReady ? Color.Cyan : Color.Magenta, 2);
+             DrawCenteredText(_context.SpriteBatch, readyMsg, centerX, 400, _amIReady ? Color.Cyan : Color.Magenta, 2);
 
              _context.SpriteBatch.End();
         }

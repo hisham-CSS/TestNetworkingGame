@@ -16,6 +16,12 @@ namespace Bomberman.Core.Game
             _state = (uint)seed;
         }
 
+        public uint State
+        {
+            get => _state;
+            set => _state = value;
+        }
+
         public int Next()
         {
             // Xorshift32 algorithm

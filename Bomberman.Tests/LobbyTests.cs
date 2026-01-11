@@ -125,6 +125,10 @@ namespace Bomberman.Tests
             // Connect
             client.Connect("127.0.0.1", hostPort);
             client.SendJoinRequest();
+
+            // Host must accept the client for Disconnect to be valid
+            host.OnJoinRequestRaw += (sender) => host.AddClient(sender);
+            
             for(int i=0; i<50; i++) { host.Update(); client.Update(); Thread.Sleep(10); }
 
             // Act - Client Closes Gracefully

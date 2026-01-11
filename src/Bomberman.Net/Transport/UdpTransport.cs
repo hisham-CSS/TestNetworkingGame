@@ -78,6 +78,11 @@ namespace Bomberman.Net
             {
                 Console.WriteLine($"Socket Error: {e.Message}");
             }
+            catch (ObjectDisposedException)
+            {
+                // Socket was closed during event handling (e.g. Disconnect -> Close)
+                return;
+            }
         }
 
         public void Close()

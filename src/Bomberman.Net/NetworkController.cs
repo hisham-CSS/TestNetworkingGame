@@ -14,7 +14,7 @@ namespace Bomberman.Net
 
         // Events to decouple logic from Program.cs
         public event Action<int, int, int>? OnWelcomeReceived; // assignedId, seed, totalPlayers
-        public event Action<int, int>? OnLobbyUpdateReceived; // connectedCount, totalPlayers
+        public event Action<int, int, int>? OnLobbyUpdateReceived; // connectedCount, totalPlayers, slotMask
         public event Action<int, int>? OnStartGameReceived; // seed, totalPlayers
         public event Action<System.Net.IPEndPoint, string, int, int>? OnDiscoveryRequestReceived; // sender, header, players, max
         public event Action<System.Net.IPEndPoint, string, int, int>? OnDiscoveryResponseReceived; 
@@ -22,8 +22,13 @@ namespace Bomberman.Net
         public event Action<int, int, InputState[], IntVector2, int>? OnInputReceived; 
         public event Action<IPEndPoint, string>? OnDisconnected; // sender, reason
         public event Action<int, bool>? OnLobbyReadyReceived; // pid, isReady
+        public event Action<byte[]>? OnStateSyncReceived;
 
         private Dictionary<IPEndPoint, DateTime> _lastDataReceived = new Dictionary<IPEndPoint, DateTime>();
+        
+        // Chunk Reassembly: [Endpoint] -> (Chunks[Index->Data], TotalChunks)
+        private Dictionary<IPEndPoint, (Dictionary<int, byte[]> Chunks, int TotalChunks)> _reassemblyBuffers = new Dictionary<IPEndPoint, (Dictionary<int, byte[]>, int)>();
+        
         private DateTime _lastHeartbeatSent = DateTime.MinValue;
         private bool _isClient = false;
 
@@ -60,14 +65,16 @@ namespace Bomberman.Net
             }
         }
 
-        public void RemoveClient(IPEndPoint client)
+        public bool RemoveClient(IPEndPoint client)
         {
             if (_connectedClients.Contains(client))
             {
                 _connectedClients.Remove(client);
                 _lastDataReceived.Remove(client);
                 Console.WriteLine($"[Network] Client Removed: {client}");
+                return true;
             }
+            return false;
         }
 
         public void Update()
@@ -143,9 +150,9 @@ namespace Bomberman.Net
             _transport.SendTo(NetworkProtocol.CreateWelcome(assignedId, seed, totalPlayers), target);
         }
 
-        public void BroadcastLobbyUpdate(int connectedCount, int totalPlayers)
+        public void BroadcastLobbyUpdate(int connectedCount, int totalPlayers, int slotMask)
         {
-            Broadcast(NetworkProtocol.CreateLobbyUpdate(connectedCount, totalPlayers));
+            Broadcast(NetworkProtocol.CreateLobbyUpdate(connectedCount, totalPlayers, slotMask));
         }
 
         public void BroadcastStartGame(int seed, int totalPlayers)
@@ -175,6 +182,35 @@ namespace Bomberman.Net
 
         public void RelayPacket(IPEndPoint target, byte[] packet)
         {
+            _transport.SendTo(packet, target);
+        }
+
+        public void SendStateSync(IPEndPoint target, byte[] snapshot)
+        {
+            // Chunking
+            const int CHUNK_SIZE = 1000; // Safe UDP payload size
+            int totalChunks = (int)Math.Ceiling(snapshot.Length / (double)CHUNK_SIZE);
+            
+            for (int i = 0; i < totalChunks; i++)
+            {
+                int offset = i * CHUNK_SIZE;
+                int len = Math.Min(CHUNK_SIZE, snapshot.Length - offset);
+                
+                byte[] chunkData = new byte[len];
+                Array.Copy(snapshot, offset, chunkData, 0, len);
+                
+                byte[] packet = NetworkProtocol.CreateStateChunk(i, totalChunks, chunkData);
+                _transport.SendTo(packet, target);
+                
+                // Small delay to prevent UDP buffer overflow on sender/receiver?
+                // System.Threading.Thread.Sleep(1); 
+            }
+            Console.WriteLine($"[Network] Sent StateSync to {target} in {totalChunks} chunks.");
+        }
+
+        public void SendDisconnect(IPEndPoint target, string reason)
+        {
+            byte[] packet = NetworkProtocol.CreateDisconnect(reason);
             _transport.SendTo(packet, target);
         }
 
@@ -229,8 +265,19 @@ namespace Bomberman.Net
                 case PacketType.Disconnect:
                     string reason = NetworkProtocol.ReadDisconnect(data);
                     Console.WriteLine($"[Network] Received Disconnect from {sender}: {reason}");
-                    RemoveClient(sender);
-                    OnDisconnected?.Invoke(sender, reason);
+                    
+                    // If we are a client, we must respect the disconnect from the server even if not physically in the list yet
+                    // (e.g. rejection during connection phase)
+                    bool wasRemoved = RemoveClient(sender);
+                    
+                    if (wasRemoved || _isClient)
+                    {
+                        OnDisconnected?.Invoke(sender, reason);
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[Network] Ignoring Disconnect from unknown client {sender}");
+                    }
                     break;
 
                 case PacketType.DiscoveryRequest:
@@ -252,6 +299,58 @@ namespace Bomberman.Net
                     }
                     OnJoinRequestRaw?.Invoke(sender);
                     break;
+                    
+                case PacketType.StateChunk:
+                    var (chunkIndex, totalChunks, chunkData) = NetworkProtocol.ReadStateChunk(data);
+                    
+                    if (!_reassemblyBuffers.ContainsKey(sender))
+                    {
+                        _reassemblyBuffers[sender] = (new Dictionary<int, byte[]>(), totalChunks);
+                    }
+
+                    var buffer = _reassemblyBuffers[sender];
+                    // Validation: If TotalChunks changed, maybe reset?
+                    if (buffer.TotalChunks != totalChunks)
+                    {
+                        // Stale or new sync started? Reset.
+                         _reassemblyBuffers[sender] = (new Dictionary<int, byte[]>(), totalChunks);
+                         buffer = _reassemblyBuffers[sender];
+                    }
+
+                    if (!buffer.Chunks.ContainsKey(chunkIndex))
+                    {
+                        buffer.Chunks[chunkIndex] = chunkData;
+                    }
+
+                    // Check Completion
+                    if (buffer.Chunks.Count == totalChunks)
+                    {
+                        Console.WriteLine($"[Network] StateSync Reassembled ({totalChunks} chunks) from {sender}");
+                        
+                        // Merge
+                        // We need to know total size. Iterate to sum length.
+                        int totalBytes = 0;
+                        for(int i=0; i<totalChunks; i++) totalBytes += buffer.Chunks[i].Length;
+                        
+                        byte[] fullSnapshot = new byte[totalBytes];
+                        int offset = 0;
+                        for(int i=0; i<totalChunks; i++)
+                        {
+                            byte[] c = buffer.Chunks[i];
+                            Array.Copy(c, 0, fullSnapshot, offset, c.Length);
+                            offset += c.Length;
+                        }
+                        
+                        _reassemblyBuffers.Remove(sender);
+                        OnStateSyncReceived?.Invoke(fullSnapshot);
+                    }
+                    break;
+                    
+                case PacketType.StateSync:
+                    // Legacy or single-packet fallback
+                    byte[] snap = NetworkProtocol.ReadStateSync(data);
+                    OnStateSyncReceived?.Invoke(snap);
+                    break;
 
                 case PacketType.Welcome:
                     var (assignedId, seed, total) = NetworkProtocol.ReadWelcome(data);
@@ -260,8 +359,8 @@ namespace Bomberman.Net
                     break;
 
                 case PacketType.LobbyUpdate:
-                    var (connected, totalP) = NetworkProtocol.ReadLobbyUpdate(data);
-                    OnLobbyUpdateReceived?.Invoke(connected, totalP);
+                    var (connected, totalP, mask) = NetworkProtocol.ReadLobbyUpdate(data);
+                    OnLobbyUpdateReceived?.Invoke(connected, totalP, mask);
                     break;
 
                 case PacketType.StartGame:
@@ -278,6 +377,8 @@ namespace Bomberman.Net
                     var (readyPid, isReady) = NetworkProtocol.ReadLobbyReady(data);
                     OnLobbyReadyReceived?.Invoke(readyPid, isReady);
                     break;
+
+
             }
         }
 
@@ -298,5 +399,7 @@ namespace Bomberman.Net
         {
             _transport.SendTo(NetworkProtocol.CreateLobbyReady(pid, isReady), target);
         }
+
+
     }
 }

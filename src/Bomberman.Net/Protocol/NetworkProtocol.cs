@@ -16,7 +16,9 @@ namespace Bomberman.Net
         DiscoveryResponse = 6,
         Heartbeat = 7,
         Disconnect = 8,
-        LobbyReady = 9
+        LobbyReady = 9,
+        StateSync = 10,
+        StateChunk = 11
     }
 
     public static class NetworkProtocol
@@ -72,7 +74,7 @@ namespace Bomberman.Net
             }
         }
 
-        public static byte[] CreateLobbyUpdate(int connectedCount, int totalPlayers)
+        public static byte[] CreateLobbyUpdate(int connectedCount, int totalPlayers, int slotMask)
         {
             using (var ms = new MemoryStream())
             using (var writer = new BinaryWriter(ms))
@@ -80,11 +82,12 @@ namespace Bomberman.Net
                 writer.Write((byte)PacketType.LobbyUpdate);
                 writer.Write(connectedCount);
                 writer.Write(totalPlayers);
+                writer.Write(slotMask);
                 return ms.ToArray();
             }
         }
 
-        public static (int connectedCount, int totalPlayers) ReadLobbyUpdate(byte[] data)
+        public static (int connectedCount, int totalPlayers, int slotMask) ReadLobbyUpdate(byte[] data)
         {
              using (var ms = new MemoryStream(data))
             using (var reader = new BinaryReader(ms))
@@ -92,7 +95,13 @@ namespace Bomberman.Net
                 reader.ReadByte(); 
                 int c = reader.ReadInt32();
                 int t = reader.ReadInt32();
-                return (c, t);
+                // Handle legacy gracefully or force upgrade?
+                // Given we control both, force read.
+                int mask = 0;
+                if (ms.Position < ms.Length)
+                    mask = reader.ReadInt32();
+                
+                return (c, t, mask);
             }
         }
 
@@ -275,5 +284,57 @@ namespace Bomberman.Net
                 return (pid, ready);
             }
         }
+
+        public static byte[] CreateStateSync(byte[] snapshotData)
+        {
+            using (var ms = new MemoryStream())
+            using (var writer = new BinaryWriter(ms))
+            {
+                writer.Write((byte)PacketType.StateSync);
+                writer.Write(snapshotData.Length);
+                writer.Write(snapshotData);
+                return ms.ToArray();
+            }
+        }
+
+        public static byte[] ReadStateSync(byte[] data)
+        {
+            using (var ms = new MemoryStream(data))
+            using (var reader = new BinaryReader(ms))
+            {
+                reader.ReadByte(); // Type
+                int length = reader.ReadInt32();
+                return reader.ReadBytes(length);
+            }
+        }
+
+        public static byte[] CreateStateChunk(int index, int totalChunks, byte[] chunkData)
+        {
+            using (var ms = new MemoryStream())
+            using (var writer = new BinaryWriter(ms))
+            {
+                writer.Write((byte)PacketType.StateChunk);
+                writer.Write(index);
+                writer.Write(totalChunks);
+                writer.Write(chunkData.Length);
+                writer.Write(chunkData);
+                return ms.ToArray();
+            }
+        }
+
+        public static (int index, int totalChunks, byte[] data) ReadStateChunk(byte[] data)
+        {
+            using (var ms = new MemoryStream(data))
+            using (var reader = new BinaryReader(ms))
+            {
+                reader.ReadByte(); // Type
+                int index = reader.ReadInt32();
+                int total = reader.ReadInt32();
+                int len = reader.ReadInt32();
+                byte[] chunkData = reader.ReadBytes(len);
+                return (index, total, chunkData);
+            }
+        }
+
     }
 }

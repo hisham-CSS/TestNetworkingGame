@@ -85,6 +85,16 @@ namespace Bomberman.Core.Rollback
             _recorder.Reset();
         }
 
+        public void SyncToFrame(int frame)
+        {
+            _currentFrame = frame;
+            // Clear future snapshots if any? 
+            // When syncing, we assume we are replacing everything.
+            _snapshotBuffer.Clear();
+            // Store current as base snapshot?
+             _snapshotBuffer[frame] = new GameStateSnapshot(frame, Simulation.World);
+        }
+
         private int _currentFrame = 0;
 
         public void AddRemoteInput(int pid, int frame, InputState input)

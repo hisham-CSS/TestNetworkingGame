@@ -26,9 +26,9 @@ namespace Bomberman.App.States
         private KeyboardState _previousKeyboardState;
 
         private bool _isReplayView = false;
-        private System.Collections.Generic.List<IPEndPoint> _clients = new System.Collections.Generic.List<IPEndPoint>();
+        private IPEndPoint?[] _clientSlots;
 
-        public PlayState(GameContext context, GameStateManager manager, int localPlayerId, int playerCount, int seed)
+        public PlayState(GameContext context, GameStateManager manager, int localPlayerId, int playerCount, int seed, IPEndPoint?[] lobbySlots = null)
         {
             _context = context;
             _manager = manager;
@@ -36,6 +36,35 @@ namespace Bomberman.App.States
             _isHost = _localPlayerId == 0;
 
             _gameSession = new GameSession(_localPlayerId, playerCount, seed);
+            
+            // Initialize Slots from Lobby
+            if (_isHost)
+            {
+                if (lobbySlots != null)
+                {
+                    // Copy slots directly. Note: lobbySlots has size 4 usually.
+                    // _clientSlots expects size (playerCount - 1).
+                    // Mapping: P1 -> Index 0.
+                    _clientSlots = new IPEndPoint?[Math.Max(playerCount - 1, 0)];
+                    for(int i=0; i<_clientSlots.Length; i++)
+                    {
+                        // Player i+1
+                        int pid = i + 1;
+                        if (pid < lobbySlots.Length)
+                        {
+                            _clientSlots[i] = lobbySlots[pid];
+                        }
+                    }
+                }
+                else
+                {
+                    _clientSlots = new IPEndPoint?[Math.Max(playerCount - 1, 0)];
+                }
+            }
+            else
+            {
+                _clientSlots = new IPEndPoint?[0];
+            }
             
             // Enable Validated Simulation if networked
             if (_context.Network != null)
@@ -53,6 +82,33 @@ namespace Bomberman.App.States
             _localPlayerId = 0; // Default view for replay
             _isHost = false; 
             _isReplayView = true;
+            _clientSlots = new IPEndPoint?[0];
+        }
+
+        public PlayState(GameContext context, GameStateManager manager, GameSession restoredSession, int localId)
+        {
+            _context = context;
+            _manager = manager;
+            _gameSession = restoredSession;
+            _localPlayerId = localId; 
+            _isHost = (localId == 0);
+            _isReplayView = false;
+            
+            if (_isHost)
+            {
+                _clientSlots = new IPEndPoint?[_gameSession.TotalPlayers - 1];
+            }
+            else
+            {
+                _clientSlots = new IPEndPoint?[0];
+            }
+            
+            // Enable Validated Simulation if networked
+            if (_context.Network != null)
+            {
+                _gameSession.RollbackSystem.SimulateNetworked = true;
+                SetupLogging();
+            }
         }
 
         private void SetupLogging()
@@ -81,12 +137,13 @@ namespace Bomberman.App.States
                 _context.Network.OnInputReceived += HandleInputReceived;
                 _context.Network.OnDiscoveryRequestReceived += HandleDiscoveryRequest;
                 _context.Network.OnDisconnected += HandleDisconnected;
+                _context.Network.OnJoinRequestRaw += HandleJoinRequest;
                 
                 // Host: Snapshot clients to map to PlayerIDs
                 if (_isHost)
                 {
-                    _clients.Clear();
-                    _clients.AddRange(_context.Network.ConnectedClients);
+                   // Slots are already set in constructor from LobbyState.
+                   // We trust them.
                 }
             }
             _previousKeyboardState = Keyboard.GetState();
@@ -100,6 +157,7 @@ namespace Bomberman.App.States
                  _context.Network.OnInputReceived -= HandleInputReceived;
                  _context.Network.OnDiscoveryRequestReceived -= HandleDiscoveryRequest;
                  _context.Network.OnDisconnected -= HandleDisconnected;
+                 _context.Network.OnJoinRequestRaw -= HandleJoinRequest;
              }
         }
         
@@ -107,12 +165,20 @@ namespace Bomberman.App.States
         {
             if (_isHost)
             {
-                int index = _clients.IndexOf(sender);
-                if (index != -1)
+                // Find slot
+                for(int i=0; i<_clientSlots.Length; i++)
                 {
-                    int pid = index + 1; // 0 is Host
-                    Console.WriteLine($"[PlayState] Player {pid} Disconnected: {reason}");
-                    _gameSession.DisconnectPlayer(pid);
+                    if (_clientSlots[i] != null && _clientSlots[i].Equals(sender))
+                    {
+                        _clientSlots[i] = null;
+                        int pid = i + 1; // 0 is Host, but client slots start at 0? 
+                        // Wait, Host is 0. 
+                        // Client slots: Slot 0 -> ID 1. Slot 1 -> ID 2.
+                        Console.WriteLine($"[PlayState] Player {pid} Disconnected: {reason}");
+                        _gameSession.DisconnectPlayer(pid);
+                        _context.Network.RemoveClient(sender);
+                        break;
+                    }
                 }
             }
             else
@@ -258,6 +324,59 @@ namespace Bomberman.App.States
                 // PlayState constructor knows 'playerCount'.
                 _context.Network.SendDiscoveryResponse(sender, "Local Game", _context.Network.ConnectedClients.Count() + 1, _gameSession.TotalPlayers);
             }
+        }
+
+        private void HandleJoinRequest(IPEndPoint sender)
+        {
+            if (!_isHost || _context.Network == null) return;
+            
+            Console.WriteLine($"[PlayState] Join Request from {sender}");
+
+            int assignedId = -1;
+            
+            // Check if already in a slot
+            for(int i=0; i<_clientSlots.Length; i++)
+            {
+                if (_clientSlots[i] != null && _clientSlots[i].Equals(sender))
+                {
+                    assignedId = i + 1;
+                    break;
+                }
+            }
+
+            if (assignedId == -1)
+            {
+                // Find free slot
+                for(int i=0; i<_clientSlots.Length; i++)
+                {
+                    if (_clientSlots[i] == null)
+                    {
+                        _clientSlots[i] = sender;
+                        assignedId = i + 1;
+                        _context.Network.AddClient(sender);
+                        break;
+                    }
+                }
+
+                if (assignedId == -1)
+                {
+                     Console.WriteLine($"[PlayState] Server Full. Rejecting {sender}");
+                     _context.Network.SendDisconnect(sender, "Server is Full");
+                     return;
+                }
+            }
+
+            // Sync State
+            // 1. Send Welcome (so they get their ID)
+            // Note: We use the CURRENT seed, but they will overwrite World anyway.
+            _context.Network.SendWelcome(sender, assignedId, (int)_gameSession.Simulation!.Rng.State, _gameSession.TotalPlayers);
+
+            // 2. Serialize World
+            byte[] snapshot = GameStateSnapshot.SerializeWorld(_gameSession.CurrentFrame, _gameSession.Simulation!.World, _gameSession.Simulation.Rng.State);
+            
+            // 3. Send State Sync
+            Console.WriteLine($"[PlayState] Sending StateSync ({snapshot.Length} bytes) to P{assignedId} ({sender})");
+            _context.Network.SendStateSync(sender, snapshot);
         }
 
         // --- Drawing ---

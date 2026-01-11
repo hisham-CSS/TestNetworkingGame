@@ -53,8 +53,11 @@ namespace Bomberman.App.GameHost
             // I'll create a lightweight `PixelFont` wrapper in `GameContext` or just pass the drawing logic?
             // Better to have a class.
             
+            // PixelFont
+            // _font = new PixelFont(pixelTexture); // Assume logic exists or handled by context
+            
             _stateManager = new GameStateManager();
-            _context = new GameContext(this, _spriteBatch, pixelTexture, font);
+            _context = new GameContext(this, _spriteBatch, pixelTexture, font, new Bomberman.App.Input.MonogameInputService());
             
             _stateManager.ChangeState(new MenuState(_context, _stateManager));
         }

@@ -14,10 +14,13 @@ namespace Bomberman.App.States
         private GameStateManager _manager;
         private KeyboardState _prevKeyboard;
         
-        public MenuState(GameContext context, GameStateManager manager)
+        private string? _message;
+
+        public MenuState(GameContext context, GameStateManager manager, string? message = null)
         {
             _context = context;
             _manager = manager;
+            _message = message;
         }
 
         public void Enter()
@@ -93,6 +96,11 @@ namespace Bomberman.App.States
             DrawCenteredText(_context.SpriteBatch, "Press [J] to JOIN Game (Browser)", centerX, startY + gap, Color.Green, 2);
             DrawCenteredText(_context.SpriteBatch, "Press [R] for REPLAYS", centerX, startY + gap * 2, Color.Cyan, 2);
             DrawCenteredText(_context.SpriteBatch, "Press [ESC] to Quit", centerX, startY + gap * 3, Color.Red, 2);
+            
+            if (!string.IsNullOrEmpty(_message))
+            {
+                DrawCenteredText(_context.SpriteBatch, _message, centerX, 500, Color.OrangeRed, 2);
+            }
 
             _context.SpriteBatch.End();
         }

@@ -9,6 +9,7 @@ namespace Bomberman.Core
     {
         public World World { get; private set; }
         public Action<string>? Log; // Debug Logger
+        public DeterministicRandom Rng { get; private set; }
 
         private const int MapWidth = 15;
         private const int MapHeight = 13;
@@ -23,14 +24,15 @@ namespace Bomberman.Core
         public Simulation(int seed, int playerCount)
         {
             World = new World();
-            GenerateMap(seed);
+            Rng = new DeterministicRandom(seed);
+            GenerateMap();
             SpawnPlayers(playerCount);
         }
 
-        private void GenerateMap(int seed)
+        private void GenerateMap()
         {
-            // Use DeterministicRandom
-            var random = new DeterministicRandom(seed);
+            // Use Rng property
+            var random = Rng;
 
             for (int y = 0; y < MapHeight; y++)
             {

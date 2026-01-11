@@ -10,8 +10,8 @@ namespace Bomberman.App.States
 {
     public class ServerInfo
     {
-        public IPEndPoint Endpoint;
-        public string Name;
+        public required IPEndPoint Endpoint;
+        public required string Name;
         public int Players;
         public int MaxPlayers;
         public DateTime LastSeen;
@@ -66,7 +66,7 @@ namespace Bomberman.App.States
         private void BroadcastDiscovery()
         {
             Console.WriteLine("[ServerBrowser] Broadcasting Discovery Request...");
-            _context.Network.BroadcastDiscoveryRequest(StartPort, EndPort);
+            _context.Network?.BroadcastDiscoveryRequest(StartPort, EndPort);
             _lastBroadcastTime = DateTime.Now;
         }
 
@@ -119,7 +119,7 @@ namespace Bomberman.App.States
                 // For simplicity, let's keep it alive or Dispose if Menu creates a new one.
                 // MenuState.Enter doesn't create one. It waits for Host/Join action.
                 // We'll dispose it here to be clean, as Host mode needs specific port binding.
-                _context.Network.Close();
+                _context.Network?.Close();
                 _context.Network = null;
                 
                 _manager.ChangeState(new MenuState(_context, _manager));

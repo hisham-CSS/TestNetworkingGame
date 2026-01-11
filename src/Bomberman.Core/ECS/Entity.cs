@@ -4,7 +4,7 @@ using System;
 
 public struct Entity : IEquatable<Entity>
 {
-    public uint Index { get; }
+    public uint Index { get; set; }
     
     public Entity(uint index)
     {
