@@ -30,7 +30,7 @@ namespace Bomberman.Core.Rollback
         private Dictionary<int, int> _lastConfirmedRemoteFrame = new Dictionary<int, int>();
         
         private const int MaxSnapshotFrames = 60 * 5; // 5 Seconds
-        private const int MaxPredictionFrames = 15; // 250ms
+        private const int MaxPredictionFrames = 60 * 60 * 10; // 10 Hours (Effectively unlimited)
         private const double FixedTimeStep = 1.0 / 60.0;
         
         private int _totalPlayers;
@@ -328,9 +328,52 @@ namespace Bomberman.Core.Rollback
             return new InputState(); 
         }
 
-        public void HandleRemoteInput(int pid, int startFrame, InputState[] inputs, IntVector2 remotePos, int remoteHash)
+        public enum InputResult
+        {
+            Success,
+            Misprediction,
+            TooOld
+        }
+
+        public InputResult HandleRemoteInput(int pid, int startFrame, InputState[] inputs, IntVector2 remotePos, int remoteHash)
         {
              int earliestMisprediction = -1;
+             
+             // Check if inputs are too old to rollback to
+             // We need at least one snapshot BEFORE the startFrame to rollback properly?
+             // Actually, we need snapshot at startFrame-1.
+             // If the oldest history we have is Frame 100, and input is for Frame 50 -> Too Old.
+             
+             int oldestFrameWeHave = -1;
+             foreach(var k in _snapshotBuffer.Keys) 
+                 if (oldestFrameWeHave == -1 || k < oldestFrameWeHave) oldestFrameWeHave = k;
+
+             // Allow some margin? 
+             // If inputs start at StartFrame.
+             if (inputs.Length > 0)
+             {
+                 int oldestInputFrame = startFrame - (inputs.Length - 1);
+                 // If the NEWEST input in the packet is still too old to matter?
+                 // No, if ANY part of the packet requires a rollback we can't do, we are in trouble.
+                 // Actually, usually we care about the earliest frame we need to effect.
+                 
+                 // If the inputs are ancient, we can't apply them.
+                 // Rollback requires snapshot at (frame-1).
+                 // So if startFrame < oldestFrameWeHave + 1 -> TooOld?
+                 
+                 // Let's use the oldest frame in the batch.
+                 int oldestInBatch = startFrame - (inputs.Length - 1);
+                 
+                 // However, we only care if it differs from what we predicted.
+                 // Use simple check: If startFrame (newest) is older than oldest snapshot... it's definitely too old?
+                 // Wait, we need to check validity of specific frames.
+                 
+                 // Simple heuristic: If startFrame is older than oldest available snapshot, reject.
+                 if (startFrame < oldestFrameWeHave)
+                 {
+                     return InputResult.TooOld;
+                 }
+             }
 
             // Process all inputs in the packet (Oldest first)
             for (int i = inputs.Length - 1; i >= 0; i--)
@@ -345,8 +388,13 @@ namespace Bomberman.Core.Rollback
                 // CHECK FOR MISPREDICTION (INPUTS)
                 if (frame < _currentFrame)
                 {
+                        // Saftey check for history availability before checking misprediction
+                        // If we don't have the recorder history for this frame (cleared), we might skip?
+                        // But we should have it if within snapshot range.
+                        
                         InputState[] usedInputs = _recorder.GetFrame(frame);
                         
+                        // If we can't check, we assume success or ignore?
                         if (usedInputs != null && usedInputs.Length > pid && !input.Equals(usedInputs[pid]))
                         {
                             if (earliestMisprediction == -1 || frame < earliestMisprediction)
@@ -432,8 +480,18 @@ namespace Bomberman.Core.Rollback
             // Trigger Rollback if needed
             if (earliestMisprediction != -1)
             {
+                // Verify we actually CAN rollback to this frame
+                if (!_snapshotBuffer.ContainsKey(earliestMisprediction - 1))
+                {
+                    Console.WriteLine($"[Rollback] Request to rollback to {earliestMisprediction} but too old. Returning TooOld.");
+                    return InputResult.TooOld;
+                }
+                
                 PerformRollback(earliestMisprediction);
+                return InputResult.Misprediction;
             }
+            
+            return InputResult.Success;
         }
 
         private void PerformRollback(int mispredictedFrame)

@@ -50,9 +50,9 @@ namespace Bomberman.Core.Game
                 RollbackSystem.SaveReplay(path);
         }
         
-        public void HandleRemoteInput(int pid, int startFrame, InputState[] inputs, Bomberman.Core.IntVector2 remotePos, int remoteHash)
+        public RollbackSystem.InputResult HandleRemoteInput(int pid, int startFrame, InputState[] inputs, Bomberman.Core.IntVector2 remotePos, int remoteHash)
         {
-            RollbackSystem.HandleRemoteInput(pid, startFrame, inputs, remotePos, remoteHash);
+            return RollbackSystem.HandleRemoteInput(pid, startFrame, inputs, remotePos, remoteHash);
         }
 
         public void DisconnectPlayer(int pid)

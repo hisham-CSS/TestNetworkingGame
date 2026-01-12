@@ -141,6 +141,7 @@ namespace Bomberman.App.States
                 _context.Network.OnDiscoveryRequestReceived += HandleDiscoveryRequest;
                 _context.Network.OnDisconnected += HandleDisconnected;
                 _context.Network.OnJoinRequestRaw += HandleJoinRequest;
+                _context.Network.OnStateSyncReceived += HandleStateSyncReceived;
                 
                 // Host: Snapshot clients to map to PlayerIDs
                 if (_isHost)
@@ -161,6 +162,7 @@ namespace Bomberman.App.States
                  _context.Network.OnDiscoveryRequestReceived -= HandleDiscoveryRequest;
                  _context.Network.OnDisconnected -= HandleDisconnected;
                  _context.Network.OnJoinRequestRaw -= HandleJoinRequest;
+                 _context.Network.OnStateSyncReceived -= HandleStateSyncReceived;
              }
         }
         
@@ -311,7 +313,21 @@ namespace Bomberman.App.States
 
         private void HandleInputReceived(int pid, int startFrame, InputState[] inputs, IntVector2 remotePos, int remoteHash)
         {
-            _gameSession.HandleRemoteInput(pid, startFrame, inputs, remotePos, remoteHash);
+            var result = _gameSession.HandleRemoteInput(pid, startFrame, inputs, remotePos, remoteHash);
+
+            if (result == RollbackSystem.InputResult.TooOld && _isHost && _context.Network != null)
+            {
+                // Player is desynced beyond recovery (lagged out). Force Resync.
+                // We need the endpoint for this PID.
+                if (pid > 0 && pid <= _clientSlots.Length && _clientSlots[pid-1] != null)
+                {
+                    var endpoint = _clientSlots[pid-1];
+                    Console.WriteLine($"[PlayState] P{pid} inputs too old (Freeze detected). Forcing Resync to Frame {_gameSession.CurrentFrame}.");
+                    
+                    byte[] snapshot = GameStateSnapshot.SerializeWorld(_gameSession.CurrentFrame, _gameSession.Simulation!.World, _gameSession.Simulation.Rng.State);
+                    _context.Network.SendStateSync(endpoint!, snapshot);
+                }
+            }
 
             // Host Relay
             if (_isHost && _context.Network != null && pid != 0)
@@ -385,6 +401,19 @@ namespace Bomberman.App.States
             // 3. Send State Sync
             Console.WriteLine($"[PlayState] Sending StateSync ({snapshot.Length} bytes) to P{assignedId} ({sender})");
             _context.Network.SendStateSync(sender, snapshot);
+        }
+
+        private void HandleStateSyncReceived(byte[] snapshotData)
+        {
+             if (_gameSession.Simulation == null) return;
+             
+             // Restore
+             int frame = GameStateSnapshot.RestoreFromBytes(_gameSession.Simulation.World, _gameSession.Simulation.Rng, snapshotData);
+             
+             Console.WriteLine($"[PlayState] Received StateSync (Jump to Frame {frame})");
+             
+             // Sync Rollback System
+             _gameSession.RollbackSystem.SyncToFrame(frame);
         }
 
         // --- Drawing ---
