@@ -13,8 +13,9 @@ namespace Bomberman.Tests
         {
             // Setup
             int hostPort = 6000;
-            var host = new NetworkController(hostPort);
-            var client = new NetworkController(0);
+
+            var host = new NetworkController(new UdpTransport(hostPort));
+            var client = new NetworkController(new UdpTransport(0));
 
             bool hostReceivedReady = false;
             int readyPid = -1;
@@ -62,8 +63,9 @@ namespace Bomberman.Tests
         {
             // Setup
             int hostPort = 6001;
-            var host = new NetworkController(hostPort);
-            var client = new NetworkController(0);
+
+            var host = new NetworkController(new UdpTransport(hostPort));
+            var client = new NetworkController(new UdpTransport(0));
 
             bool clientReceivedUpdate = false;
             int updatedPid = -1;
@@ -110,8 +112,9 @@ namespace Bomberman.Tests
         {
             // Setup
             int hostPort = 6002;
-            var host = new NetworkController(hostPort);
-            var client = new NetworkController(0);
+
+            var host = new NetworkController(new UdpTransport(hostPort));
+            var client = new NetworkController(new UdpTransport(0));
 
             bool hostDetectedDisconnect = false;
             string disconnectReason = "";
@@ -143,6 +146,63 @@ namespace Bomberman.Tests
             Assert.That(disconnectReason, Is.EqualTo("Quit"));
             
             host.Close();
+        }
+        [Test]
+        public void JoinFullLobby_Rejection()
+        {
+            // Setup
+            int hostPort = 6003;
+
+            var host = new NetworkController(new UdpTransport(hostPort));
+            var client1 = new NetworkController(new UdpTransport(0));
+            var client2 = new NetworkController(new UdpTransport(0));
+
+            // Host Logic
+            // Simulate minimal Lobby logic: Accept if count < max.
+            int connected = 0;
+            int max = 1; 
+            
+            host.OnJoinRequestRaw += (sender) => 
+            {
+                if (connected < max)
+                {
+                    host.AddClient(sender);
+                    connected++;
+                    // Send Welcome? Not needed for this test, simply Acceptance.
+                }
+                else
+                {
+                    host.SendDisconnect(sender, "Lobby is Full");
+                }
+            };
+
+            // Client 2 Disconnect Logic
+            bool client2Disconnected = false;
+            string disconnectReason = "";
+            client2.OnDisconnected += (sender, reason) => 
+            {
+               client2Disconnected = true;
+               disconnectReason = reason;
+            };
+
+            // Act
+            // 1. Client 1 Joins (Success)
+            client1.Connect("127.0.0.1", hostPort);
+            client1.SendJoinRequest();
+            for(int i=0; i<50; i++) { host.Update(); client1.Update(); Thread.Sleep(10); }
+
+            // 2. Client 2 Joins (Should be Rejected)
+            client2.Connect("127.0.0.1", hostPort);
+            client2.SendJoinRequest();
+            for(int i=0; i<50; i++) { host.Update(); client2.Update(); Thread.Sleep(10); }
+
+            // Assert
+            Assert.That(client2Disconnected, Is.True, "Client 2 should have been disconnected");
+            Assert.That(disconnectReason, Is.EqualTo("Lobby is Full"));
+
+            host.Close();
+            client1.Close();
+            client2.Close();
         }
     }
 }

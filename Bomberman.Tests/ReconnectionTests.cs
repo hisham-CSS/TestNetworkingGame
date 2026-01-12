@@ -2,6 +2,8 @@ using NUnit.Framework;
 using Bomberman.Core;
 using Bomberman.Core.Game;
 using Bomberman.Core.Rollback;
+using System;
+using Bomberman.Core.ECS.Components;
 using System.Text.Json;
 
 namespace Bomberman.Tests

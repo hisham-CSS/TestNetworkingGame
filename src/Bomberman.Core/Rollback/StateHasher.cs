@@ -1,4 +1,5 @@
 using System;
+using Bomberman.Core.ECS.Components;
 using System.Collections.Generic;
 
 using Bomberman.Core;

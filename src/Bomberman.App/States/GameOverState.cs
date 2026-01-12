@@ -51,7 +51,7 @@ namespace Bomberman.App.States
                 // Simple Exit Logic for Replay View
                 if (kState.IsKeyDown(Keys.Escape) && !_prevKeyboard.IsKeyDown(Keys.Escape))
                 {
-                    _manager.ChangeState(new MenuState(_context, _manager));
+                    _manager.ChangeState(_context.StateFactory.CreateMenu());
                     return;
                 }
                 // Maybe 'R' to restart?
@@ -68,7 +68,7 @@ namespace Bomberman.App.States
             if (kState.IsKeyDown(Keys.Escape) && !_prevKeyboard.IsKeyDown(Keys.Escape))
             {
                 // Discard
-                _manager.ChangeState(new MenuState(_context, _manager));
+                _manager.ChangeState(_context.StateFactory.CreateMenu());
                 return;
             }
 
@@ -128,7 +128,7 @@ namespace Bomberman.App.States
                 _context.Network = null;
             }
 
-            _manager.ChangeState(new MenuState(_context, _manager));
+            _manager.ChangeState(_context.StateFactory.CreateMenu());
         }
 
         public void Draw(GameTime gameTime)

@@ -14,10 +14,10 @@ namespace Bomberman.Tests
         {
             // Setup Host
             int hostPort = 5500;
-            var host = new NetworkController(hostPort);
+            var host = new NetworkController(new UdpTransport(hostPort));
             
             // Setup Client (Browser)
-            var client = new NetworkController(0); // Random port
+            var client = new NetworkController(new UdpTransport(0)); // Random port
             
             bool discoveryRequestReceived = false;
             bool discoveryResponseReceived = false;

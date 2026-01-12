@@ -66,12 +66,15 @@ namespace Bomberman.Net
         {
             try
             {
-                while (_udpClient.Available > 0)
+                while (_udpClient != null && _udpClient.Available > 0)
                 {
                     IPEndPoint sender = new IPEndPoint(IPAddress.Any, 0);
                     byte[] data = _udpClient.Receive(ref sender);
 
                     PacketReceived?.Invoke(data, sender);
+                    
+                    // Check again in case callback closed us
+                    if (_udpClient == null) break;
                 }
             }
             catch (SocketException e)
@@ -88,6 +91,7 @@ namespace Bomberman.Net
         public void Close()
         {
             _udpClient?.Close();
+            _udpClient = null;
         }
 
         public void Dispose()

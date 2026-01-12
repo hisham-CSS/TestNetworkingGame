@@ -44,7 +44,7 @@ namespace Bomberman.App.States
             // Ensure NetworkController exists for discovery
             if (_context.Network == null)
             {
-                _context.Network = new NetworkController(0); // Bind to random port
+                _context.Network = new NetworkController(new UdpTransport(0)); // Bind to random port
             }
 
             _context.Network.OnDiscoveryResponseReceived += HandleDiscoveryResponse;
@@ -122,7 +122,7 @@ namespace Bomberman.App.States
                 _context.Network?.Close();
                 _context.Network = null;
                 
-                _manager.ChangeState(new MenuState(_context, _manager));
+                _manager.ChangeState(_context.StateFactory.CreateMenu());
             }
 
             if (_servers.Count > 0)
@@ -156,7 +156,7 @@ namespace Bomberman.App.States
 
             // Transition to Lobby as Client
             // We reuse the current NetworkController which is bound to a random port
-            _manager.ChangeState(new LobbyState(_context, _manager, false, target.Endpoint));
+            _manager.ChangeState(_context.StateFactory.CreateLobby(false, target.Endpoint));
         }
 
         public void Draw(GameTime gameTime)

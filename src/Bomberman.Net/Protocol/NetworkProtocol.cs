@@ -1,40 +1,26 @@
 using System;
 using System.IO;
-using System.IO;
 using Bomberman.Core;
+using Bomberman.Core.Input;
+using Bomberman.Net.Packets;
 
 namespace Bomberman.Net
 {
-    public enum PacketType : byte
-    {
-        Input = 0,
-        JoinRequest = 1,
-        Welcome = 2,
-        StartGame = 3,
-        LobbyUpdate = 4,
-        DiscoveryRequest = 5,
-        DiscoveryResponse = 6,
-        Heartbeat = 7,
-        Disconnect = 8,
-        LobbyReady = 9,
-        StateSync = 10,
-        StateChunk = 11
-    }
-
     public static class NetworkProtocol
     {
         public const int ProtocolVersion = 1;
 
-        public static byte[] CreateJoinRequest()
+        public static byte[] Serialize(IPacket packet)
         {
             using (var ms = new MemoryStream())
             using (var writer = new BinaryWriter(ms))
             {
-                writer.Write((byte)PacketType.JoinRequest);
-                writer.Write(ProtocolVersion);
+                packet.Serialize(writer);
                 return ms.ToArray();
             }
         }
+
+        public static byte[] CreateJoinRequest() => Serialize(new JoinRequestPacket { Version = ProtocolVersion });
 
         public static int ReadJoinRequest(byte[] data)
         {
@@ -42,236 +28,114 @@ namespace Bomberman.Net
             using (var reader = new BinaryReader(ms))
             {
                 reader.ReadByte(); // type
-                // Handle legacy or short packets safely
-                if (ms.Position >= ms.Length) return 0; 
-                return reader.ReadInt32();
+                return JoinRequestPacket.Deserialize(reader).Version;
             }
         }
 
-        public static byte[] CreateWelcome(int assignedId, int seed, int totalPlayers)
-        {
-            using (var ms = new MemoryStream())
-            using (var writer = new BinaryWriter(ms))
-            {
-                writer.Write((byte)PacketType.Welcome);
-                writer.Write(assignedId);
-                writer.Write(seed);
-                writer.Write(totalPlayers);
-                return ms.ToArray();
-            }
-        }
+        public static byte[] CreateWelcome(int assignedId, int seed, int totalPlayers) 
+            => Serialize(new WelcomePacket { AssignedId = assignedId, Seed = seed, TotalPlayers = totalPlayers });
 
         public static (int assignedId, int seed, int totalPlayers) ReadWelcome(byte[] data)
         {
             using (var ms = new MemoryStream(data))
             using (var reader = new BinaryReader(ms))
             {
-                reader.ReadByte(); // type
-                int id = reader.ReadInt32();
-                int seed = reader.ReadInt32();
-                int total = reader.ReadInt32();
-                return (id, seed, total);
+                reader.ReadByte();
+                var p = WelcomePacket.Deserialize(reader);
+                return (p.AssignedId, p.Seed, p.TotalPlayers);
             }
         }
 
         public static byte[] CreateLobbyUpdate(int connectedCount, int totalPlayers, int slotMask)
-        {
-            using (var ms = new MemoryStream())
-            using (var writer = new BinaryWriter(ms))
-            {
-                writer.Write((byte)PacketType.LobbyUpdate);
-                writer.Write(connectedCount);
-                writer.Write(totalPlayers);
-                writer.Write(slotMask);
-                return ms.ToArray();
-            }
-        }
+            => Serialize(new LobbyUpdatePacket { ConnectedCount = connectedCount, TotalPlayers = totalPlayers, SlotMask = slotMask });
 
         public static (int connectedCount, int totalPlayers, int slotMask) ReadLobbyUpdate(byte[] data)
         {
-             using (var ms = new MemoryStream(data))
+            using (var ms = new MemoryStream(data))
             using (var reader = new BinaryReader(ms))
             {
-                reader.ReadByte(); 
-                int c = reader.ReadInt32();
-                int t = reader.ReadInt32();
-                // Handle legacy gracefully or force upgrade?
-                // Given we control both, force read.
-                int mask = 0;
-                if (ms.Position < ms.Length)
-                    mask = reader.ReadInt32();
-                
-                return (c, t, mask);
+                reader.ReadByte();
+                var p = LobbyUpdatePacket.Deserialize(reader);
+                return (p.ConnectedCount, p.TotalPlayers, p.SlotMask);
             }
         }
 
         public static byte[] CreateStartGame(int seed, int totalPlayers)
-        {
-             using (var ms = new MemoryStream())
-            using (var writer = new BinaryWriter(ms))
-            {
-                writer.Write((byte)PacketType.StartGame);
-                writer.Write(seed);
-                writer.Write(totalPlayers);
-                return ms.ToArray();
-            }
-        }
+            => Serialize(new StartGamePacket { Seed = seed, TotalPlayers = totalPlayers });
 
         public static (int seed, int totalPlayers) ReadStartGame(byte[] data)
         {
             using (var ms = new MemoryStream(data))
             using (var reader = new BinaryReader(ms))
             {
-                reader.ReadByte(); 
-                int s = reader.ReadInt32();
-                int t = reader.ReadInt32();
-                return (s, t);
+                reader.ReadByte();
+                var p = StartGamePacket.Deserialize(reader);
+                return (p.Seed, p.TotalPlayers);
             }
         }
 
         public static byte[] CreateInputPacket(int playerId, int startFrame, InputState[] inputs, IntVector2 currentPos, int stateHash)
         {
-             using (var ms = new MemoryStream())
-            using (var writer = new BinaryWriter(ms))
+            return Serialize(new InputPacket
             {
-                writer.Write((byte)PacketType.Input);
-                writer.Write(playerId);
-                writer.Write(startFrame);
-                writer.Write(inputs.Length);
-                writer.Write(currentPos.X);
-                writer.Write(currentPos.Y);
-                writer.Write(stateHash); // New: State Hash
-                for (int i = 0; i < inputs.Length; i++)
-                {
-                    writer.Write(inputs[i].Movement.X);
-                    writer.Write(inputs[i].Movement.Y);
-                    writer.Write(inputs[i].PlaceBomb);
-                    // Explicit Bomb Target
-                    writer.Write(inputs[i].BombTarget.X);
-                    writer.Write(inputs[i].BombTarget.Y);
-                }
-                return ms.ToArray();
-            }
+                PlayerId = playerId,
+                StartFrame = startFrame,
+                Inputs = inputs,
+                CurrentPos = currentPos,
+                StateHash = stateHash
+            });
         }
 
-         public static (int playerId, int startFrame, InputState[] inputs, IntVector2 currentPos, int stateHash) ReadInputPacket(byte[] data)
+        public static (int playerId, int startFrame, InputState[] inputs, IntVector2 currentPos, int stateHash) ReadInputPacket(byte[] data)
         {
             using (var ms = new MemoryStream(data))
             using (var reader = new BinaryReader(ms))
             {
-                reader.ReadByte(); // Skip Type
-                int playerId = reader.ReadInt32();
-                int startFrame = reader.ReadInt32();
-                int count = reader.ReadInt32();
-                
-                // Hardening: Validate count against remaining data length
-                long remainingBytes = ms.Length - ms.Position;
-                // Minimum bytes per input: Movement(8) + PlaceBomb(1) + BombTarget(8) = 17 bytes
-                // We also have X, Y, StateHash (12 bytes) before the loop.
-                if (count < 0 || count > 60 || remainingBytes < count * 17) 
-                {
-                     // Return empty/safe default or throw specific error?
-                     // For now, return empty to avoid crash. 
-                     // Ideally we should log this.
-                     return (playerId, startFrame, new InputState[0], new IntVector2(0,0), 0);
-                }
-
-                int x = reader.ReadInt32();
-                int y = reader.ReadInt32();
-                int stateHash = reader.ReadInt32(); // Read Hash
-                IntVector2 currentPos = new IntVector2(x, y);
-                
-                InputState[] inputs = new InputState[count];
-                for (int i = 0; i < count; i++)
-                {
-                     inputs[i].Movement.X = reader.ReadInt32();
-                     inputs[i].Movement.Y = reader.ReadInt32();
-                     inputs[i].PlaceBomb = reader.ReadBoolean();
-                     inputs[i].BombTarget = new IntVector2(reader.ReadInt32(), reader.ReadInt32());
-                }
-
-                return (playerId, startFrame, inputs, currentPos, stateHash);
+                reader.ReadByte();
+                var p = InputPacket.Deserialize(reader);
+                return (p.PlayerId, p.StartFrame, p.Inputs, p.CurrentPos, p.StateHash);
             }
         }
 
-        public static byte[] CreateDiscoveryRequest()
-        {
-            return new byte[] { (byte)PacketType.DiscoveryRequest };
-        }
+        public static byte[] CreateDiscoveryRequest() => Serialize(new DiscoveryRequestPacket());
 
         public static byte[] CreateDiscoveryResponse(string serverName, int currentPlayers, int maxPlayers)
-        {
-            using (var ms = new MemoryStream())
-            using (var writer = new BinaryWriter(ms))
-            {
-                writer.Write((byte)PacketType.DiscoveryResponse);
-                writer.Write(serverName);
-                writer.Write(currentPlayers);
-                writer.Write(maxPlayers);
-                return ms.ToArray();
-            }
-        }
+            => Serialize(new DiscoveryResponsePacket { ServerName = serverName, CurrentPlayers = currentPlayers, MaxPlayers = maxPlayers });
 
         public static (string serverName, int currentPlayers, int maxPlayers) ReadDiscoveryResponse(byte[] data)
         {
             using (var ms = new MemoryStream(data))
             using (var reader = new BinaryReader(ms))
             {
-                reader.ReadByte(); 
-                string name = reader.ReadString();
-                int cur = reader.ReadInt32();
-                int max = reader.ReadInt32();
-                return (name, cur, max);
+                reader.ReadByte();
+                var p = DiscoveryResponsePacket.Deserialize(reader);
+                return (p.ServerName, p.CurrentPlayers, p.MaxPlayers);
             }
         }
 
         public static PacketType ReadType(byte[] data)
         {
-             if (data == null || data.Length == 0) return PacketType.Input; 
-             return (PacketType)data[0];
-        }
-        public static byte[] CreateHeartbeat()
-        {
-            using (var ms = new MemoryStream())
-            using (var writer = new BinaryWriter(ms))
-            {
-                writer.Write((byte)PacketType.Heartbeat);
-                return ms.ToArray();
-            }
+            if (data == null || data.Length == 0) return PacketType.Input;
+            return (PacketType)data[0];
         }
 
-        public static byte[] CreateDisconnect(string reason)
-        {
-            using (var ms = new MemoryStream())
-            using (var writer = new BinaryWriter(ms))
-            {
-                writer.Write((byte)PacketType.Disconnect);
-                writer.Write(reason);
-                return ms.ToArray();
-            }
-        }
+        public static byte[] CreateHeartbeat() => Serialize(new HeartbeatPacket());
+
+        public static byte[] CreateDisconnect(string reason) => Serialize(new DisconnectPacket { Reason = reason });
 
         public static string ReadDisconnect(byte[] data)
         {
-            using (var ms = new MemoryStream(data))
+             using (var ms = new MemoryStream(data))
             using (var reader = new BinaryReader(ms))
             {
-                reader.ReadByte(); 
-                if (ms.Position >= ms.Length) return "Unknown";
-                return reader.ReadString();
+                reader.ReadByte();
+                var p = DisconnectPacket.Deserialize(reader);
+                return p.Reason;
             }
         }
+
         public static byte[] CreateLobbyReady(int playerId, bool isReady)
-        {
-            using (var ms = new MemoryStream())
-            using (var writer = new BinaryWriter(ms))
-            {
-                writer.Write((byte)PacketType.LobbyReady);
-                writer.Write(playerId);
-                writer.Write(isReady);
-                return ms.ToArray();
-            }
-        }
+            => Serialize(new LobbyReadyPacket { PlayerId = playerId, IsReady = isReady });
 
         public static (int PlayerId, bool IsReady) ReadLobbyReady(byte[] data)
         {
@@ -279,62 +143,61 @@ namespace Bomberman.Net
             using (var reader = new BinaryReader(ms))
             {
                 reader.ReadByte();
-                int pid = reader.ReadInt32();
-                bool ready = reader.ReadBoolean();
-                return (pid, ready);
+                var p = LobbyReadyPacket.Deserialize(reader);
+                return (p.PlayerId, p.IsReady);
             }
         }
 
         public static byte[] CreateStateSync(byte[] snapshotData)
-        {
-            using (var ms = new MemoryStream())
-            using (var writer = new BinaryWriter(ms))
-            {
-                writer.Write((byte)PacketType.StateSync);
-                writer.Write(snapshotData.Length);
-                writer.Write(snapshotData);
-                return ms.ToArray();
-            }
-        }
+            => Serialize(new StateSyncPacket { Data = snapshotData });
 
         public static byte[] ReadStateSync(byte[] data)
         {
             using (var ms = new MemoryStream(data))
             using (var reader = new BinaryReader(ms))
             {
-                reader.ReadByte(); // Type
-                int length = reader.ReadInt32();
-                return reader.ReadBytes(length);
+                reader.ReadByte();
+                var p = StateSyncPacket.Deserialize(reader);
+                return p.Data;
             }
         }
 
         public static byte[] CreateStateChunk(int index, int totalChunks, byte[] chunkData)
-        {
-            using (var ms = new MemoryStream())
-            using (var writer = new BinaryWriter(ms))
-            {
-                writer.Write((byte)PacketType.StateChunk);
-                writer.Write(index);
-                writer.Write(totalChunks);
-                writer.Write(chunkData.Length);
-                writer.Write(chunkData);
-                return ms.ToArray();
-            }
-        }
+            => Serialize(new StateChunkPacket { Index = index, TotalChunks = totalChunks, Data = chunkData });
 
         public static (int index, int totalChunks, byte[] data) ReadStateChunk(byte[] data)
         {
             using (var ms = new MemoryStream(data))
             using (var reader = new BinaryReader(ms))
             {
-                reader.ReadByte(); // Type
-                int index = reader.ReadInt32();
-                int total = reader.ReadInt32();
-                int len = reader.ReadInt32();
-                byte[] chunkData = reader.ReadBytes(len);
-                return (index, total, chunkData);
+                reader.ReadByte();
+                var p = StateChunkPacket.Deserialize(reader);
+                return (p.Index, p.TotalChunks, p.Data);
             }
         }
 
+        public static byte[] CreatePing(long timestamp) => Serialize(new PingPacket { Timestamp = timestamp });
+
+        public static long ReadPing(byte[] data)
+        {
+            using (var ms = new MemoryStream(data))
+            using (var reader = new BinaryReader(ms))
+            {
+                reader.ReadByte();
+                return PingPacket.Deserialize(reader).Timestamp;
+            }
+        }
+
+        public static byte[] CreatePong(long timestamp) => Serialize(new PongPacket { Timestamp = timestamp });
+
+        public static long ReadPong(byte[] data)
+        {
+            using (var ms = new MemoryStream(data))
+            using (var reader = new BinaryReader(ms))
+            {
+                reader.ReadByte();
+                return PongPacket.Deserialize(reader).Timestamp;
+            }
+        }
     }
 }

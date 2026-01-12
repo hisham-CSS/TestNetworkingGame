@@ -142,14 +142,14 @@ namespace Bomberman.App.States
             
             if (!string.IsNullOrEmpty(reason))
             {
-                _manager.ChangeState(new PromptState(_context, _manager, reason, () => 
+                _manager.ChangeState(_context.StateFactory.CreatePrompt(reason, () => 
                 {
-                    _manager.ChangeState(new MenuState(_context, _manager));
+                    _manager.ChangeState(_context.StateFactory.CreateMenu());
                 }));
             }
             else
             {
-                _manager.ChangeState(new MenuState(_context, _manager));
+                _manager.ChangeState(_context.StateFactory.CreateMenu());
             }
         }
 
@@ -175,7 +175,7 @@ namespace Bomberman.App.States
                     _context.Network?.Close();
                     _context.Network = null;
                 }
-                _manager.ChangeState(new MenuState(_context, _manager));
+                _manager.ChangeState(_context.StateFactory.CreateMenu());
                 return;
             }
 
@@ -270,7 +270,7 @@ namespace Bomberman.App.States
                  
                  // 4. Transition to PlayState
                  // Use the new constructor for restored sessions
-                 _manager.ChangeState(new PlayState(_context, _manager, session, _localPlayerId));
+                 _manager.ChangeState(_context.StateFactory.CreatePlay(session, _localPlayerId));
              }
              catch (Exception e)
              {
@@ -283,7 +283,7 @@ namespace Bomberman.App.States
         {
              // Transition to PlayState
              // We need to pass the lobby slots so PlayState knows who is who
-             _manager.ChangeState(new PlayState(_context, _manager, _localPlayerId, totalPlayers, seed, _lobbySlots));
+             _manager.ChangeState(_context.StateFactory.CreatePlay(_localPlayerId, totalPlayers, seed, _lobbySlots));
         }
 
         // --- Network Handlers ---

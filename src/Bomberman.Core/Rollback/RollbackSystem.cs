@@ -1,4 +1,7 @@
 using System;
+using Bomberman.Core.Input;
+using Bomberman.Core.ECS.Components;
+using Bomberman.Core.Game;
 using System.Collections.Generic;
 using System.IO;
 
@@ -40,6 +43,16 @@ namespace Bomberman.Core.Rollback
             _localPlayerId = localPlayerId;
             _totalPlayers = totalPlayers;
             _recorder = new InputRecorder();
+            _recorder = new InputRecorder();
+        }
+
+        public int GetLastConfirmedFrame(int playerId)
+        {
+            if (_lastConfirmedRemoteFrame.TryGetValue(playerId, out int frame))
+            {
+                return frame;
+            }
+            return 0; // Default
         }
 
         public void InitializeSimulation(int seed, int totalPlayers)
@@ -274,9 +287,24 @@ namespace Bomberman.Core.Rollback
 
                     // 5. Save Snapshot
                     _snapshotBuffer[_currentFrame] = new GameStateSnapshot(_currentFrame, Simulation.World);
-                    if (_snapshotBuffer.ContainsKey(_currentFrame - MaxSnapshotFrames)) 
+                    
+                    // 6. Cleanup Old History
+                    int oldestFrameToKeep = _currentFrame - MaxSnapshotFrames;
+                    
+                    if (_snapshotBuffer.ContainsKey(oldestFrameToKeep - 1)) 
                     {
-                        _snapshotBuffer.Remove(_currentFrame - MaxSnapshotFrames);
+                        _snapshotBuffer.Remove(oldestFrameToKeep - 1);
+                    }
+
+                    // Trim Input Buffers
+                    // We can safely remove inputs older than the oldest snapshot we can rollback to.
+                    if (_localInputBuffer.ContainsKey(oldestFrameToKeep - 1))
+                    {
+                        _localInputBuffer.Remove(oldestFrameToKeep - 1);
+                    }
+                    if (_remoteInputBuffer.ContainsKey(oldestFrameToKeep - 1))
+                    {
+                        _remoteInputBuffer.Remove(oldestFrameToKeep - 1);
                     }
                 }
             }

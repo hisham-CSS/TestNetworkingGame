@@ -75,13 +75,13 @@ namespace Bomberman.App.States
                     
                     // Launch Replay
                     GameSession replaySession = new GameSession(selectedFile);
-                    _manager.ChangeState(new PlayState(_context, _manager, replaySession));
+                    _manager.ChangeState(_context.StateFactory.CreateReplay(replaySession));
                 }
             }
             
             if (esc && !_prevEsc)
             {
-                _manager.ChangeState(new MenuState(_context, _manager));
+                _manager.ChangeState(_context.StateFactory.CreateMenu());
             }
 
             _prevDown = down;

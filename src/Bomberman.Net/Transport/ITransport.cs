@@ -15,5 +15,7 @@ namespace Bomberman.Net
         void SendTo(byte[] data, IPEndPoint target);
         
         void Poll();
+        
+        int LocalPort { get; }
     }
 }

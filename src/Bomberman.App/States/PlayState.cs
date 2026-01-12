@@ -4,6 +4,8 @@ using System.Net;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Bomberman.Core;
+using Bomberman.Core.Input;
+using Bomberman.Core.ECS.Components;
 using Bomberman.Core.Game;
 using Bomberman.Core.Rollback;
 using Bomberman.Net;
@@ -26,6 +28,7 @@ namespace Bomberman.App.States
         private KeyboardState _previousKeyboardState;
 
         private bool _isReplayView = false;
+        private bool _showDebugOverlay = false;
         private IPEndPoint?[] _clientSlots;
 
         public PlayState(GameContext context, GameStateManager manager, int localPlayerId, int playerCount, int seed, IPEndPoint?[] lobbySlots = null)
@@ -186,7 +189,7 @@ namespace Bomberman.App.States
                 // Client: If we receive Disconnect, it's likely from Host (or we timed out host)
                 Console.WriteLine($"[PlayState] Disconnected from Host: {reason}");
                 // Force return to menu
-                _manager.ChangeState(new MenuState(_context, _manager));
+                _manager.ChangeState(_context.StateFactory.CreateMenu());
             }
         }
 
@@ -215,8 +218,13 @@ namespace Bomberman.App.States
                     _gameSession.SaveReplay(replayPath);
                 }
 
-                _manager.ChangeState(new MenuState(_context, _manager));
+                _manager.ChangeState(_context.StateFactory.CreateMenu());
                 return;
+            }
+
+            if (kState.IsKeyDown(Keys.F1) && !_previousKeyboardState.IsKeyDown(Keys.F1))
+            {
+                _showDebugOverlay = !_showDebugOverlay;
             }
 
             // Fixed Update Loop
@@ -242,7 +250,7 @@ namespace Bomberman.App.States
                     if (_gameSession.Simulation != null) winner = _gameSession.Simulation.WinnerId;
 
                     // Transition to Game Over (Flag replay status)
-                    _manager.ChangeState(new GameOverState(_context, _manager, _gameSession, winner, _isReplayView, isGameOver));
+                    _manager.ChangeState(_context.StateFactory.CreateGameOver(_gameSession, winner, _isReplayView, isGameOver));
                     return;
                 }
             }
@@ -391,6 +399,11 @@ namespace Bomberman.App.States
                 DrawWorld(_gameSession.Simulation.World);
             }
 
+            if (_showDebugOverlay)
+            {
+                DrawDebugStats();
+            }
+
             _context.SpriteBatch.End();
         }
 
@@ -489,6 +502,38 @@ namespace Bomberman.App.States
                     return transforms[i];
             }
             return new TransformComponent();
+        }
+
+        private void DrawDebugStats()
+        {
+            int y = 10;
+            int x = 10;
+            Color c = Color.Yellow;
+
+            // Ping
+            int ping = _context.Network != null ? _context.Network.LastPingMs : 0;
+            _context.Font.DrawText(_context.SpriteBatch, x, y, $"Ping: {ping}ms", c, 2);
+            y += 20;
+
+            // Local Frame
+            int currentFrame = _gameSession.RollbackSystem.CurrentFrame;
+            _context.Font.DrawText(_context.SpriteBatch, x, y, $"Frame: {currentFrame}", c, 2);
+            y += 20;
+
+            // Frame Advantage / Delays
+            // Show for each remote player
+            for(int i=0; i<_clientSlots.Length; i++)
+            {
+                 int pid = i + 1;
+                 if (_clientSlots[i] != null) // If slot occupied
+                 {
+                      int lastConfirmed = _gameSession.RollbackSystem.GetLastConfirmedFrame(pid);
+                      int advantage = currentFrame - lastConfirmed;
+                      string status = advantage > 0 ? $"+{advantage}" : $"{advantage}";
+                      _context.Font.DrawText(_context.SpriteBatch, x, y, $"P{pid} Adv: {status}", c, 2);
+                      y += 20;
+                 }
+            }
         }
     }
 }

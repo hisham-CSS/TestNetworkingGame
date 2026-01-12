@@ -1,16 +1,8 @@
-namespace Bomberman.Core;
+namespace Bomberman.Core.ECS.Pools;
 
 using System;
-
 using System.Collections.Generic;
-
-public interface IComponentPool
-{
-    Type ComponentType { get; }
-    object CaptureState();
-    void RestoreState(object state);
-    void Clear();
-}
+using Bomberman.Core.ECS; // For Entity? Wait, Entity is in root Core or Core.ECS? Entity was in Components.cs? No, line 2 in Step 266 said Entity.cs exists!
 
 public class ComponentPool<T> : IComponentPool where T : struct
 {
@@ -116,58 +108,4 @@ public class ComponentPool<T> : IComponentPool where T : struct
             throw new KeyNotFoundException($"Entity {entity.Index} not in pool {typeof(T).Name}");
         return _components[index];
     }
-}
-
-public struct TransformComponent
-{
-    public IntVector2 Position; // Continuous position in simulation units (e.g. 1/100th pixel)
-    public IntVector2 Size;     // AABB Size
-}
-
-public struct PlayerComponent
-{
-    public uint PlayerId;
-    public bool Alive;
-    public int BombRange;
-    public int BombCapacity;
-}
-
-public struct InputState
-{
-    public IntVector2 Movement; // Input direction (-1, 0, 1)
-    public bool PlaceBomb;
-    public IntVector2 BombTarget; // Explicit Grid Coordinate
-
-    public bool Equals(InputState other)
-    {
-        return Movement == other.Movement && PlaceBomb == other.PlaceBomb && BombTarget == other.BombTarget;
-    }
-}
-
-public struct BombComponent
-{
-    public int Timer;
-    public int MaxTimer;
-    public int Range;
-    public uint OwnerId; 
-}
-
-public struct ExplosionComponent
-{
-    public int Timer;
-    public int MaxTimer;
-}
-
-public struct PowerupComponent
-{
-    public enum PowerupType { None, Range, Capacity }
-    public PowerupType Type;
-}
-
-public struct TileComponent
-{
-    public enum TileType { Solid, Destructible, Empty }
-    public TileType Type;
-    public bool Destroyed;
-    public PowerupComponent.PowerupType HiddenPowerup;
 }

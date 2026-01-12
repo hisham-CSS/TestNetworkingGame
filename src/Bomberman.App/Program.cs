@@ -15,7 +15,9 @@ namespace Bomberman.App
             }
             catch (Exception e)
             {
-                Console.WriteLine("CRASH: " + e.ToString());
+                string log = "CRASH: " + e.ToString();
+                Console.WriteLine(log);
+                System.IO.File.WriteAllText("crash.log", log);
                 throw;
             }
         }

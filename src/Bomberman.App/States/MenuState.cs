@@ -48,22 +48,22 @@ namespace Bomberman.App.States
             {
                 // HOST
                 _context.Network?.Close();
-                _context.Network = new NetworkController(5000);
+                _context.Network = new NetworkController(new UdpTransport(5000));
                 
                 // Host starts Lobby directly
-                _manager.ChangeState(new LobbyState(_context, _manager, true, null));
+                _manager.ChangeState(_context.StateFactory.CreateLobby(true, null));
             }
             
             if (IsNewKeyPress(kState, Keys.J))
             {
                 // JOIN (Server Browser)
                 _context.Network?.Close();
-                _manager.ChangeState(new ServerBrowserState(_context, _manager));
+                _manager.ChangeState(_context.StateFactory.CreateServerBrowser());
             }
 
             if (IsNewKeyPress(kState, Keys.R))
             {
-                _manager.ChangeState(new ReplaySelectState(_context, _manager));
+                _manager.ChangeState(_context.StateFactory.CreateReplaySelect());
             }
 
             if (IsNewKeyPress(kState, Keys.Escape))

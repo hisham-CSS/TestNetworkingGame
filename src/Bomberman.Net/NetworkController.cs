@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Net;
 using Bomberman.Core;
+using Bomberman.Core.Input;
 using Bomberman.Core.Rollback;
+using Bomberman.Net.Packets;
 
 namespace Bomberman.Net
 {
@@ -34,13 +36,12 @@ namespace Bomberman.Net
 
         private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(1.0);
         private static readonly TimeSpan TimeoutThreshold = TimeSpan.FromSeconds(5.0);
+        private static readonly TimeSpan PingInterval = TimeSpan.FromSeconds(1.0);
 
-        public NetworkController(int port)
-        {
-            // Default to UdpTransport
-            _transport = new UdpTransport(port);
-            _transport.PacketReceived += HandlePacket;
-        }
+        public int LastPingMs { get; private set; } = 0;
+        private DateTime _lastPingSent = DateTime.MinValue;
+
+
 
         // Allow injecting mock transport for testing
         public NetworkController(ITransport transport)
@@ -95,6 +96,17 @@ namespace Bomberman.Net
                     Broadcast(hb);
                 }
                 _lastHeartbeatSent = DateTime.Now;
+            }
+
+
+            // Ping Logic
+            if (DateTime.Now - _lastPingSent > PingInterval)
+            {
+               long timestamp = DateTime.Now.Ticks;
+               var ping = NetworkProtocol.CreatePing(timestamp);
+               if (_isClient) _transport.SendToConnectedHost(ping);
+               else Broadcast(ping);
+               _lastPingSent = DateTime.Now;
             }
 
             // Timeout Logic
@@ -376,6 +388,19 @@ namespace Bomberman.Net
                 case PacketType.LobbyReady:
                     var (readyPid, isReady) = NetworkProtocol.ReadLobbyReady(data);
                     OnLobbyReadyReceived?.Invoke(readyPid, isReady);
+                    break;
+
+                case PacketType.Ping:
+                    long pTimestamp = NetworkProtocol.ReadPing(data);
+                    var pong = NetworkProtocol.CreatePong(pTimestamp);
+                    _transport.SendTo(pong, sender);
+                    break;
+
+                case PacketType.Pong:
+                    long pontTimestamp = NetworkProtocol.ReadPong(data);
+                    long rttTicks = DateTime.Now.Ticks - pontTimestamp;
+                    LastPingMs = (int)(rttTicks / TimeSpan.TicksPerMillisecond);
+                    // Optional: Smooth this value
                     break;
 
 
