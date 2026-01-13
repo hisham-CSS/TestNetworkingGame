@@ -30,6 +30,9 @@ namespace Bomberman.App.States
         private bool _isReplayView = false;
         private bool _showDebugOverlay = false;
         private IPEndPoint?[] _clientSlots;
+        
+        // Rate Limiting for StateSync
+        private System.Collections.Generic.Dictionary<int, double> _lastSyncSent = new System.Collections.Generic.Dictionary<int, double>();
 
         public PlayState(GameContext context, GameStateManager manager, int localPlayerId, int playerCount, int seed, IPEndPoint?[] lobbySlots = null)
         {
@@ -238,10 +241,25 @@ namespace Bomberman.App.States
                 _pendingBombInput = true;
             }
 
-            while (_accumulator >= FixedTimeStep)
+            // Synchronization Logic (Catch-Up & Slow-Down) - Client Only
+            int maxSteps = 1;
+
+            if (!_isHost && _context.Network != null && !_isReplayView)
+            {
+                // We assume Player 0 is Host
+                int hostFrame = _gameSession.RollbackSystem.GetLastConfirmedFrame(0);
+                int myFrame = _gameSession.CurrentFrame;
+                
+                maxSteps = _gameSession.RollbackSystem.CalculateTargetSteps(myFrame, hostFrame);
+            }
+            
+            int stepsTaken = 0;
+
+            while (_accumulator >= FixedTimeStep && stepsTaken < maxSteps)
             {
                 StepSimulation(kState);
                 _accumulator -= FixedTimeStep;
+                stepsTaken++;
                 
                 bool isGameOver = _gameSession.Simulation != null && _gameSession.Simulation.IsGameOver;
                 bool isReplayEnd = _gameSession.RollbackSystem.IsReplayFinished;
@@ -256,6 +274,34 @@ namespace Bomberman.App.States
                     return;
                 }
             }
+            
+            // If we consumed all accumulator and still need catchup?
+            // If we have extraSteps > 0, it means we have DATA to simulate.
+            // Ideally we run those steps even if accumulator is 0, because we are "playing back" history.
+            // BUT: StepSimulation consumes inputs. If we run without accumulator, do we use valid inputs?
+            // Yes, StepSimulation reads/generates inputs for the CURRENT frame.
+            
+            if (stepsTaken < maxSteps)
+            {
+                // Force run remaining steps
+                while (stepsTaken < maxSteps)
+                {
+                     StepSimulation(kState);
+                     // Do NOT subtract accumulator, we are creating time from nothing (Catching up)
+                     stepsTaken++;
+                     
+                      bool isGameOver = _gameSession.Simulation != null && _gameSession.Simulation.IsGameOver;
+                      if (isGameOver) 
+                      {
+                            int winner = _gameSession.Simulation.WinnerId;
+                             _manager.ChangeState(_context.StateFactory.CreateGameOver(_gameSession, winner, _isReplayView, isGameOver));
+                            return;
+                      }
+                }
+            }            
+            
+            // Clamp accumulator if spiraling?
+            if (_accumulator > FixedTimeStep * 2) _accumulator = FixedTimeStep;
 
             _previousKeyboardState = kState;
         }
@@ -321,11 +367,24 @@ namespace Bomberman.App.States
                 // We need the endpoint for this PID.
                 if (pid > 0 && pid <= _clientSlots.Length && _clientSlots[pid-1] != null)
                 {
-                    var endpoint = _clientSlots[pid-1];
-                    Console.WriteLine($"[PlayState] P{pid} inputs too old (Freeze detected). Forcing Resync to Frame {_gameSession.CurrentFrame}.");
+                    double now = _accumulator; // Use accumulation time or DateTime? Accumulator is per-tick. Use DateTime for wall clock.
+                    // Actually PlayState tracks _accumulator from gameTime.
+                    // Let's use DateTime.Now.TimeOfDay.TotalSeconds
+                    double nowSec = DateTime.Now.TimeOfDay.TotalSeconds;
                     
-                    byte[] snapshot = GameStateSnapshot.SerializeWorld(_gameSession.CurrentFrame, _gameSession.Simulation!.World, _gameSession.Simulation.Rng.State);
-                    _context.Network.SendStateSync(endpoint!, snapshot);
+                    if (!_lastSyncSent.ContainsKey(pid) || (nowSec - _lastSyncSent[pid]) > 1.0)
+                    {
+                        var endpoint = _clientSlots[pid-1];
+                        Console.WriteLine($"[PlayState] P{pid} inputs too old (Freeze detected). Forcing Resync to Frame {_gameSession.CurrentFrame}.");
+                        
+                        byte[] snapshot = GameStateSnapshot.SerializeWorld(_gameSession.CurrentFrame, _gameSession.Simulation!.World, _gameSession.Simulation.Rng.State);
+                        _context.Network.SendStateSync(endpoint!, snapshot);
+                        
+                        _lastSyncSent[pid] = nowSec;
+                        
+                        // Optional: Send a specific "Stop Spamming" packet? 
+                        // Or we just rely on the sync eventually getting there.
+                    }
                 }
             }
 

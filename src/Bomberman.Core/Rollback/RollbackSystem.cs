@@ -55,6 +55,28 @@ namespace Bomberman.Core.Rollback
             return 0; // Default
         }
 
+        public int CalculateTargetSteps(int localFrame, int hostFrame)
+        {
+             int lag = hostFrame - localFrame; // Positive = We are Behind. Negative = We are Ahead.
+                
+             // 1. Catch-Up: We are behind confirmed inputs
+             if (lag > 2) 
+             {
+                 // speed up
+                 // Base 1 step + extra
+                 return 1 + Math.Min(lag, 8); // Cap at 8x speed
+             }
+             // 2. Slow-Down: We are too far ahead (Predicting too much)
+             else if (lag < -5)
+             {
+                 // Stall (0 steps)
+                 return 0;
+             }
+             
+             // Normal speed
+             return 1;
+        }
+
         public void InitializeSimulation(int seed, int totalPlayers)
         {
             _seed = seed;

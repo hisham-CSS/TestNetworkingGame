@@ -35,7 +35,7 @@ namespace Bomberman.Net
         private bool _isClient = false;
 
         private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(1.0);
-        private static readonly TimeSpan TimeoutThreshold = TimeSpan.FromSeconds(5.0);
+        private static readonly TimeSpan TimeoutThreshold = TimeSpan.FromSeconds(60.0); // Increased to support long pauses/window drags
         private static readonly TimeSpan PingInterval = TimeSpan.FromSeconds(1.0);
 
         public int LastPingMs { get; private set; } = 0;
@@ -215,7 +215,7 @@ namespace Bomberman.Net
                 _transport.SendTo(packet, target);
                 
                 // Small delay to prevent UDP buffer overflow on sender/receiver?
-                // System.Threading.Thread.Sleep(1); 
+                System.Threading.Thread.Sleep(2); 
             }
             Console.WriteLine($"[Network] Sent StateSync to {target} in {totalChunks} chunks.");
         }
