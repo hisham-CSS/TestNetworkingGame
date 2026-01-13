@@ -153,7 +153,7 @@ namespace Bomberman.App.States
                    // We trust them.
                 }
             }
-            _previousKeyboardState = Keyboard.GetState();
+
         }
 
         public void Exit()
@@ -202,8 +202,8 @@ namespace Bomberman.App.States
         {
             if (_context.Network != null) _context.Network.Update();
 
-            var kState = Keyboard.GetState();
-            if (kState.IsKeyDown(Keys.Escape) && !_previousKeyboardState.IsKeyDown(Keys.Escape))
+            // Menu/Escape Check
+            if (_context.Input.IsMenuCancel())
             {
                 // Clean exit
                 if (_context.Network != null)
@@ -227,7 +227,7 @@ namespace Bomberman.App.States
                 return;
             }
 
-            if (kState.IsKeyDown(Keys.F1) && !_previousKeyboardState.IsKeyDown(Keys.F1))
+            if (_context.Input.IsDebugToggle())
             {
                 _showDebugOverlay = !_showDebugOverlay;
             }
@@ -235,11 +235,7 @@ namespace Bomberman.App.States
             // Fixed Update Loop
             _accumulator += gameTime.ElapsedGameTime.TotalSeconds;
 
-            // Input Latching
-            if (kState.IsKeyDown(Keys.Space) && !_previousKeyboardState.IsKeyDown(Keys.Space))
-            {
-                _pendingBombInput = true;
-            }
+            // Input Latching (Removed, handled by Service)
 
             // Synchronization Logic (Catch-Up & Slow-Down) - Client Only
             int maxSteps = 1;
@@ -257,7 +253,7 @@ namespace Bomberman.App.States
 
             while (_accumulator >= FixedTimeStep && stepsTaken < maxSteps)
             {
-                StepSimulation(kState);
+                StepSimulation();
                 _accumulator -= FixedTimeStep;
                 stepsTaken++;
                 
@@ -286,7 +282,7 @@ namespace Bomberman.App.States
                 // Force run remaining steps
                 while (stepsTaken < maxSteps)
                 {
-                     StepSimulation(kState);
+                     StepSimulation();
                      // Do NOT subtract accumulator, we are creating time from nothing (Catching up)
                      stepsTaken++;
                      
@@ -302,21 +298,15 @@ namespace Bomberman.App.States
             
             // Clamp accumulator if spiraling?
             if (_accumulator > FixedTimeStep * 2) _accumulator = FixedTimeStep;
-
-            _previousKeyboardState = kState;
         }
 
-        private void StepSimulation(KeyboardState keyboardState)
+        private void StepSimulation()
         {
-            // Capture Local Input
-            IntVector2 movement = IntVector2.Zero;
-            if (keyboardState.IsKeyDown(Keys.W) || keyboardState.IsKeyDown(Keys.Up)) movement.Y -= 1;
-            if (keyboardState.IsKeyDown(Keys.S) || keyboardState.IsKeyDown(Keys.Down)) movement.Y += 1;
-            if (keyboardState.IsKeyDown(Keys.A) || keyboardState.IsKeyDown(Keys.Left)) movement.X -= 1;
-            if (keyboardState.IsKeyDown(Keys.D) || keyboardState.IsKeyDown(Keys.Right)) movement.X += 1;
-
-            bool placeBomb = _pendingBombInput;
-            _pendingBombInput = false;
+            // Capture Local Input via Service
+            var input = _context.Input.GetGameInput(_localPlayerId);
+            
+            IntVector2 movement = input.Movement;
+            bool placeBomb = input.PlaceBomb; // Already pulsed by Service
 
              // Calculate explicit bomb target
              IntVector2 bombTarget = new IntVector2(0, 0);

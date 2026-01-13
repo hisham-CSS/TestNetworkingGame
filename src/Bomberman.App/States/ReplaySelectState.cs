@@ -15,10 +15,7 @@ namespace Bomberman.App.States
         private GameStateManager _manager;
         private List<string> _replayFiles = new List<string>();
         private int _selection = 0;
-        private bool _prevDown;
-        private bool _prevUp;
-        private bool _prevEnter;
-        private bool _prevEsc;
+
 
         public ReplaySelectState(GameContext context, GameStateManager manager)
         {
@@ -29,12 +26,6 @@ namespace Bomberman.App.States
         public void Enter()
         {
             Console.WriteLine("[ReplaySelectState] Enter");
-            
-            var kState = Keyboard.GetState();
-            _prevDown = kState.IsKeyDown(Keys.Down);
-            _prevUp = kState.IsKeyDown(Keys.Up);
-            _prevEnter = kState.IsKeyDown(Keys.Enter);
-            _prevEsc = kState.IsKeyDown(Keys.Escape);
 
             string replayDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Replays");
             if (Directory.Exists(replayDir))
@@ -53,22 +44,20 @@ namespace Bomberman.App.States
 
         public void Update(GameTime gameTime)
         {
-            var kState = Keyboard.GetState();
-
-            bool down = kState.IsKeyDown(Keys.Down);
-            bool up = kState.IsKeyDown(Keys.Up);
-            bool enter = kState.IsKeyDown(Keys.Enter);
-            bool esc = kState.IsKeyDown(Keys.Escape);
+            bool down = _context.Input.IsMenuDown();
+            bool up = _context.Input.IsMenuUp();
+            bool enter = _context.Input.IsMenuSelect();
+            bool esc = _context.Input.IsMenuCancel();
 
             if (_replayFiles.Count > 0)
             {
-                if (down && !_prevDown) _selection++;
-                if (up && !_prevUp) _selection--;
+                if (down) _selection++;
+                if (up) _selection--;
 
                 if (_selection < 0) _selection = _replayFiles.Count - 1;
                 if (_selection >= _replayFiles.Count) _selection = 0;
 
-                if (enter && !_prevEnter)
+                if (enter)
                 {
                     string selectedFile = _replayFiles[_selection];
                     Console.WriteLine($"Loading Replay: {selectedFile}");
@@ -79,15 +68,10 @@ namespace Bomberman.App.States
                 }
             }
             
-            if (esc && !_prevEsc)
+            if (esc)
             {
                 _manager.ChangeState(_context.StateFactory.CreateMenu());
             }
-
-            _prevDown = down;
-            _prevUp = up;
-            _prevEnter = enter;
-            _prevEsc = esc;
         }
 
         public void Draw(GameTime gameTime)

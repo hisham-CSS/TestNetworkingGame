@@ -39,6 +39,7 @@ namespace Bomberman.App.GameHost
 
         protected override void Update(GameTime gameTime)
         {
+            _context.Input.Update();
             _stateManager.Update(gameTime);
             base.Update(gameTime);
         }

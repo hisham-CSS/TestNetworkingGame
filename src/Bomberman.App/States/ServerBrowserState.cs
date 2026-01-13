@@ -21,7 +21,7 @@ namespace Bomberman.App.States
     {
         private GameContext _context;
         private GameStateManager _manager;
-        private KeyboardState _prevKeyboard;
+
 
         private List<ServerInfo> _servers = new List<ServerInfo>();
         private int _selectedIndex = 0;
@@ -48,7 +48,6 @@ namespace Bomberman.App.States
             }
 
             _context.Network.OnDiscoveryResponseReceived += HandleDiscoveryResponse;
-            _prevKeyboard = Keyboard.GetState();
             
             // Initial Broadcast
             BroadcastDiscovery();
@@ -108,9 +107,7 @@ namespace Bomberman.App.States
             _servers.RemoveAll(s => (DateTime.Now - s.LastSeen).TotalSeconds > 5);
             if (_selectedIndex >= _servers.Count) _selectedIndex = Math.Max(0, _servers.Count - 1);
 
-            var kState = Keyboard.GetState();
-
-            if (kState.IsKeyDown(Keys.Escape) && !_prevKeyboard.IsKeyDown(Keys.Escape))
+            if (_context.Input.IsMenuCancel())
             {
                 // Back to Menu
                 // If we created the NetworkController just for browsing, maybe we should keep it?
@@ -127,25 +124,25 @@ namespace Bomberman.App.States
 
             if (_servers.Count > 0)
             {
-                if (kState.IsKeyDown(Keys.Up) && !_prevKeyboard.IsKeyDown(Keys.Up))
+                if (_context.Input.IsMenuUp())
                 {
                     _selectedIndex--;
                     if (_selectedIndex < 0) _selectedIndex = _servers.Count - 1;
                 }
-                if (kState.IsKeyDown(Keys.Down) && !_prevKeyboard.IsKeyDown(Keys.Down))
+                if (_context.Input.IsMenuDown())
                 {
                     _selectedIndex++;
                     if (_selectedIndex >= _servers.Count) _selectedIndex = 0;
                 }
 
-                if (kState.IsKeyDown(Keys.Enter) && !_prevKeyboard.IsKeyDown(Keys.Enter))
+                if (_context.Input.IsMenuSelect())
                 {
                     JoinSelectedServer();
                 }
             }
-
-            _prevKeyboard = kState;
         }
+
+
 
         private void JoinSelectedServer()
         {

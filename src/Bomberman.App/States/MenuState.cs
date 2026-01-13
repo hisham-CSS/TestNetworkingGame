@@ -12,7 +12,7 @@ namespace Bomberman.App.States
     {
         private GameContext _context;
         private GameStateManager _manager;
-        private KeyboardState _prevKeyboard;
+
         
         private string? _message;
 
@@ -26,7 +26,7 @@ namespace Bomberman.App.States
         public void Enter()
         {
             Console.WriteLine("[MenuState] Enter");
-            _prevKeyboard = Keyboard.GetState();
+            // _prevKeyboard managed by InputService
             // Clean up any existing network session when returning to Menu
             if (_context.Network != null)
             {
@@ -42,9 +42,7 @@ namespace Bomberman.App.States
 
         public void Update(GameTime gameTime)
         {
-            var kState = Keyboard.GetState();
-
-            if (IsNewKeyPress(kState, Keys.H))
+            if (_context.Input.IsGameHost())
             {
                 // HOST
                 _context.Network?.Close();
@@ -54,29 +52,25 @@ namespace Bomberman.App.States
                 _manager.ChangeState(_context.StateFactory.CreateLobby(true, null));
             }
             
-            if (IsNewKeyPress(kState, Keys.J))
+            
+            if (_context.Input.IsGameJoin())
             {
                 // JOIN (Server Browser)
                 _context.Network?.Close();
                 _manager.ChangeState(_context.StateFactory.CreateServerBrowser());
             }
 
-            if (IsNewKeyPress(kState, Keys.R))
+            if (_context.Input.IsGameReplay())
             {
                 _manager.ChangeState(_context.StateFactory.CreateReplaySelect());
             }
 
-            if (IsNewKeyPress(kState, Keys.Escape))
+            if (_context.Input.IsMenuCancel())
             {
                 _context.Game.Exit();
             }
 
-            _prevKeyboard = kState;
-        }
-
-        private bool IsNewKeyPress(KeyboardState current, Keys key)
-        {
-            return current.IsKeyDown(key) && !_prevKeyboard.IsKeyDown(key);
+            // _prevKeyboard managed by InputService
         }
 
         public void Draw(GameTime gameTime)
