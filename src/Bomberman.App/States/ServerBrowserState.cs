@@ -40,7 +40,7 @@ namespace Bomberman.App.States
 
         public void Enter()
         {
-            Console.WriteLine("[ServerBrowser] Entering...");
+            _context.Logger.Info("[ServerBrowser] Entering...");
             // Ensure NetworkController exists for discovery
             if (_context.Network == null)
             {
@@ -55,7 +55,7 @@ namespace Bomberman.App.States
 
         public void Exit()
         {
-            Console.WriteLine("[ServerBrowser] Exiting...");
+            _context.Logger.Info("[ServerBrowser] Exiting...");
             if (_context.Network != null)
             {
                 _context.Network.OnDiscoveryResponseReceived -= HandleDiscoveryResponse;
@@ -64,7 +64,7 @@ namespace Bomberman.App.States
 
         private void BroadcastDiscovery()
         {
-            Console.WriteLine("[ServerBrowser] Broadcasting Discovery Request...");
+            _context.Logger.Info("[ServerBrowser] Broadcasting Discovery Request...");
             _context.Network?.BroadcastDiscoveryRequest(StartPort, EndPort);
             _lastBroadcastTime = DateTime.Now;
         }
@@ -90,7 +90,7 @@ namespace Bomberman.App.States
                     MaxPlayers = max,
                     LastSeen = DateTime.Now
                 });
-                Console.WriteLine($"[ServerBrowser] Found Server: {name} at {sender}");
+                _context.Logger.Info($"[ServerBrowser] Found Server: {name} at {sender}");
             }
         }
 
@@ -149,7 +149,7 @@ namespace Bomberman.App.States
             if (_selectedIndex < 0 || _selectedIndex >= _servers.Count) return;
 
             var target = _servers[_selectedIndex];
-            Console.WriteLine($"[ServerBrowser] Joining {target.Name} ({target.Endpoint})...");
+            _context.Logger.Info($"[ServerBrowser] Joining {target.Name} ({target.Endpoint})...");
 
             // Transition to Lobby as Client
             // We reuse the current NetworkController which is bound to a random port

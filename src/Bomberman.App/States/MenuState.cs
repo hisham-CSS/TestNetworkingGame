@@ -33,7 +33,7 @@ namespace Bomberman.App.States
 
         public void Enter()
         {
-            Console.WriteLine("[MenuState] Enter");
+            _context.Logger.Info("[MenuState] Enter");
             if (_context.Network != null)
             {
                 _context.Network.Close();
@@ -44,7 +44,7 @@ namespace Bomberman.App.States
 
         public void Exit()
         {
-            Console.WriteLine("[MenuState] Exit");
+            _context.Logger.Info("[MenuState] Exit");
         }
 
         public void Update(GameTime gameTime)

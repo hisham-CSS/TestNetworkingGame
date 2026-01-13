@@ -15,10 +15,11 @@ namespace Bomberman.App.States
         public PixelFont Font { get; set; }
         public IInputService Input { get; set; }
         public IRenderer Renderer { get; set; }
+        public Core.Logging.ILogger Logger { get; set; }
         public StateFactory StateFactory { get; set; } = null!;
         public bool EnableDebugLogs { get; set; } = true;
 
-        public GameContext(Game1 game, SpriteBatch spriteBatch, Texture2D pixelTexture, PixelFont font, IInputService input, IRenderer renderer)
+        public GameContext(Game1 game, SpriteBatch spriteBatch, Texture2D pixelTexture, PixelFont font, IInputService input, IRenderer renderer, Core.Logging.ILogger logger)
         {
             Game = game;
             SpriteBatch = spriteBatch;
@@ -26,6 +27,7 @@ namespace Bomberman.App.States
             Font = font;
             Input = input;
             Renderer = renderer;
+            Logger = logger;
         }
     }
 }

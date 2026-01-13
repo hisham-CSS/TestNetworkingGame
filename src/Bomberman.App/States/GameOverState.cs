@@ -31,7 +31,7 @@ namespace Bomberman.App.States
 
         public void Enter()
         {
-            Console.WriteLine($"[GameOver] Winner: {_winnerId} (ReplayView={_isReplayView})");
+            _context.Logger.Info($"[GameOver] Winner: {_winnerId} (ReplayView={_isReplayView})");
             _prevKeyboard = Keyboard.GetState();
         }
 
@@ -115,11 +115,11 @@ namespace Bomberman.App.States
 
                 string fullPath = Path.Combine(replayDir, filename);
                 _session.SaveReplay(fullPath);
-                Console.WriteLine($"Replay Saved: {fullPath}");
+                _context.Logger.Info($"Replay Saved: {fullPath}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to save replay: {ex.Message}");
+                _context.Logger.Error($"Failed to save replay: {ex.Message}", ex);
             }
 
             if (_context.Network != null)

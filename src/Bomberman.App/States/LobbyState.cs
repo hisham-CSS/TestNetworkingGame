@@ -60,7 +60,7 @@ namespace Bomberman.App.States
 
         public void Enter()
         {
-            Console.WriteLine($"[LobbyState] Enter. Host={_isHost}");
+            _context.Logger.Info($"[LobbyState] Enter. Host={_isHost}");
             _prevKeyboard = Keyboard.GetState();
 
             if (_context.Network != null)
@@ -79,14 +79,14 @@ namespace Bomberman.App.States
             {
                 // Client: Send initial join request
                 _context.Network?.SendJoinRequest();
-                Console.WriteLine("Sent Join Request...");
+                _context.Logger.Info("Sent Join Request...");
                 _joinRetryTimer = 1.0f;
             }
         }
 
         public void Exit()
         {
-             Console.WriteLine("[LobbyState] Exit");
+             _context.Logger.Info("[LobbyState] Exit");
              if (_context.Network != null)
              {
                  _context.Network.OnJoinRequestRaw -= HandleJoinRequest;
@@ -104,12 +104,12 @@ namespace Bomberman.App.States
         {
              if (!_isHost)
              {
-                 Console.WriteLine($"[Lobby] Host Disconnected: {reason}");
+                 _context.Logger.Info($"[Lobby] Host Disconnected: {reason}");
                  ReturnToMenu(reason);
              }
              else
              {
-                  Console.WriteLine($"[Lobby] Client {sender} Disconnected: {reason}");
+                  _context.Logger.Info($"[Lobby] Client {sender} Disconnected: {reason}");
                   
                   // Find and remove from slot
                   for(int i=1; i<4; i++) // Slot 0 is Host, ignore
@@ -185,7 +185,7 @@ namespace Bomberman.App.States
                 if (_joinRetryTimer <= 0)
                 {
                     _context.Network.SendJoinRequest();
-                    Console.WriteLine("Resending Join Request...");
+                    _context.Logger.Info("Resending Join Request...");
                     _joinRetryTimer = 1.0f;
                 }
             }
@@ -257,7 +257,7 @@ namespace Bomberman.App.States
              
              try
              {
-                 Console.WriteLine($"[LobbyState] Received State Sync ({data.Length} bytes). Joining Game...");
+                 _context.Logger.Info($"[LobbyState] Received State Sync ({data.Length} bytes). Joining Game...");
                  
                  // 1. Create Game Session
                  var session = new GameSession(_localPlayerId, _totalPlayersForGame, _networkSeed);
@@ -274,7 +274,7 @@ namespace Bomberman.App.States
              }
              catch (Exception e)
              {
-                 Console.WriteLine($"[LobbyState] CRASH during State Sync: {e}");
+                 _context.Logger.Error($"[LobbyState] CRASH during State Sync: {e}", e);
                  ReturnToMenu($"Join Failed: {e.Message}");
              }
         }
@@ -307,7 +307,7 @@ namespace Bomberman.App.States
              if (existingSlot != -1)
              {
                  // Client is already connected (retry)
-                 Console.WriteLine($"[LobbyState] Resending Welcome to existing client in Slot {existingSlot} ({sender})");
+                 _context.Logger.Info($"[LobbyState] Resending Welcome to existing client in Slot {existingSlot} ({sender})");
                  
                  _context.Network.SendWelcome(sender, existingSlot, _networkSeed, _totalPlayersForGame);
                  _context.Network.SendLobbyReadyTo(sender, 0, _amIReady); 
@@ -360,11 +360,11 @@ namespace Bomberman.App.States
                         }
                     }
 
-                    Console.WriteLine($"Client Assigned to Slot {newId} ({sender})");
+                    _context.Logger.Info($"Client Assigned to Slot {newId} ({sender})");
                 }
                 else
                 {
-                    Console.WriteLine($"[LobbyState] Rejecting {sender}. No Slots Available or Lobby Full.");
+                    _context.Logger.Info($"[LobbyState] Rejecting {sender}. No Slots Available or Lobby Full.");
                     _context.Network.SendDisconnect(sender, "Lobby is Full");
                 }
             }
@@ -378,7 +378,7 @@ namespace Bomberman.App.States
                 _localPlayerId = assignedId;
                 _networkSeed = seed;
                 _totalPlayersForGame = totalPlayers;
-                Console.WriteLine($"Joined as Player {_localPlayerId}. seed={_networkSeed}");
+                _context.Logger.Info($"Joined as Player {_localPlayerId}. seed={_networkSeed}");
             }
         }
 

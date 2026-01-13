@@ -21,8 +21,14 @@ namespace Bomberman.App
             var font = new PixelFont(pixelTexture);
             var inputService = new MonogameInputService();
             var renderer = new RenderingService(graphicsDevice, spriteBatch, font, pixelTexture);
+            
+            // Logging
+            var logger = new Bomberman.Core.Logging.CompositeLogger(
+                new Bomberman.Core.Logging.ConsoleLogger(),
+                new Bomberman.Core.Logging.FileLogger("gamelog.txt")
+            );
 
-            return new GameContext(game, spriteBatch, pixelTexture, font, inputService, renderer);
+            return new GameContext(game, spriteBatch, pixelTexture, font, inputService, renderer, logger);
         }
     }
 }

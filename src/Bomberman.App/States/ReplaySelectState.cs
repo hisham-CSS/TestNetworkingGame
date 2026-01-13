@@ -28,7 +28,7 @@ namespace Bomberman.App.States
 
         public void Enter()
         {
-            Console.WriteLine("[ReplaySelectState] Enter");
+            _context.Logger.Info("[ReplaySelectState] Enter");
 
             string replayDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Replays");
             if (Directory.Exists(replayDir))
@@ -43,7 +43,7 @@ namespace Bomberman.App.States
 
         public void Exit()
         {
-            Console.WriteLine("[ReplaySelectState] Exit");
+            _context.Logger.Info("[ReplaySelectState] Exit");
         }
 
         public void Update(GameTime gameTime)
@@ -87,7 +87,7 @@ namespace Bomberman.App.States
                 if (enter)
                 {
                     string selectedFile = _replayFiles[_selection];
-                    Console.WriteLine($"Loading Replay: {selectedFile}");
+                    _context.Logger.Info($"Loading Replay: {selectedFile}");
                     
                     try 
                     {
@@ -96,7 +96,7 @@ namespace Bomberman.App.States
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"Failed to load replay: {ex.Message}");
+                        _context.Logger.Error($"Failed to load replay: {ex.Message}", ex);
                     }
                 }
             }
