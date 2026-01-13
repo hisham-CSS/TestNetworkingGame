@@ -158,21 +158,21 @@ namespace Bomberman.App.States
 
         public void Draw(GameTime gameTime)
         {
-            _context.Game.GraphicsDevice.Clear(Color.DarkSlateGray);
-            _context.SpriteBatch.Begin(samplerState: SamplerState.PointClamp);
+            _context.Renderer.ClearScreen(Color.DarkSlateGray);
+            _context.Renderer.BeginDraw();
 
             int centerX = _context.Game.GraphicsDevice.Viewport.Width / 2;
             int width = _context.Game.GraphicsDevice.Viewport.Width;
             
-            DrawCenteredText(_context.SpriteBatch, "SERVER BROWSER", centerX, 50, Color.White, 4); // Match Header Style
-            DrawCenteredText(_context.SpriteBatch, "Scanning LAN...", centerX, 100, Color.Gray, 2); // Simpler subtext
+            _context.Renderer.DrawTextCentered("SERVER BROWSER", centerX, 50, Color.White, 4); // Match Header Style
+            _context.Renderer.DrawTextCentered("Scanning LAN...", centerX, 100, Color.Gray, 2); // Simpler subtext
 
             int startY = 150;
             int lineHeight = 30; // Tighter gap
 
             if (_servers.Count == 0)
             {
-                DrawCenteredText(_context.SpriteBatch, "NO SERVERS FOUND...", centerX, startY, Color.Gray, 2);
+                _context.Renderer.DrawTextCentered("NO SERVERS FOUND...", centerX, startY, Color.Gray, 2);
             }
             else
             {
@@ -185,17 +185,11 @@ namespace Bomberman.App.States
                     if (selected) row = $"> {row} <";
                     
                     Color color = selected ? Color.Yellow : Color.White;
-                    DrawCenteredText(_context.SpriteBatch, row, centerX, startY + (i * lineHeight), color, 2);
+                    _context.Renderer.DrawTextCentered(row, centerX, startY + (i * lineHeight), color, 2);
                 }
             }
 
-            _context.SpriteBatch.End();
-        }
-
-        private void DrawCenteredText(SpriteBatch spriteBatch, string text, int x, int y, Color color, int scale)
-        {
-            var size = _context.Font.MeasureString(text, scale);
-            _context.Font.DrawText(spriteBatch, x - size.X / 2, y - size.Y / 2, text, color, scale);
+            _context.Renderer.EndDraw();
         }
     }
 }

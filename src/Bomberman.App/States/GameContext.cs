@@ -14,16 +14,18 @@ namespace Bomberman.App.States
         public Texture2D PixelTexture { get; set; }
         public PixelFont Font { get; set; }
         public IInputService Input { get; set; }
+        public IRenderer Renderer { get; set; }
         public StateFactory StateFactory { get; set; } = null!;
         public bool EnableDebugLogs { get; set; } = true;
 
-        public GameContext(Game1 game, SpriteBatch spriteBatch, Texture2D pixelTexture, PixelFont font, IInputService input)
+        public GameContext(Game1 game, SpriteBatch spriteBatch, Texture2D pixelTexture, PixelFont font, IInputService input, IRenderer renderer)
         {
             Game = game;
             SpriteBatch = spriteBatch;
             PixelTexture = pixelTexture;
             Font = font;
             Input = input;
+            Renderer = renderer;
         }
     }
 }

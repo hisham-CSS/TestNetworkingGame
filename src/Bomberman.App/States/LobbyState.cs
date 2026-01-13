@@ -425,27 +425,27 @@ namespace Bomberman.App.States
 
         public void Draw(GameTime gameTime)
         {
-             _context.Game.GraphicsDevice.Clear(Color.CornflowerBlue);
-             _context.SpriteBatch.Begin(samplerState: Microsoft.Xna.Framework.Graphics.SamplerState.PointClamp);
+             _context.Renderer.ClearScreen(Color.CornflowerBlue);
+             _context.Renderer.BeginDraw();
 
              int centerX = _context.Game.GraphicsDevice.Viewport.Width / 2;
              
              // If client and waiting for welcome (local ID -1), show connecting
              if (!_isHost && _localPlayerId == -1)
              {
-                 DrawCenteredText(_context.SpriteBatch, "CONNECTING...", centerX, 300, Color.White, 4);
-                 _context.SpriteBatch.End();
+                 _context.Renderer.DrawTextCentered("CONNECTING...", centerX, 300, Color.White, 4);
+                 _context.Renderer.EndDraw();
                  return;
              }
 
-             DrawCenteredText(_context.SpriteBatch, "LOBBY", centerX, 30, Color.Red, 8);
+             _context.Renderer.DrawTextCentered("LOBBY", centerX, 30, Color.Red, 8);
              
-             DrawCenteredText(_context.SpriteBatch, $"PLAYERS: {_connectedPlayerCount} / {_totalPlayersForGame}", centerX, 70, Color.White, 3);
+             _context.Renderer.DrawTextCentered($"PLAYERS: {_connectedPlayerCount} / {_totalPlayersForGame}", centerX, 70, Color.White, 3);
              
              // Instructions
              if (_isHost)
              {
-                 DrawCenteredText(_context.SpriteBatch, "ADJUST PLAYER COUNT:  [2]   [3]   [4]", centerX, 100, Color.Yellow, 2);
+                 _context.Renderer.DrawTextCentered("ADJUST PLAYER COUNT:  [2]   [3]   [4]", centerX, 100, Color.Yellow, 2);
              }
              
              // Slots
@@ -473,7 +473,7 @@ namespace Bomberman.App.States
                      slotInfo += "EMPTY";
                  }
                  
-                 DrawCenteredText(_context.SpriteBatch, slotInfo, centerX, startY + (i*slotHeight), c, 2);
+                 _context.Renderer.DrawTextCentered(slotInfo, centerX, startY + (i*slotHeight), c, 2);
              }
 
              // Footer Controls
@@ -503,23 +503,12 @@ namespace Bomberman.App.States
                     statusMsg = "WAITING FOR PLAYERS TO READY UP...";
             }
              
-             DrawCenteredText(_context.SpriteBatch, statusMsg, centerX, 350, statusColor, 2);
+             _context.Renderer.DrawTextCentered(statusMsg, centerX, 350, statusColor, 2);
 
              string readyMsg = _amIReady ? "PRESS [SPACE] TO UNREADY" : "PRESS [SPACE] TO READY UP";
-             DrawCenteredText(_context.SpriteBatch, readyMsg, centerX, 400, _amIReady ? Color.Cyan : Color.Magenta, 2);
+             _context.Renderer.DrawTextCentered(readyMsg, centerX, 400, _amIReady ? Color.Cyan : Color.Magenta, 2);
 
-             _context.SpriteBatch.End();
-        }
-
-        private void DrawCenteredText(SpriteBatch spriteBatch, string text, int x, int y, Color color, int scale)
-        {
-            var size = _context.Font.MeasureString(text, scale);
-            _context.Font.DrawText(spriteBatch, x - size.X / 2, y - size.Y / 2, text, color, scale);
-        }
-
-        private void DrawText(string text, Vector2 position, int scale, Color color)
-        {
-            _context.Font.DrawText(_context.SpriteBatch, (int)position.X, (int)position.Y, text, color, scale);
+             _context.Renderer.EndDraw();
         }
     }
 }

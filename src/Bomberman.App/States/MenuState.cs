@@ -99,12 +99,12 @@ namespace Bomberman.App.States
 
         public void Draw(GameTime gameTime)
         {
-            _context.Game.GraphicsDevice.Clear(Color.CornflowerBlue);
-            _context.SpriteBatch.Begin(samplerState: SamplerState.PointClamp);
+            _context.Renderer.ClearScreen(Color.CornflowerBlue);
+            _context.Renderer.BeginDraw();
 
             int centerX = _context.Game.GraphicsDevice.Viewport.Width / 2;
             // Title
-            DrawCenteredText(_context.SpriteBatch, "BOMBERMAN", centerX, 80, Color.White, 8);
+            _context.Renderer.DrawTextCentered("BOMBERMAN", centerX, 80, Color.White, 8);
             
             // Menu
             int startY = 220;
@@ -117,25 +117,19 @@ namespace Bomberman.App.States
                 string text = _menuOptions[i];
                 if (selected) text = $"> {text} <";
                 
-                DrawCenteredText(_context.SpriteBatch, text, centerX, startY + (i * gap), color, 2);
+                _context.Renderer.DrawTextCentered(text, centerX, startY + (i * gap), color, 2);
             }
             
             // Message
             if (!string.IsNullOrEmpty(_message))
             {
-                DrawCenteredText(_context.SpriteBatch, _message, centerX, 380, Color.OrangeRed, 2);
+                _context.Renderer.DrawTextCentered(_message, centerX, 380, Color.OrangeRed, 2);
             }
             
             // Controls Hint
-            DrawCenteredText(_context.SpriteBatch, "[UP/DOWN] Select   [ENTER] Confirm", centerX, 400, Color.LightGray, 1);
+            _context.Renderer.DrawTextCentered("[UP/DOWN] Select   [ENTER] Confirm", centerX, 400, Color.LightGray, 1);
 
-            _context.SpriteBatch.End();
-        }
-
-        private void DrawCenteredText(SpriteBatch spriteBatch, string text, int x, int y, Color color, int scale)
-        {
-            var size = _context.Font.MeasureString(text, scale);
-            _context.Font.DrawText(spriteBatch, x - size.X / 2, y - size.Y / 2, text, color, scale);
+            _context.Renderer.EndDraw();
         }
     }
 }

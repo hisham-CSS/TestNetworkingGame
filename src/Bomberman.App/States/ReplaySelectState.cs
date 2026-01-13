@@ -109,18 +109,18 @@ namespace Bomberman.App.States
 
         public void Draw(GameTime gameTime)
         {
-            _context.Game.GraphicsDevice.Clear(Color.Black);
-            _context.SpriteBatch.Begin(samplerState: SamplerState.PointClamp);
+            _context.Renderer.ClearScreen(Color.Black);
+            _context.Renderer.BeginDraw();
 
             int centerX = _context.Game.GraphicsDevice.Viewport.Width / 2;
             int startY = 80;
             int gap = 30;
 
-            DrawCenteredText(_context.SpriteBatch, "REPLAYS", centerX, 30, Color.White, 4);
+            _context.Renderer.DrawTextCentered("REPLAYS", centerX, 30, Color.White, 4);
 
             if (_replayFiles.Count == 0)
             {
-                DrawCenteredText(_context.SpriteBatch, "No Replays Found", centerX, startY, Color.Gray, 2);
+                _context.Renderer.DrawTextCentered("No Replays Found", centerX, startY, Color.Gray, 2);
             }
             else
             {
@@ -139,24 +139,18 @@ namespace Bomberman.App.States
                     // index for drawing position (0 to MaxVisibleItems-1)
                     int drawIndex = i - _scrollOffset;
                     
-                    DrawCenteredText(_context.SpriteBatch, text, centerX, startY + (drawIndex * gap), color, 2);
+                    _context.Renderer.DrawTextCentered(text, centerX, startY + (drawIndex * gap), color, 2);
                 }
                 
                 // Scroll Indicators
                 if (_scrollOffset > 0)
-                    DrawCenteredText(_context.SpriteBatch, "^", centerX, startY - 20, Color.Gray, 1);
+                    _context.Renderer.DrawTextCentered("^", centerX, startY - 20, Color.Gray, 1);
                 
                 if (_scrollOffset + itemsToShow < _replayFiles.Count)
-                    DrawCenteredText(_context.SpriteBatch, "v", centerX, startY + (itemsToShow * gap), Color.Gray, 1);
+                    _context.Renderer.DrawTextCentered("v", centerX, startY + (itemsToShow * gap), Color.Gray, 1);
             }
 
-            _context.SpriteBatch.End();
-        }
-
-        private void DrawCenteredText(SpriteBatch spriteBatch, string text, int x, int y, Color color, int scale)
-        {
-            var size = _context.Font.MeasureString(text, scale);
-            _context.Font.DrawText(spriteBatch, x - size.X / 2, y - size.Y / 2, text, color, scale);
+            _context.Renderer.EndDraw();
         }
     }
 }

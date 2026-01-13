@@ -31,7 +31,7 @@ namespace Bomberman.Tests
             // PromptState only uses them in Draw().
             // Enter() and Update() only use Input.
             
-            _context = new GameContext(null, null, null, null, _input);
+            _context = new GameContext(null, null, null, null, _input, new Mocks.MockRenderer());
             _manager = new GameStateManager();
         }
 

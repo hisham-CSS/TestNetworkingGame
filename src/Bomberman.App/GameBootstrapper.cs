@@ -20,8 +20,9 @@ namespace Bomberman.App
             // Services
             var font = new PixelFont(pixelTexture);
             var inputService = new MonogameInputService();
+            var renderer = new RenderingService(graphicsDevice, spriteBatch, font, pixelTexture);
 
-            return new GameContext(game, spriteBatch, pixelTexture, font, inputService);
+            return new GameContext(game, spriteBatch, pixelTexture, font, inputService, renderer);
         }
     }
 }
