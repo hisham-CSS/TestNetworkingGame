@@ -1,10 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Net;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Input;
 using Microsoft.Xna.Framework.Graphics;
 using Bomberman.Net;
+using Bomberman.App.Input;
 
 namespace Bomberman.App.States
 {
@@ -12,9 +11,18 @@ namespace Bomberman.App.States
     {
         private GameContext _context;
         private GameStateManager _manager;
-
         
         private string? _message;
+        
+        // Navigation
+        private int _selectedIndex = 0;
+        private string[] _menuOptions = new string[] 
+        { 
+            "HOST GAME", 
+            "JOIN GAME", 
+            "REPLAYS", 
+            "EXIT" 
+        };
 
         public MenuState(GameContext context, GameStateManager manager, string? message = null)
         {
@@ -26,13 +34,12 @@ namespace Bomberman.App.States
         public void Enter()
         {
             Console.WriteLine("[MenuState] Enter");
-            // _prevKeyboard managed by InputService
-            // Clean up any existing network session when returning to Menu
             if (_context.Network != null)
             {
                 _context.Network.Close();
                 _context.Network = null;
             }
+            _selectedIndex = 0;
         }
 
         public void Exit()
@@ -42,35 +49,52 @@ namespace Bomberman.App.States
 
         public void Update(GameTime gameTime)
         {
-            if (_context.Input.IsGameHost())
+            // Navigation
+            if (_context.Input.IsMenuUp())
             {
-                // HOST
-                _context.Network?.Close();
-                _context.Network = new NetworkController(new UdpTransport(5000));
-                
-                // Host starts Lobby directly
-                _manager.ChangeState(_context.StateFactory.CreateLobby(true, null));
+                _selectedIndex--;
+                if (_selectedIndex < 0) _selectedIndex = _menuOptions.Length - 1;
             }
-            
-            
-            if (_context.Input.IsGameJoin())
+            else if (_context.Input.IsMenuDown())
             {
-                // JOIN (Server Browser)
-                _context.Network?.Close();
-                _manager.ChangeState(_context.StateFactory.CreateServerBrowser());
+                _selectedIndex++;
+                if (_selectedIndex >= _menuOptions.Length) _selectedIndex = 0;
             }
 
-            if (_context.Input.IsGameReplay())
+            // Selection
+            if (_context.Input.IsMenuSelect())
             {
-                _manager.ChangeState(_context.StateFactory.CreateReplaySelect());
+                ExecuteSelection();
             }
 
+            // Legacy H/J/R Hotkeys (Optional: Keep or Remove? Removing for consistency)
+            // ESC
             if (_context.Input.IsMenuCancel())
             {
-                _context.Game.Exit();
+                _context.Game.Exit(); // Exit on ESC from Main Menu
             }
+        }
 
-            // _prevKeyboard managed by InputService
+        private void ExecuteSelection()
+        {
+            switch (_selectedIndex)
+            {
+                case 0: // HOST
+                    _context.Network?.Close();
+                    _context.Network = new NetworkController(new UdpTransport(5000));
+                    _manager.ChangeState(_context.StateFactory.CreateLobby(true, null));
+                    break;
+                case 1: // JOIN
+                    _context.Network?.Close();
+                    _manager.ChangeState(_context.StateFactory.CreateServerBrowser());
+                    break;
+                case 2: // REPLAYS
+                    _manager.ChangeState(_context.StateFactory.CreateReplaySelect());
+                    break;
+                case 3: // EXIT
+                    _context.Game.Exit();
+                    break;
+            }
         }
 
         public void Draw(GameTime gameTime)
@@ -79,22 +103,31 @@ namespace Bomberman.App.States
             _context.SpriteBatch.Begin(samplerState: SamplerState.PointClamp);
 
             int centerX = _context.Game.GraphicsDevice.Viewport.Width / 2;
-            int centerY = _context.Game.GraphicsDevice.Viewport.Height / 2;
-
-            DrawCenteredText(_context.SpriteBatch, "BOMBERMAN", centerX, 100, Color.White, 8);
+            // Title
+            DrawCenteredText(_context.SpriteBatch, "BOMBERMAN", centerX, 80, Color.White, 8);
             
-            int startY = 300;
-            int gap = 50;
+            // Menu
+            int startY = 220;
+            int gap = 30;
 
-            DrawCenteredText(_context.SpriteBatch, "Press [H] to HOST Game", centerX, startY, Color.Yellow, 2);
-            DrawCenteredText(_context.SpriteBatch, "Press [J] to JOIN Game (Browser)", centerX, startY + gap, Color.Green, 2);
-            DrawCenteredText(_context.SpriteBatch, "Press [R] for REPLAYS", centerX, startY + gap * 2, Color.Cyan, 2);
-            DrawCenteredText(_context.SpriteBatch, "Press [ESC] to Quit", centerX, startY + gap * 3, Color.Red, 2);
+            for (int i = 0; i < _menuOptions.Length; i++)
+            {
+                bool selected = (i == _selectedIndex);
+                Color color = selected ? Color.Yellow : Color.White;
+                string text = _menuOptions[i];
+                if (selected) text = $"> {text} <";
+                
+                DrawCenteredText(_context.SpriteBatch, text, centerX, startY + (i * gap), color, 2);
+            }
             
+            // Message
             if (!string.IsNullOrEmpty(_message))
             {
-                DrawCenteredText(_context.SpriteBatch, _message, centerX, 500, Color.OrangeRed, 2);
+                DrawCenteredText(_context.SpriteBatch, _message, centerX, 380, Color.OrangeRed, 2);
             }
+            
+            // Controls Hint
+            DrawCenteredText(_context.SpriteBatch, "[UP/DOWN] Select   [ENTER] Confirm", centerX, 400, Color.LightGray, 1);
 
             _context.SpriteBatch.End();
         }

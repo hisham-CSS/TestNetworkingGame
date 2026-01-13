@@ -164,15 +164,15 @@ namespace Bomberman.App.States
             int centerX = _context.Game.GraphicsDevice.Viewport.Width / 2;
             int width = _context.Game.GraphicsDevice.Viewport.Width;
             
-            DrawCenteredText(_context.SpriteBatch, "SERVER BROWSER", centerX, 50, Color.Gold, 4);
-            DrawCenteredText(_context.SpriteBatch, "Scanning LAN... (Press ESC to return)", centerX, 100, Color.Gray, 2);
+            DrawCenteredText(_context.SpriteBatch, "SERVER BROWSER", centerX, 50, Color.White, 4); // Match Header Style
+            DrawCenteredText(_context.SpriteBatch, "Scanning LAN...", centerX, 100, Color.Gray, 2); // Simpler subtext
 
-            int startY = 180;
-            int lineHeight = 40;
+            int startY = 150;
+            int lineHeight = 30; // Tighter gap
 
             if (_servers.Count == 0)
             {
-                DrawCenteredText(_context.SpriteBatch, "NO SERVERS FOUND...", centerX, startY, Color.White, 2);
+                DrawCenteredText(_context.SpriteBatch, "NO SERVERS FOUND...", centerX, startY, Color.Gray, 2);
             }
             else
             {
@@ -181,9 +181,8 @@ namespace Bomberman.App.States
                     var server = _servers[i];
                     bool selected = (i == _selectedIndex);
                     
-                    // Format: "Name  [X/Y]  IP"
-                    string row = $"{server.Name.ToUpper()}   [{server.Players}/{server.MaxPlayers}]   {server.Endpoint}";
-                    if (selected) row = $">  {row}  <";
+                    string row = $"{server.Name} [{server.Players}/{server.MaxPlayers}]";
+                    if (selected) row = $"> {row} <";
                     
                     Color color = selected ? Color.Yellow : Color.White;
                     DrawCenteredText(_context.SpriteBatch, row, centerX, startY + (i * lineHeight), color, 2);
