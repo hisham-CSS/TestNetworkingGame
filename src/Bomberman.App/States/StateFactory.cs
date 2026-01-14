@@ -1,6 +1,7 @@
 using System;
 using System.Net;
 using Bomberman.Core.Game;
+using Bomberman.Rollback;
 using Bomberman.App.States;
 
 namespace Bomberman.App.States

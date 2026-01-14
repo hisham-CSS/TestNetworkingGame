@@ -10,6 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Bomberman.Core\Bomberman.Core.csproj" />
     <ProjectReference Include="..\Bomberman.Net\Bomberman.Net.csproj" />
+    <ProjectReference Include="..\Bomberman.Rollback\Bomberman.Rollback.csproj" />
   </ItemGroup>
 
   <ItemGroup>

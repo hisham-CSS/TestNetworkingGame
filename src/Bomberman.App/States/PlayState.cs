@@ -7,7 +7,7 @@ using Bomberman.Core;
 using Bomberman.Core.Input;
 using Bomberman.Core.ECS.Components;
 using Bomberman.Core.Game;
-using Bomberman.Core.Rollback;
+using Bomberman.Rollback;
 using Bomberman.Net;
 
 namespace Bomberman.App.States
@@ -39,7 +39,7 @@ namespace Bomberman.App.States
         // Rate Limiting for StateSync
         private System.Collections.Generic.Dictionary<int, double> _lastSyncSent = new System.Collections.Generic.Dictionary<int, double>();
 
-        public PlayState(GameContext context, GameStateManager manager, int localPlayerId, int playerCount, int seed, IPEndPoint?[] lobbySlots = null)
+        public PlayState(GameContext context, GameStateManager manager, int localPlayerId, int playerCount, int seed, IPEndPoint?[]? lobbySlots = null)
         {
             _context = context;
             _manager = manager;

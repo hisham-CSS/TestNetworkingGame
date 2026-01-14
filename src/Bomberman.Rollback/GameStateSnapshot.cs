@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 using Bomberman.Core;
 
-namespace Bomberman.Core.Rollback
+namespace Bomberman.Rollback
 {
     /// <summary>
     /// Represents a complete capture of the game state at a specific frame.

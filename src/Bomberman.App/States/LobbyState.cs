@@ -6,7 +6,7 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Bomberman.Net;
 using Bomberman.Core.Game;
-using Bomberman.Core.Rollback;
+using Bomberman.Rollback;
 
 namespace Bomberman.App.States
 {

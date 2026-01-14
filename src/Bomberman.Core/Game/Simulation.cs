@@ -20,14 +20,15 @@ namespace Bomberman.Core.Game
         public Action<string>? Log; 
         
         /// <summary>Deterministic Random Number Generator.</summary>
-        public DeterministicRandom Rng { get; private set; }
+        public DeterministicRandom Rng { get; private set; } 
+        
+        /// <summary>Deterministic Random Number Generator.</summary>
+
 
         public const int SubpixelScale = 100; // 1 unit = 0.01 pixel
-        private const int MapWidth = 15;
-        private const int MapHeight = 13;
-        private const int TileSize = 32;
-        private const int ScaledTileSize = TileSize * SubpixelScale;
-        private const int PlayerSpeedPerFrame = 250; 
+        
+        private readonly GameConfig _config;
+        private int ScaledTileSize => _config.TileSize * SubpixelScale;
 
         // Systems
         private MovementSystem _movementSystem;
@@ -40,15 +41,26 @@ namespace Bomberman.Core.Game
         /// </summary>
         /// <param name="seed">Seed for Map Generation and RNG.</param>
         /// <param name="playerCount">Number of players to spawn.</param>
-        public Simulation(int seed, int playerCount)
+        /// <param name="config">Game configuration.</param>
+        public Simulation(int seed, int playerCount, GameConfig? config = null)
         {
+            _config = config ?? GameConfig.Default;
             World = new World();
             Rng = new DeterministicRandom(seed);
             
+            // Calculate speed per frame based on config (Speed is pixels/sec)
+            // Units/Frame = (Speed * Subpixel) * FixedTimeStep
+            // But Physics runs on fixed tick? Simulation doesn't enforce tick here, RollbackSystem does.
+            // Assuming FixedTimeStep is constant 1/60 for now in physics calculations or passed in?
+            // Existing code used const int PlayerSpeedPerFrame = 250; 
+            // Let's approximate: 250 means 2.5 pixels/frame? 2.5 * 60 = 150 px/sec.
+            // Config default is 120. Let's use formula.
+            int speedPerFrame = (int)(_config.PlayerSpeed * SubpixelScale * _config.FixedTimeStep);
+
             // Initialize Systems
-            _movementSystem = new MovementSystem(World, PlayerSpeedPerFrame);
+            _movementSystem = new MovementSystem(World, speedPerFrame);
             // Log hookup handled via property injection ideally, or pass lambda
-            _bombSystem = new BombSystem(World, MapWidth, MapHeight, ScaledTileSize, (msg) => Log?.Invoke(msg));
+            _bombSystem = new BombSystem(World, _config.MapWidth, _config.MapHeight, ScaledTileSize, (msg) => Log?.Invoke(msg));
             _explosionSystem = new ExplosionSystem(World, ScaledTileSize, SubpixelScale);
             _damageSystem = new DamageSystem(World, SubpixelScale);
 
@@ -60,9 +72,9 @@ namespace Bomberman.Core.Game
         {
             var random = Rng;
 
-            for (int y = 0; y < MapHeight; y++)
+            for (int y = 0; y < _config.MapHeight; y++)
             {
-                for (int x = 0; x < MapWidth; x++)
+                for (int x = 0; x < _config.MapWidth; x++)
                 {
                     Entity tile = World.CreateEntity();
                     var transform = new TransformComponent
@@ -75,7 +87,7 @@ namespace Bomberman.Core.Game
                     PowerupComponent.PowerupType hiddenPowerup = PowerupComponent.PowerupType.None;
 
                     // Borders
-                    if (y == 0 || y == MapHeight - 1 || x == 0 || x == MapWidth - 1)
+                    if (y == 0 || y == _config.MapHeight - 1 || x == 0 || x == _config.MapWidth - 1)
                         type = TileComponent.TileType.Solid;
                     else if (x % 2 == 0 && y % 2 == 0)
                         type = TileComponent.TileType.Solid;
@@ -96,8 +108,8 @@ namespace Bomberman.Core.Game
 
         private bool IsSpawnZone(int x, int y)
         {
-            if ((x <= 2 && y <= 2) || (x >= MapWidth - 3 && y <= 2) ||
-                (x <= 2 && y >= MapHeight - 3) || (x >= MapWidth - 3 && y >= MapHeight - 3))
+            if ((x <= 2 && y <= 2) || (x >= _config.MapWidth - 3 && y <= 2) ||
+                (x <= 2 && y >= _config.MapHeight - 3) || (x >= _config.MapWidth - 3 && y >= _config.MapHeight - 3))
                 return true;
             return false;
         }
@@ -107,15 +119,15 @@ namespace Bomberman.Core.Game
             var spawnPoints = new[]
             {
                 new IntVector2(1, 1),
-                new IntVector2(MapWidth - 2, 1),
-                new IntVector2(1, MapHeight - 2),
-                new IntVector2(MapWidth - 2, MapHeight - 2)
+                new IntVector2(_config.MapWidth - 2, 1),
+                new IntVector2(1, _config.MapHeight - 2),
+                new IntVector2(_config.MapWidth - 2, _config.MapHeight - 2)
             };
 
             for (int i = 0; i < count; i++) 
             {
                 var player = World.CreateEntity();
-                World.Players.Add(player, new PlayerComponent { PlayerId = (uint)i, Alive = true, BombRange = 1, BombCapacity = 1 });
+                World.Players.Add(player, new PlayerComponent { PlayerId = (uint)i, Alive = true, BombRange = _config.DefaultBombRange, BombCapacity = _config.InitialBombCapacity });
                 
                 int playerSize = 24 * SubpixelScale;
                 int startX = spawnPoints[i].X * ScaledTileSize + (ScaledTileSize - playerSize) / 2;

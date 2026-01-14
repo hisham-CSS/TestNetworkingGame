@@ -3,7 +3,7 @@ using NUnit.Framework;
 using System.Collections.Generic;
 using Bomberman.Core;
 using Bomberman.Core.ECS.Components;
-using Bomberman.Core.Rollback;
+using Bomberman.Rollback;
 using Bomberman.Net;
 
 namespace Bomberman.Tests

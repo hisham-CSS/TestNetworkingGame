@@ -3,10 +3,10 @@ using Bomberman.Core;
 
 
 
-using Bomberman.Core.Rollback;
+
 using Bomberman.Core.Game;
 
-namespace Bomberman.Core.Game
+namespace Bomberman.Rollback
 {
     /// <summary>
     /// Manages the high-level game session, including the rollback system and simulation state.

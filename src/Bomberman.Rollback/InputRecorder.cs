@@ -6,7 +6,7 @@ using System.Text.Json;
 
 using Bomberman.Core;
 
-namespace Bomberman.Core.Rollback
+namespace Bomberman.Rollback
 {
     /// <summary>
     /// Records and plays back input history for replays and rollback prediction.
@@ -72,6 +72,13 @@ namespace Bomberman.Core.Rollback
             _history.Clear();
         }
 
+        private readonly IReplayStorage? _storage;
+
+        public InputRecorder(IReplayStorage? storage = null)
+        {
+            _storage = storage;
+        }
+
         /// <summary>
         /// Saves the recorded history to a JSON file.
         /// </summary>
@@ -79,13 +86,6 @@ namespace Bomberman.Core.Rollback
         {
             try 
             {
-                // Ensure directory exists
-                var dir = Path.GetDirectoryName(path);
-                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                {
-                    Directory.CreateDirectory(dir);
-                }
-
                 var data = new ReplayData 
                 {
                     Seed = seed,
@@ -95,7 +95,22 @@ namespace Bomberman.Core.Rollback
 
                 var options = new JsonSerializerOptions { IncludeFields = true, WriteIndented = true };
                 string json = JsonSerializer.Serialize(data, options);
-                File.WriteAllText(path, json);
+                
+                if (_storage != null)
+                {
+                    _storage.Save(path, json);
+                }
+                else
+                {
+                    // Fallback to direct IO if no storage abstraction provided (Backwards compat)
+                    var dir = Path.GetDirectoryName(path);
+                    if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    {
+                        Directory.CreateDirectory(dir);
+                    }
+                    File.WriteAllText(path, json);
+                }
+
                 Console.WriteLine($"Saved replay to {path} ({_history.Count} frames)");
             }
             catch(Exception e)
@@ -144,16 +159,31 @@ namespace Bomberman.Core.Rollback
 
         public void Load(string path)
         {
-            if (!File.Exists(path)) 
+            string json = "";
+
+            if (_storage != null)
             {
-                Console.WriteLine($"Replay file not found: {path}");
-                return;
+                 if (!_storage.Exists(path))
+                 {
+                     Console.WriteLine($"Replay file not found (Storage): {path}");
+                     return;
+                 }
+                 json = _storage.Load(path);
+            }
+            else
+            {
+                if (!File.Exists(path)) 
+                {
+                    Console.WriteLine($"Replay file not found: {path}");
+                    return;
+                }
+                json = File.ReadAllText(path);
             }
             
             try
             {
                 var options = new JsonSerializerOptions { IncludeFields = true };
-                string json = File.ReadAllText(path);
+                // ... (rest of parsing)
                 
                 // Try deserialize as new format
                 try 
@@ -170,8 +200,7 @@ namespace Bomberman.Core.Rollback
                 }
                 catch
                 {
-                    // Fallback to old list format (optional, or just fail)
-                    // Assuming we want to support old replays minimally or just break them (this is dev phase so break is arguably fine, but clean check is better)
+                     // Fallback
                 }
 
                 // Fallback attempt for raw list

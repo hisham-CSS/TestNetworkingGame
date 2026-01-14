@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Net;
 using Bomberman.Core;
 using Bomberman.Core.Input;
-using Bomberman.Core.Rollback;
+using Bomberman.Rollback;
 using Bomberman.Net.Packets;
 
 namespace Bomberman.Net
@@ -50,22 +50,21 @@ namespace Bomberman.Net
         private DateTime _lastHeartbeatSent = DateTime.MinValue;
         private bool _isClient = false;
 
-        private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(1.0);
-        private static readonly TimeSpan TimeoutThreshold = TimeSpan.FromSeconds(60.0); // Increased to support long pauses/window drags
         private static readonly TimeSpan PingInterval = TimeSpan.FromSeconds(1.0);
+        
+        private readonly NetConfig _config;
 
         /// <summary>The last measured round-trip time in milliseconds.</summary>
         public int LastPingMs { get; private set; } = 0;
         private DateTime _lastPingSent = DateTime.MinValue;
 
-
-
         // Allow injecting mock transport for testing
         /// <summary>
         /// Initializes the NetworkController with the specified transport layer.
         /// </summary>
-        public NetworkController(ITransport transport)
+        public NetworkController(ITransport transport, NetConfig? config = null)
         {
+            _config = config ?? NetConfig.Default;
             _transport = transport;
             _transport.PacketReceived += HandlePacket;
         }
@@ -115,7 +114,7 @@ namespace Bomberman.Net
             _transport.Poll();
 
             // Heartbeat Logic
-            if (DateTime.Now - _lastHeartbeatSent > HeartbeatInterval)
+            if (DateTime.Now - _lastHeartbeatSent > TimeSpan.FromMilliseconds(_config.HeartbeatIntervalMs))
             {
                 var hb = NetworkProtocol.CreateHeartbeat();
                 if (_isClient)
@@ -156,7 +155,7 @@ namespace Bomberman.Net
             
             foreach(var kvp in _lastDataReceived)
             {
-                if (now - kvp.Value > TimeoutThreshold)
+                if (now - kvp.Value > TimeSpan.FromMilliseconds(_config.ConnectionTimeoutMs))
                 {
                     timedOut.Add(kvp.Key);
                 }
@@ -260,13 +259,13 @@ namespace Bomberman.Net
         public void SendStateSync(IPEndPoint target, byte[] snapshot)
         {
             // Chunking
-            const int CHUNK_SIZE = 1000; // Safe UDP payload size
-            int totalChunks = (int)Math.Ceiling(snapshot.Length / (double)CHUNK_SIZE);
+            int chunkSize = _config.ChunkSize;
+            int totalChunks = (int)Math.Ceiling(snapshot.Length / (double)chunkSize);
             
             for (int i = 0; i < totalChunks; i++)
             {
-                int offset = i * CHUNK_SIZE;
-                int len = Math.Min(CHUNK_SIZE, snapshot.Length - offset);
+                int offset = i * chunkSize;
+                int len = Math.Min(chunkSize, snapshot.Length - offset);
                 
                 byte[] chunkData = new byte[len];
                 Array.Copy(snapshot, offset, chunkData, 0, len);

@@ -3,7 +3,7 @@ using Bomberman.Core.Input;
 using System.Collections.Generic;
 using Bomberman.Core;
 
-namespace Bomberman.Core.Rollback
+namespace Bomberman.Rollback
 {
     /// <summary>
     /// Represents a packet of input information to be sent over the network.

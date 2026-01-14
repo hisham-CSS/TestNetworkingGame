@@ -1,5 +1,5 @@
 using NUnit.Framework;
-using Bomberman.Core.Rollback;
+using Bomberman.Rollback;
 using System;
 
 namespace Bomberman.Tests

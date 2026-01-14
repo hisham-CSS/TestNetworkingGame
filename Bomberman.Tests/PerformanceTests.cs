@@ -1,7 +1,7 @@
 using System;
 using System.Diagnostics;
 using NUnit.Framework;
-using Bomberman.Core.Rollback;
+using Bomberman.Rollback;
 using Bomberman.Core.Input;
 using Bomberman.Core;
 

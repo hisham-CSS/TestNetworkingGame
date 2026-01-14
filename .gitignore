@@ -10,3 +10,4 @@ msbuild.log
 debug_log_*.txt
 src/**/debug_log_*.txt
 gamelog.txt
+build_log.txt

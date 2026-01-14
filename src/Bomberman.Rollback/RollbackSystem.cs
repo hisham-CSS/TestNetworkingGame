@@ -9,7 +9,7 @@ using System.IO;
 
 using Bomberman.Core;
 
-namespace Bomberman.Core.Rollback
+namespace Bomberman.Rollback
 {
     /// <summary>
     /// The core Rollback Networking system.
@@ -41,9 +41,14 @@ namespace Bomberman.Core.Rollback
         private Dictionary<int, InputState> _lastConfirmedRemoteInputs = new Dictionary<int, InputState>();
         private Dictionary<int, int> _lastConfirmedRemoteFrame = new Dictionary<int, int>();
         
-        private const int MaxSnapshotFrames = 60 * 5; // 5 Seconds
-        private const int MaxPredictionFrames = 60 * 60 * 10; // 10 Hours (Effectively unlimited)
-        private const double FixedTimeStep = 1.0 / 60.0;
+        private readonly RollbackConfig _config;
+        private readonly GameConfig _gameConfig;
+        private readonly IRollbackTelemetry _telemetry;
+        private readonly IReplayStorage? _storage;
+        
+        private int MaxSnapshotFrames => _config.MaxSnapshotFrames;
+        private int MaxPredictionFrames => _config.MaxPredictionFrames;
+        private double FixedTimeStep => _gameConfig.FixedTimeStep;
         
         private int _totalPlayers;
         private int _localPlayerId;
@@ -55,11 +60,19 @@ namespace Bomberman.Core.Rollback
         /// </summary>
         /// <param name="localPlayerId">The ID of the local player (0 for host).</param>
         /// <param name="totalPlayers">Total players in session.</param>
-        public RollbackSystem(int localPlayerId, int totalPlayers)
+        /// <param name="config">Rollback configuration.</param>
+        /// <param name="gameConfig">Game configuration (for simulation).</param>
+        /// <param name="telemetry">Telemetry logger.</param>
+        /// <param name="storage">Replay storage provider.</param>
+        public RollbackSystem(int localPlayerId, int totalPlayers, RollbackConfig? config = null, GameConfig? gameConfig = null, IRollbackTelemetry? telemetry = null, IReplayStorage? storage = null)
         {
             _localPlayerId = localPlayerId;
             _totalPlayers = totalPlayers;
-            _recorder = new InputRecorder();
+            _config = config ?? RollbackConfig.Default;
+            _gameConfig = gameConfig ?? GameConfig.Default;
+            _telemetry = telemetry ?? new NoOpTelemetry();
+            _storage = storage;
+            _recorder = new InputRecorder(_storage);
         }
 
         public int GetLastConfirmedFrame(int playerId)
@@ -105,7 +118,7 @@ namespace Bomberman.Core.Rollback
         {
             _seed = seed;
             _totalPlayers = totalPlayers; // Update in case it changed (e.g. from replay)
-            Simulation = new Simulation(seed, totalPlayers);
+            Simulation = new Simulation(seed, totalPlayers, _gameConfig);
             // Save initial state (Frame -1) so we can rollback TO Frame 0
             _snapshotBuffer[-1] = new GameStateSnapshot(-1, Simulation.World);
             // Logger hookup can be done externally or passed in
@@ -119,7 +132,7 @@ namespace Bomberman.Core.Rollback
             _recorder.Load(path);
             if (_recorder.FrameCount > 0)
             {
-                Console.WriteLine($"Initializing Replay: Seed={_recorder.Seed}, Players={_recorder.TotalPlayers}");
+                _telemetry.Log($"Initializing Replay: Seed={_recorder.Seed}, Players={_recorder.TotalPlayers}");
                 InitializeSimulation(_recorder.Seed, _recorder.TotalPlayers);
                 IsReplaying = true;
                 IsRecording = false; // Don't record while replaying
@@ -127,7 +140,7 @@ namespace Bomberman.Core.Rollback
             }
             else
             {
-                Console.WriteLine("Replay failed to load or empty.");
+                _telemetry.LogError("Replay failed to load or empty.");
             }
         }
 
@@ -185,7 +198,7 @@ namespace Bomberman.Core.Rollback
 
             if (_localInputBuffer.ContainsKey(frameToSend))
             {
-                 int redundancy = 8;
+                 int redundancy = _config.RedundancyFactor;
                  var history = new List<InputState>();
                  history.Add(_localInputBuffer[frameToSend]); // Frame To Send Input
 
@@ -240,7 +253,7 @@ namespace Bomberman.Core.Rollback
             if (pid >= 0 && pid < _totalPlayers && !_disconnectedPlayers.Contains(pid))
             {
                 _disconnectedPlayers.Add(pid);
-                Console.WriteLine($"[Rollback] Player {pid} Disconnected. Switching to Auto-Input.");
+                _telemetry.LogWarning($"[Rollback] Player {pid} Disconnected. Switching to Auto-Input.");
             }
         }
 
@@ -260,7 +273,7 @@ namespace Bomberman.Core.Rollback
                  if (replayInputs == null || replayInputs.Length == 0)
                  {
                      IsReplayFinished = true;
-                     Console.WriteLine("[Rollback] Replay Finished (End of Input Stream).");
+                     _telemetry.Log("[Rollback] Replay Finished (End of Input Stream).");
                      return;
                  }
                  
@@ -521,7 +534,7 @@ namespace Bomberman.Core.Rollback
 
                             if (distSq > threshold) 
                             {
-                                Console.WriteLine($"[Sync] Correction! Frame {startFrame} Player {pid}. Local:{localPos} Remote:{remotePos}");
+                                _telemetry.Log($"[Sync] Correction! Frame {startFrame} Player {pid}. Local:{localPos} Remote:{remotePos}");
                                 var tf = transforms.components[tIndex];
                                 tf.Position = remotePos;
                                 transforms.components[tIndex] = tf; 
@@ -535,7 +548,7 @@ namespace Bomberman.Core.Rollback
                     int localHash = StateHasher.Hash(snap);
                     if (localHash != remoteHash)
                     {
-                        Console.WriteLine($"[Sync] CRITICAL DESYNC! Frame {startFrame} Player {pid}. LocalHash:{localHash} RemoteHash:{remoteHash} -> ROLLBACK");
+                        _telemetry.LogError($"[Sync] CRITICAL DESYNC! Frame {startFrame} Player {pid}. LocalHash:{localHash} RemoteHash:{remoteHash} -> ROLLBACK");
                         if (earliestMisprediction == -1 || startFrame < earliestMisprediction)
                             earliestMisprediction = startFrame;
                     }
@@ -554,7 +567,7 @@ namespace Bomberman.Core.Rollback
                 // Verify we actually CAN rollback to this frame
                 if (!_snapshotBuffer.ContainsKey(earliestMisprediction - 1))
                 {
-                    Console.WriteLine($"[Rollback] Request to rollback to {earliestMisprediction} but too old. Returning TooOld.");
+                    _telemetry.LogWarning($"[Rollback] Request to rollback to {earliestMisprediction} but too old. Returning TooOld.");
                     return InputResult.TooOld;
                 }
                 
@@ -572,11 +585,12 @@ namespace Bomberman.Core.Rollback
         /// <param name="mispredictedFrame">The frame number where the divergence occurred.</param>
         private void PerformRollback(int mispredictedFrame)
         {
-            Console.WriteLine($"ROLLBACK from frame {_currentFrame} to {mispredictedFrame}");
+            _telemetry.LogWarning($"ROLLBACK from frame {_currentFrame} to {mispredictedFrame}");
+            _telemetry.RecordRollback(_currentFrame, mispredictedFrame);
 
             if (!_snapshotBuffer.TryGetValue(mispredictedFrame - 1, out GameStateSnapshot? snapshot))
             {
-                Console.WriteLine($"!!! CRITICAL: Cannot rollback, no snapshot for frame {mispredictedFrame - 1}");
+                _telemetry.LogError($"!!! CRITICAL: Cannot rollback, no snapshot for frame {mispredictedFrame - 1}");
                 return;
             }
             

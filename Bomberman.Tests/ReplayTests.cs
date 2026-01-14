@@ -4,7 +4,7 @@ using Bomberman.Core.Input;
 using System.Collections.Generic;
 using Bomberman.Core;
 using Bomberman.Core.Game;
-using Bomberman.Core.Rollback;
+using Bomberman.Rollback;
 using Bomberman.Net;
 
 namespace Bomberman.Tests

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Bomberman.Core.Input;
 using Bomberman.Core;
-using Bomberman.Core.Rollback;
+using Bomberman.Rollback;
 using Bomberman.Net;
 
 namespace Bomberman.Tests

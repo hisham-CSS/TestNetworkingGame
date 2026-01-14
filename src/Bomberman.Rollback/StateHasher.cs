@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 using Bomberman.Core;
 
-namespace Bomberman.Core.Rollback
+namespace Bomberman.Rollback
 {
     /// <summary>
     /// Utility for calculating deterministic hashes of the game world or snapshots.
