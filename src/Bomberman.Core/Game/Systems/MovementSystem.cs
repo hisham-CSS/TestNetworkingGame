@@ -6,6 +6,9 @@ using Bomberman.Core;
 
 namespace Bomberman.Core.Game.Systems
 {
+    /// <summary>
+    /// System responsible for moving players based on input and handling collision detection with the map.
+    /// </summary>
     public class MovementSystem
     {
         private World _world;
@@ -17,6 +20,11 @@ namespace Bomberman.Core.Game.Systems
             _playerSpeedPerFrame = playerSpeedPerFrame;
         }
 
+        /// <summary>
+        /// Updates player positions based on their inputs.
+        /// Handles collision with solid blocks, destructible blocks, and bombs.
+        /// Also handles powerup collection.
+        /// </summary>
         public void Update(InputState[] inputs)
         {
             var players = _world.Players.GetAll();

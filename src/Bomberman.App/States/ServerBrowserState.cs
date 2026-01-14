@@ -8,6 +8,9 @@ using Bomberman.Net;
 
 namespace Bomberman.App.States
 {
+    /// <summary>
+    /// Helper class containing details about a discovered server.
+    /// </summary>
     public class ServerInfo
     {
         public required IPEndPoint Endpoint;
@@ -17,6 +20,10 @@ namespace Bomberman.App.States
         public DateTime LastSeen;
     }
 
+    /// <summary>
+    /// State for discovering LAN servers via UDP broadcast.
+    /// Lists available servers and allows joining.
+    /// </summary>
     public class ServerBrowserState : IGameState
     {
         private GameContext _context;

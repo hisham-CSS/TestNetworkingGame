@@ -3,6 +3,10 @@ using Bomberman.App.Rendering;
 
 namespace Bomberman.Tests.Mocks
 {
+    /// <summary>
+    /// Mock implementation of IRenderer.
+    /// Tracks draw calls for verification.
+    /// </summary>
     public class MockRenderer : IRenderer
     {
         public void BeginDraw() { }

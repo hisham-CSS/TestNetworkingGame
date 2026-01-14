@@ -2,11 +2,20 @@ namespace Bomberman.Core.Input;
 
 using Bomberman.Core; // For IntVector2
 
+/// <summary>
+/// Represents the input state for a single player for a specific frame.
+/// This struct is serialized and sent over the network.
+/// </summary>
 public struct InputState
 {
-    public IntVector2 Movement; // Input direction (-1, 0, 1)
+    /// <summary>Movement direction vector (typically -1, 0, or 1 for each axis).</summary>
+    public IntVector2 Movement; 
+    
+    /// <summary>True if the player is attempting to place a bomb.</summary>
     public bool PlaceBomb;
-    public IntVector2 BombTarget; // Explicit Grid Coordinate
+    
+    /// <summary>The grid coordinate target for the bomb placement.</summary>
+    public IntVector2 BombTarget; 
 
     public bool Equals(InputState other)
     {

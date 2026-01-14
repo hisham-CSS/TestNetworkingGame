@@ -7,6 +7,10 @@ using Bomberman.Core.Game;
 
 namespace Bomberman.App.States
 {
+    /// <summary>
+    /// Displays the game over screen (Win/Draw) or Replay completion screen.
+    /// Handles replay saving and naming.
+    /// </summary>
     public class GameOverState : IGameState
     {
         private GameContext _context;
@@ -32,7 +36,7 @@ namespace Bomberman.App.States
         public void Enter()
         {
             _context.Logger.Info($"[GameOver] Winner: {_winnerId} (ReplayView={_isReplayView})");
-            _prevKeyboard = Keyboard.GetState();
+            _prevKeyboard = _context.Input.GetKeyboard();
         }
 
         public void Exit()
@@ -44,28 +48,28 @@ namespace Bomberman.App.States
         {
             if (_context.Network != null) _context.Network.Update(); 
             
-            var kState = Keyboard.GetState();
+            // Still need raw keyboard for text entry detection
+            var kState = _context.Input.GetKeyboard();
 
             if (_isReplayView)
             {
                 // Simple Exit Logic for Replay View
-                if (kState.IsKeyDown(Keys.Escape) && !_prevKeyboard.IsKeyDown(Keys.Escape))
+                if (_context.Input.IsMenuCancel())
                 {
                     _manager.ChangeState(_context.StateFactory.CreateMenu());
                     return;
                 }
-                // Maybe 'R' to restart?
                 _prevKeyboard = kState;
                 return;
             }
 
             // Normal Game Over Logic (Save Replay)
-            if (kState.IsKeyDown(Keys.Enter) && !_prevKeyboard.IsKeyDown(Keys.Enter))
+            if (_context.Input.IsMenuSelect())
             {
                 SaveReplayAndExit();
                 return;
             }
-            if (kState.IsKeyDown(Keys.Escape) && !_prevKeyboard.IsKeyDown(Keys.Escape))
+            if (_context.Input.IsMenuCancel())
             {
                 // Discard
                 _manager.ChangeState(_context.StateFactory.CreateMenu());
@@ -133,8 +137,8 @@ namespace Bomberman.App.States
 
         public void Draw(GameTime gameTime)
         {
-            _context.Game.GraphicsDevice.Clear(Color.Black);
-            _context.SpriteBatch.Begin(samplerState: SamplerState.PointClamp);
+            _context.Renderer.ClearScreen(Color.Black);
+            _context.Renderer.BeginDraw();
 
             int centerX = _context.Game.GraphicsDevice.Viewport.Width / 2;
             int h = _context.Game.GraphicsDevice.Viewport.Height;
@@ -153,31 +157,31 @@ namespace Bomberman.App.States
                 titleColor = _winnerId == -1 ? Color.Gray : Color.Gold;
             }
             
-            DrawCenteredText(centerX, 100, title, titleColor, scale);
+            _context.Renderer.DrawTextCentered(title, centerX, 100, titleColor, scale);
 
             if (_isReplayView)
             {
                  if (!_isGameCompleted)
                  {
-                     DrawCenteredText(centerX, 200, "Recording stopped before game over.", Color.White, 2);
+                     _context.Renderer.DrawTextCentered("Recording stopped before game over.", centerX, 200, Color.White, 2);
                  }
                  else
                  {
-                     DrawCenteredText(centerX, 250, "REPLAY FINISHED", Color.Cyan, 2);
+                     _context.Renderer.DrawTextCentered("REPLAY FINISHED", centerX, 250, Color.Cyan, 2);
                  }
-                 DrawCenteredText(centerX, 400, "Press ESC to Return to Menu", Color.White, 2);
+                 _context.Renderer.DrawTextCentered("Press ESC to Return to Menu", centerX, 400, Color.White, 2);
             }
             else
             {
                 // Replay Input
-                DrawCenteredText(centerX, 250, "Name your Replay:", Color.White, 2);
-                DrawCenteredText(centerX, 280, _replayName + "_", Color.Yellow, 2);
+                _context.Renderer.DrawTextCentered("Name your Replay:", centerX, 250, Color.White, 2);
+                _context.Renderer.DrawTextCentered(_replayName + "_", centerX, 280, Color.Yellow, 2);
 
-                DrawCenteredText(centerX, 400, "Press ENTER to Save & Exit", Color.White, 2);
-                DrawCenteredText(centerX, 430, "Press ESC to Discard", Color.Gray, 2);
+                _context.Renderer.DrawTextCentered("Press ENTER to Save & Exit", centerX, 400, Color.White, 2);
+                _context.Renderer.DrawTextCentered("Press ESC to Discard", centerX, 430, Color.Gray, 2);
             }
 
-            _context.SpriteBatch.End();
+            _context.Renderer.EndDraw();
         }
 
         public static string GetTitle(bool isReplay, bool isComplete, int winnerId)
@@ -190,12 +194,6 @@ namespace Bomberman.App.States
             {
                 return winnerId == -1 ? "DRAW GAME!" : $"PLAYER {winnerId + 1} WINS!";
             }
-        }
-
-        private void DrawCenteredText(int centerX, int y, string text, Color color, int scale)
-        {
-            var size = _context.Font.MeasureString(text, scale);
-            _context.Font.DrawText(_context.SpriteBatch, centerX - size.X / 2, y, text, color, scale);
         }
     }
 }

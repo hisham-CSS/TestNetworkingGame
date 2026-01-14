@@ -5,6 +5,9 @@ using Bomberman.Core;
 
 namespace Bomberman.Core.Game.Systems
 {
+    /// <summary>
+    /// System responsible for spawning explosion entities and handling tile destruction.
+    /// </summary>
     public class ExplosionSystem
     {
         private World _world;
@@ -18,6 +21,10 @@ namespace Bomberman.Core.Game.Systems
             _subpixelScale = subpixelScale;
         }
 
+        /// <summary>
+        /// Creates explosion entities radiating from the origin.
+        /// Handles propagation logic (stopping at solid blocks/walls).
+        /// </summary>
         public void TriggerExplosion(IntVector2 origin, int range)
         {
              SpawnExplosion(origin);

@@ -9,6 +9,10 @@ using Bomberman.Net;
 
 namespace Bomberman.Tests
 {
+    /// <summary>
+    /// Tests for deterministic simulation behavior and replay system verification.
+    /// Ensures that the same inputs produce the same game state across multiple runs.
+    /// </summary>
     public class ReplayTests
     {
         [Test]

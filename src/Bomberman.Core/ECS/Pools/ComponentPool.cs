@@ -4,6 +4,11 @@ using System;
 using System.Collections.Generic;
 using Bomberman.Core.ECS; // For Entity? Wait, Entity is in root Core or Core.ECS? Entity was in Components.cs? No, line 2 in Step 266 said Entity.cs exists!
 
+/// <summary>
+/// A dense storage pool for ECS components of a specific type.
+/// Uses a sparse set approach (Entity ID -> Index) for O(1) lookups and O(1) iteration.
+/// </summary>
+/// <typeparam name="T">The component struct type.</typeparam>
 public class ComponentPool<T> : IComponentPool where T : struct
 {
     private List<T> _components = new();
@@ -13,11 +18,21 @@ public class ComponentPool<T> : IComponentPool where T : struct
     public int Count => _components.Count;
     public Type ComponentType => typeof(T);
 
+    /// <summary>
+    /// Captures the entire state of the pool (Entities and Components).
+    /// Used for Rollback snapshots.
+    /// </summary>
+    /// <returns>A tuple of (List{Entity}, List{T}) boxed as object.</returns>
     public object CaptureState()
     {
         return (new List<Entity>(_entities), new List<T>(_components));
     }
 
+    /// <summary>
+    /// Restores the state of the pool from a snapshot.
+    /// Rebuilds the internal lookup dictionary.
+    /// </summary>
+    /// <param name="state">The boxed state object returned from CaptureState.</param>
     public void RestoreState(object state)
     {
         var tuple = ((List<Entity>, List<T>))state;
@@ -32,12 +47,14 @@ public class ComponentPool<T> : IComponentPool where T : struct
         }
     }
     
+    /// <summary>
+    /// Adds or updates a component for the specified entity.
+    /// </summary>
     public void Add(Entity entity, T component)
     {
         if (_entityToIndex.ContainsKey(entity)) 
         {
-             // Overwrite or error? Usually ECS implies one per entity.
-             // We'll update.
+             // Component already exists, update it.
              int index = _entityToIndex[entity];
              _components[index] = component;
              return;
@@ -48,6 +65,9 @@ public class ComponentPool<T> : IComponentPool where T : struct
         _components.Add(component);
     }
     
+    /// <summary>
+    /// Removes all components and entities from the pool.
+    /// </summary>
     public void Clear()
     {
         _components.Clear();
@@ -55,7 +75,9 @@ public class ComponentPool<T> : IComponentPool where T : struct
         _entityToIndex.Clear();
     }
 
-    // Used for bulk setting (e.g. initial setup or tests)
+    /// <summary>
+    /// Bulk sets the state of the pool (used for testing or initialization).
+    /// </summary>
     public void SetAll(List<Entity> entities, List<T> components)
     {
         _entities = new List<Entity>(entities);
@@ -76,6 +98,10 @@ public class ComponentPool<T> : IComponentPool where T : struct
     public List<T> GetAll() => _components;
     public List<Entity> GetEntities() => _entities;
     
+    /// <summary>
+    /// Removes a component for the specified entity.
+    /// Uses Swap-and-Pop to maintain dense packing.
+    /// </summary>
     public void Remove(Entity entity)
     {
         if (_entityToIndex.TryGetValue(entity, out int index))
@@ -100,8 +126,15 @@ public class ComponentPool<T> : IComponentPool where T : struct
         }
     }
 
+    /// <summary>
+    /// Checks if the entity has a component in this pool.
+    /// </summary>
     public bool Has(Entity entity) => _entityToIndex.ContainsKey(entity);
 
+    /// <summary>
+    /// Retrieves the component for the specified entity.
+    /// Throws KeyNotFoundException if the entity is not in the pool.
+    /// </summary>
     public T Get(Entity entity)
     {
         if (!_entityToIndex.TryGetValue(entity, out int index)) 

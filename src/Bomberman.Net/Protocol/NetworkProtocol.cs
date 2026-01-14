@@ -6,10 +6,17 @@ using Bomberman.Net.Packets;
 
 namespace Bomberman.Net
 {
+    /// <summary>
+    /// Static helper class for serializing and deserializing network packets.
+    /// Handles packet creation and parsing for the unified protocol.
+    /// </summary>
     public static class NetworkProtocol
     {
         public const int ProtocolVersion = 1;
 
+        /// <summary>
+        /// Serializes a generic packet into a byte array.
+        /// </summary>
         public static byte[] Serialize(IPacket packet)
         {
             using (var ms = new MemoryStream())
@@ -74,6 +81,9 @@ namespace Bomberman.Net
             }
         }
 
+        /// <summary>
+        /// Creates a packet containing player input for a specific frame.
+        /// </summary>
         public static byte[] CreateInputPacket(int playerId, int startFrame, InputState[] inputs, IntVector2 currentPos, int stateHash)
         {
             return Serialize(new InputPacket
@@ -113,6 +123,9 @@ namespace Bomberman.Net
             }
         }
 
+        /// <summary>
+        /// Reads the packet type from the first byte of the data.
+        /// </summary>
         public static PacketType ReadType(byte[] data)
         {
             if (data == null || data.Length == 0) return PacketType.Input;

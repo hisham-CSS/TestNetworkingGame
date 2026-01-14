@@ -7,6 +7,10 @@ using Bomberman.Core;
 
 namespace Bomberman.Net
 {
+    /// <summary>
+    /// UDP implementation of the transport layer.
+    /// Handles socket binding, sending, and non-blocking receiving.
+    /// </summary>
     public class UdpTransport : ITransport
     {
         private UdpClient _udpClient;
@@ -16,6 +20,10 @@ namespace Bomberman.Net
 
         public event Action<byte[], IPEndPoint>? PacketReceived;
 
+        /// <summary>
+        /// Initializes the UDP transport, attempting to bind to the preferred port.
+        /// Retries on subsequent ports if the preferred one is busy.
+        /// </summary>
         public UdpTransport(int preferredPort)
         {
             const int MaxRetries = 10;
@@ -62,6 +70,9 @@ namespace Bomberman.Net
             }
         }
 
+        /// <summary>
+        /// Checks for pending data on the socket and invokes PacketReceived.
+        /// </summary>
         public void Poll()
         {
             try

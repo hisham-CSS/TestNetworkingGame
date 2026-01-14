@@ -6,6 +6,10 @@ using Bomberman.Net;
 
 namespace Bomberman.Tests
 {
+    /// <summary>
+    /// Tests for network protocol serialization and packet integrity.
+    /// Ensures all packet types can be serialized and deserialized correctly.
+    /// </summary>
     public class ProtocolTests
     {
         [Test]

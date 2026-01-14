@@ -12,6 +12,11 @@ using Bomberman.Net;
 
 namespace Bomberman.App.States
 {
+    /// <summary>
+    /// The core gameplay state.
+    /// Manages the GameSession, handles the game loop (Update/Draw), integrates with the RollbackSystem,
+    /// and visualizes the ECS world.
+    /// </summary>
     public class PlayState : IGameState
     {
         private GameContext _context;

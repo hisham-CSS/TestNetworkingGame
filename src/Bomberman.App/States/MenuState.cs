@@ -7,6 +7,10 @@ using Bomberman.App.Input;
 
 namespace Bomberman.App.States
 {
+    /// <summary>
+    /// The main menu state.
+    /// Handles navigation options to Host Game, Join Game (Browser), Watch Replay, or Quit.
+    /// </summary>
     public class MenuState : IGameState
     {
         private GameContext _context;

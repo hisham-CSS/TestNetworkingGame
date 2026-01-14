@@ -11,13 +11,25 @@ using Bomberman.Core;
 
 namespace Bomberman.Core.Rollback
 {
+    /// <summary>
+    /// The core Rollback Networking system.
+    /// Manages state snapshots, input prediction, and time synchronization.
+    /// Executes the simulation step-by-step, re-running frames when mispredictions occur.
+    /// </summary>
     public class RollbackSystem
     {
         public Simulation? Simulation { get; private set; }
         public int CurrentFrame => _currentFrame;
+        
+        /// <summary>If true, inputs are recorded to the standard recorder.</summary>
         public bool IsRecording { get; set; }
+        
+        /// <summary>If true, we are replaying a past session.</summary>
         public bool IsReplaying { get; set; }
+        
         public bool IsReplayFinished { get; private set; }
+        
+        /// <summary>Enables prediction logic using available inputs.</summary>
         public bool SimulateNetworked { get; set; }
 
         private InputRecorder _recorder;
@@ -38,11 +50,15 @@ namespace Bomberman.Core.Rollback
         private int _replayFrame = 0;
         private int _seed;
 
+        /// <summary>
+        /// Initializes the rollback system.
+        /// </summary>
+        /// <param name="localPlayerId">The ID of the local player (0 for host).</param>
+        /// <param name="totalPlayers">Total players in session.</param>
         public RollbackSystem(int localPlayerId, int totalPlayers)
         {
             _localPlayerId = localPlayerId;
             _totalPlayers = totalPlayers;
-            _recorder = new InputRecorder();
             _recorder = new InputRecorder();
         }
 
@@ -55,6 +71,10 @@ namespace Bomberman.Core.Rollback
             return 0; // Default
         }
 
+        /// <summary>
+        /// Calculates how many simulation steps to execute this frame to stay in sync.
+        /// Uses simple catch-up/slow-down logic based on frame lag.
+        /// </summary>
         public int CalculateTargetSteps(int localFrame, int hostFrame)
         {
              int lag = hostFrame - localFrame; // Positive = We are Behind. Negative = We are Ahead.
@@ -77,6 +97,10 @@ namespace Bomberman.Core.Rollback
              return 1;
         }
 
+        /// <summary>
+        /// Initializes the simulation with a specific seed and player count.
+        /// Takes an initial snapshot at frame -1.
+        /// </summary>
         public void InitializeSimulation(int seed, int totalPlayers)
         {
             _seed = seed;
@@ -87,6 +111,9 @@ namespace Bomberman.Core.Rollback
             // Logger hookup can be done externally or passed in
         }
 
+        /// <summary>
+        /// Loads a replay file and prepares the system for playback.
+        /// </summary>
         public void InitializeFromReplay(string path)
         {
             _recorder.Load(path);
@@ -141,6 +168,12 @@ namespace Bomberman.Core.Rollback
             _remoteInputBuffer[frame][pid] = input;
         }
 
+        /// <summary>
+        /// Attempts to bundle the input for the most recently completed frame (CurrentFrame - 1).
+        /// Includes redundant history for packet loss recovery.
+        /// </summary>
+        /// <param name="bundle">The output bundle if successful.</param>
+        /// <returns>True if a bundle was created, false if no input is available.</returns>
         public bool TryBuildOutgoingBundle(out OutgoingInputBundle bundle)
         {
             bundle = default;
@@ -200,7 +233,6 @@ namespace Bomberman.Core.Rollback
             return false;
         }
 
-        // Replaced Update -> Step
         private HashSet<int> _disconnectedPlayers = new HashSet<int>();
 
         public void SetPlayerDisconnected(int pid)
@@ -212,6 +244,11 @@ namespace Bomberman.Core.Rollback
             }
         }
 
+        /// <summary>
+        /// Advances the simulation by one frame.
+        /// Handles local prediction, input recording, and snapshotting.
+        /// </summary>
+        /// <param name="localInput">Input from the local player for this frame.</param>
         public void Step(InputState localInput)
         {
             // ... (Replay logic - handle separately or keep basic check) ...
@@ -352,11 +389,23 @@ namespace Bomberman.Core.Rollback
 
         public enum InputResult
         {
+            /// <summary>Input was accepted successfully.</summary>
             Success,
+            /// <summary>Input caused a misprediction, rollback triggered.</summary>
             Misprediction,
+            /// <summary>Input was too old to be applied (before earliest snapshot).</summary>
             TooOld
         }
 
+        /// <summary>
+        /// Processes a packet of inputs from a remote player.
+        /// Checks for mispredictions or desyncs and triggers rollback if necessary.
+        /// </summary>
+        /// <param name="pid">ID of the remote player.</param>
+        /// <param name="startFrame">The frame of the NEWEST input in the packet.</param>
+        /// <param name="inputs">History of inputs ending at startFrame (redundant history).</param>
+        /// <param name="remotePos">Position of remote player for desync check.</param>
+        /// <param name="remoteHash">State hash of remote player for desync check.</param>
         public InputResult HandleRemoteInput(int pid, int startFrame, InputState[] inputs, IntVector2 remotePos, int remoteHash)
         {
              int earliestMisprediction = -1;
@@ -516,6 +565,11 @@ namespace Bomberman.Core.Rollback
             return InputResult.Success;
         }
 
+        /// <summary>
+        /// Restores the game state to a previous snapshot and re-simulates up to the current frame.
+        /// Uses confirmed inputs where available, and predicts others.
+        /// </summary>
+        /// <param name="mispredictedFrame">The frame number where the divergence occurred.</param>
         private void PerformRollback(int mispredictedFrame)
         {
             Console.WriteLine($"ROLLBACK from frame {_currentFrame} to {mispredictedFrame}");

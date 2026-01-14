@@ -9,6 +9,9 @@ using Bomberman.Core.Game;
 
 namespace Bomberman.App.States
 {
+    /// <summary>
+    /// State for browsing and selecting saved replay files (.json) to watch.
+    /// </summary>
     public class ReplaySelectState : IGameState
     {
         private GameContext _context;

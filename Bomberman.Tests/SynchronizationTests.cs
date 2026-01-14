@@ -4,6 +4,10 @@ using System;
 
 namespace Bomberman.Tests
 {
+    /// <summary>
+    /// Tests for network synchronization logic.
+    /// Verifies frame delta calculations, catch-up steps, and stall detection.
+    /// </summary>
     [TestFixture]
     public class SynchronizationTests
     {

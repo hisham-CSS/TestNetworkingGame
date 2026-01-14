@@ -8,22 +8,38 @@ using Bomberman.Net.Packets;
 
 namespace Bomberman.Net
 {
+    /// <summary>
+    /// Controls the high-level network logic, managing connections, packet routing, and state synchronization.
+    /// Acts as the central hub for network communication in the game.
+    /// </summary>
     public class NetworkController
     {
         private ITransport _transport;
         private List<IPEndPoint> _connectedClients = new List<IPEndPoint>();
+        
+        /// <summary>List of currently connected client endpoints.</summary>
         public IReadOnlyList<IPEndPoint> ConnectedClients => _connectedClients;
 
         // Events to decouple logic from Program.cs
+        /// <summary>Event raised when a Welcome packet is received.</summary>
         public event Action<int, int, int>? OnWelcomeReceived; // assignedId, seed, totalPlayers
+        /// <summary>Event raised when a LobbyUpdate packet is received.</summary>
         public event Action<int, int, int>? OnLobbyUpdateReceived; // connectedCount, totalPlayers, slotMask
+        /// <summary>Event raised when a StartGame packet is received.</summary>
         public event Action<int, int>? OnStartGameReceived; // seed, totalPlayers
+        /// <summary>Event raised when a DiscoveryRequest packet is received.</summary>
         public event Action<System.Net.IPEndPoint, string, int, int>? OnDiscoveryRequestReceived; // sender, header, players, max
+        /// <summary>Event raised when a DiscoveryResponse packet is received.</summary>
         public event Action<System.Net.IPEndPoint, string, int, int>? OnDiscoveryResponseReceived; 
+        /// <summary>Event raised when a JoinRequest packet is received.</summary>
         public event Action<System.Net.IPEndPoint>? OnJoinRequestRaw; 
+        /// <summary>Event raised when an Input packet is received.</summary>
         public event Action<int, int, InputState[], IntVector2, int>? OnInputReceived; 
+        /// <summary>Event raised when a Disconnect packet is received or a timeout occurs.</summary>
         public event Action<IPEndPoint, string>? OnDisconnected; // sender, reason
+        /// <summary>Event raised when a LobbyReady packet is received.</summary>
         public event Action<int, bool>? OnLobbyReadyReceived; // pid, isReady
+        /// <summary>Event raised when a StateSync packet is received (potentially reassembled).</summary>
         public event Action<byte[]>? OnStateSyncReceived;
 
         private Dictionary<IPEndPoint, DateTime> _lastDataReceived = new Dictionary<IPEndPoint, DateTime>();
@@ -38,24 +54,34 @@ namespace Bomberman.Net
         private static readonly TimeSpan TimeoutThreshold = TimeSpan.FromSeconds(60.0); // Increased to support long pauses/window drags
         private static readonly TimeSpan PingInterval = TimeSpan.FromSeconds(1.0);
 
+        /// <summary>The last measured round-trip time in milliseconds.</summary>
         public int LastPingMs { get; private set; } = 0;
         private DateTime _lastPingSent = DateTime.MinValue;
 
 
 
         // Allow injecting mock transport for testing
+        /// <summary>
+        /// Initializes the NetworkController with the specified transport layer.
+        /// </summary>
         public NetworkController(ITransport transport)
         {
             _transport = transport;
             _transport.PacketReceived += HandlePacket;
         }
 
+        /// <summary>
+        /// Connects to a host at the specified IP and port.
+        /// </summary>
         public void Connect(string ip, int port)
         {
             _transport.Connect(ip, port);
             _isClient = true;
         }
 
+        /// <summary>
+        /// Registers a new client endpoint (Host Side).
+        /// </summary>
         public void AddClient(IPEndPoint client)
         {
             if (!_connectedClients.Contains(client))
@@ -66,6 +92,9 @@ namespace Bomberman.Net
             }
         }
 
+        /// <summary>
+        /// Removes a client endpoint and cleans up associated state.
+        /// </summary>
         public bool RemoveClient(IPEndPoint client)
         {
             if (_connectedClients.Contains(client))
@@ -78,6 +107,9 @@ namespace Bomberman.Net
             return false;
         }
 
+        /// <summary>
+        /// Main update loop. Polls transport, manages heartbeats, pings, and timeouts.
+        /// </summary>
         public void Update()
         {
             _transport.Poll();
@@ -138,6 +170,10 @@ namespace Bomberman.Net
             }
         }
 
+        /// <summary>
+        /// Closes the connection and disposes the transport.
+        /// Sends a disconnect message to peers.
+        /// </summary>
         public void Close()
         {
             if (_isClient)
@@ -152,26 +188,41 @@ namespace Bomberman.Net
             _transport.Dispose();
         }
 
+        /// <summary>
+        /// Sends a JoinRequest to the connected host.
+        /// </summary>
         public void SendJoinRequest()
         {
             _transport.SendToConnectedHost(NetworkProtocol.CreateJoinRequest());
         }
 
+        /// <summary>
+        /// Sends a Welcome packet to a client (Host Side).
+        /// </summary>
         public void SendWelcome(IPEndPoint target, int assignedId, int seed, int totalPlayers)
         {
             _transport.SendTo(NetworkProtocol.CreateWelcome(assignedId, seed, totalPlayers), target);
         }
 
+        /// <summary>
+        /// Broadcasts a LobbyUpdate to all clients (Host Side).
+        /// </summary>
         public void BroadcastLobbyUpdate(int connectedCount, int totalPlayers, int slotMask)
         {
             Broadcast(NetworkProtocol.CreateLobbyUpdate(connectedCount, totalPlayers, slotMask));
         }
 
+        /// <summary>
+        /// Broadcasts a StartGame packet to all clients (Host Side).
+        /// </summary>
         public void BroadcastStartGame(int seed, int totalPlayers)
         {
             Broadcast(NetworkProtocol.CreateStartGame(seed, totalPlayers));
         }
 
+        /// <summary>
+        /// Broadcasts a DiscoveryRequest to a range of ports on the local network.
+        /// </summary>
         public void BroadcastDiscoveryRequest(int startPort, int endPort)
         {
             var packet = NetworkProtocol.CreateDiscoveryRequest();
@@ -187,16 +238,25 @@ namespace Bomberman.Net
             }
         }
 
+        /// <summary>
+        /// Sends a DiscoveryResponse to a requesting client.
+        /// </summary>
         public void SendDiscoveryResponse(IPEndPoint target, string serverName, int currentPlayers, int maxPlayers)
         {
             _transport.SendTo(NetworkProtocol.CreateDiscoveryResponse(serverName, currentPlayers, maxPlayers), target);
         }
 
+        /// <summary>
+        /// Relays a raw packet to a target endpoint.
+        /// </summary>
         public void RelayPacket(IPEndPoint target, byte[] packet)
         {
             _transport.SendTo(packet, target);
         }
 
+        /// <summary>
+        /// Splits and sends a large state snapshot to a target.
+        /// </summary>
         public void SendStateSync(IPEndPoint target, byte[] snapshot)
         {
             // Chunking
@@ -220,12 +280,20 @@ namespace Bomberman.Net
             Console.WriteLine($"[Network] Sent StateSync to {target} in {totalChunks} chunks.");
         }
 
+        /// <summary>
+        /// Sends a Disconnect packet to a target.
+        /// </summary>
         public void SendDisconnect(IPEndPoint target, string reason)
         {
             byte[] packet = NetworkProtocol.CreateDisconnect(reason);
             _transport.SendTo(packet, target);
         }
 
+        /// <summary>
+        /// Sends or broadcasts an input bundle.
+        /// If PlayerId is 0 (Host), broadcasts to neighbors.
+        /// If Client, sends to Host.
+        /// </summary>
         public void SendInput(OutgoingInputBundle bundle)
         {
             byte[] packet = NetworkProtocol.CreateInputPacket(

@@ -7,10 +7,19 @@ using Bomberman.Core.Game.Systems;
 
 namespace Bomberman.Core.Game
 {
+    /// <summary>
+    /// The deterministic core game loop.
+    /// Manages the ECS World, Systems, and Map generation.
+    /// </summary>
     public class Simulation
     {
+        /// <summary>The ECS World containing all game entities.</summary>
         public World World { get; private set; }
-        public Action<string>? Log; // Debug Logger
+        
+        /// <summary>Optional debug logger hook.</summary>
+        public Action<string>? Log; 
+        
+        /// <summary>Deterministic Random Number Generator.</summary>
         public DeterministicRandom Rng { get; private set; }
 
         public const int SubpixelScale = 100; // 1 unit = 0.01 pixel
@@ -26,6 +35,11 @@ namespace Bomberman.Core.Game
         private ExplosionSystem _explosionSystem;
         private DamageSystem _damageSystem;
 
+        /// <summary>
+        /// Initializes a new simulation.
+        /// </summary>
+        /// <param name="seed">Seed for Map Generation and RNG.</param>
+        /// <param name="playerCount">Number of players to spawn.</param>
         public Simulation(int seed, int playerCount)
         {
             World = new World();

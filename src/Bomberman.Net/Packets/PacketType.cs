@@ -1,5 +1,8 @@
 namespace Bomberman.Net.Packets
 {
+    /// <summary>
+    /// Identifiers for different packet types used in the protocol.
+    /// </summary>
     public enum PacketType : byte
     {
         Input = 0,

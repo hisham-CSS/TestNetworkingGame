@@ -6,6 +6,9 @@ using Bomberman.Core;
 
 namespace Bomberman.Core.Game.Systems
 {
+    /// <summary>
+    /// System responsible for handling bomb placement logic and bomb timers.
+    /// </summary>
     public class BombSystem
     {
         private World _world;
@@ -14,9 +17,14 @@ namespace Bomberman.Core.Game.Systems
         private int _mapHeight;
         private int _scaledTileSize;
 
+        /// <summary>
+        /// Event data describing an explosion that just occurred.
+        /// </summary>
         public struct ExplosionEvent
         {
+            /// <summary>Center position of the explosion.</summary>
             public IntVector2 Position;
+            /// <summary>Radius of the explosion in tiles.</summary>
             public int Range;
         }
 
@@ -29,6 +37,10 @@ namespace Bomberman.Core.Game.Systems
             _logger = logger;
         }
 
+        /// <summary>
+        /// Attempts to spawn a bomb at the target grid location for the specified player.
+        /// Validates placement against capacity limits and existing bombs.
+        /// </summary>
         public void TryPlaceBomb(IntVector2 targetGrid, PlayerComponent player)
         {
             int gridX = targetGrid.X;

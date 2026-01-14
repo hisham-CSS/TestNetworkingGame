@@ -5,6 +5,10 @@ using Bomberman.App.States;
 
 namespace Bomberman.App.States
 {
+    /// <summary>
+    /// Factory for creating IGameState instances with all required dependencies injected.
+    /// Centralizes state creation logic.
+    /// </summary>
     public class StateFactory
     {
         private GameContext _context;

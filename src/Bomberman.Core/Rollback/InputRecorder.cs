@@ -8,12 +8,21 @@ using Bomberman.Core;
 
 namespace Bomberman.Core.Rollback
 {
+    /// <summary>
+    /// Records and plays back input history for replays and rollback prediction.
+    /// Also handles serialization of input states.
+    /// </summary>
     public class InputRecorder
     {
         private List<InputState[]> _history = new List<InputState[]>();
+        
+        /// <summary>The seed used for this recording session.</summary>
         public int Seed { get; private set; }
+        
+        /// <summary>Number of players in this recording.</summary>
         public int TotalPlayers { get; private set; }
         
+        /// <summary>Total frames recorded.</summary>
         public int FrameCount => _history.Count;
 
         private class ReplayData
@@ -23,6 +32,10 @@ namespace Bomberman.Core.Rollback
             public List<InputState[]> History { get; set; } = new List<InputState[]>();
         }
 
+        /// <summary>
+        /// Appends a frame of inputs to the history.
+        /// </summary>
+        /// <param name="inputs">Array of inputs for all players.</param>
         public void RecordFrame(InputState[] inputs)
         {
             // Clone the array to ensure we store a snapshot, just in case
@@ -31,12 +44,18 @@ namespace Bomberman.Core.Rollback
             _history.Add(snapshot);
         }
 
+        /// <summary>
+        /// Retrieves the inputs for a specific frame.
+        /// </summary>
         public InputState[] GetFrame(int frame)
         {
             if (frame < 0 || frame >= _history.Count) return new InputState[0]; // Or return empty inputs?
             return _history[frame];
         }
 
+        /// <summary>
+        /// Updates the inputs for a past frame (used during rollback correction).
+        /// </summary>
         public void UpdateFrame(int frame, InputState[] inputs)
         {
             if (frame >= 0 && frame < _history.Count)
@@ -45,11 +64,17 @@ namespace Bomberman.Core.Rollback
             }
         }
 
+        /// <summary>
+        /// Clears all recording history.
+        /// </summary>
         public void Reset()
         {
             _history.Clear();
         }
 
+        /// <summary>
+        /// Saves the recorded history to a JSON file.
+        /// </summary>
         public void Save(string path, int seed, int totalPlayers)
         {
             try 
@@ -80,6 +105,10 @@ namespace Bomberman.Core.Rollback
         }
 
         // Serialization Helpers for Networking
+        
+        /// <summary>
+        /// Serializes a single input state for network transmission.
+        /// </summary>
         public static byte[] SerializeInput(int frameId, InputState input)
         {
             using (var ms = new MemoryStream())
@@ -95,6 +124,9 @@ namespace Bomberman.Core.Rollback
             }
         }
 
+        /// <summary>
+        /// Deserializes a single input state from a byte array.
+        /// </summary>
         public static (int frameId, InputState input) DeserializeInput(byte[] data)
         {
             using (var ms = new MemoryStream(data))

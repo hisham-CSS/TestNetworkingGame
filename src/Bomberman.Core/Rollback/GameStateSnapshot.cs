@@ -6,6 +6,10 @@ using Bomberman.Core;
 
 namespace Bomberman.Core.Rollback
 {
+    /// <summary>
+    /// Represents a complete capture of the game state at a specific frame.
+    /// Used for rollback restoration and state serialization.
+    /// </summary>
     public class GameStateSnapshot
     {
         public int Frame { get; set; }
@@ -13,6 +17,9 @@ namespace Bomberman.Core.Rollback
         
         private object[] _states;
 
+        /// <summary>
+        /// Captures the current state of the World.
+        /// </summary>
         public GameStateSnapshot(int frame, World world)
         {
             Frame = frame;
@@ -25,6 +32,9 @@ namespace Bomberman.Core.Rollback
             }
         }
 
+        /// <summary>
+        /// Restores the World to the state captured in this snapshot.
+        /// </summary>
         public void Restore(World world)
         {
             world.Clear();
@@ -40,6 +50,9 @@ namespace Bomberman.Core.Rollback
             }
         }
 
+        /// <summary>
+        /// Retrieves the component state for a specific type from the snapshot.
+        /// </summary>
         public (List<Entity> entities, List<T> components) GetState<T>() where T : struct
         {
             if (World.ComponentIndexMap.TryGetValue(typeof(T), out int index))

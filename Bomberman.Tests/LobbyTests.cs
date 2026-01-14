@@ -5,6 +5,10 @@ using NUnit.Framework;
 
 namespace Bomberman.Tests
 {
+    /// <summary>
+    /// Lifecycle tests for the lobby system.
+    /// Verifies player connection, slot assignment, and ready status propagation.
+    /// </summary>
     [TestFixture]
     public class LobbyTests
     {

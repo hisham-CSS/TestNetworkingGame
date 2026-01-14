@@ -7,6 +7,10 @@ using Bomberman.Net;
 
 namespace Bomberman.Tests
 {
+    /// <summary>
+    /// Tests for the deterministic rollback system.
+    /// Verifies state saving/restoring, input prediction, and misprediction handling.
+    /// </summary>
     [TestFixture]
     public class RollbackTests
     {

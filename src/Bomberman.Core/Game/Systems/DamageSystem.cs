@@ -5,6 +5,9 @@ using Bomberman.Core;
 
 namespace Bomberman.Core.Game.Systems
 {
+    /// <summary>
+    /// System responsible for applying damage to players who touch explosions.
+    /// </summary>
     public class DamageSystem
     {
          private World _world;
@@ -16,6 +19,10 @@ namespace Bomberman.Core.Game.Systems
              _subpixelScale = subpixelScale;
          }
 
+         /// <summary>
+         /// Checks for overlap between active explosions and players.
+         /// Marks hit players as dead.
+         /// </summary>
          public void Update()
          {
             var players = _world.Players.GetAll();

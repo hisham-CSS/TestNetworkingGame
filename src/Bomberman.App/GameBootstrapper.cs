@@ -7,8 +7,14 @@ using Bomberman.App.Input;
 
 namespace Bomberman.App
 {
+    /// <summary>
+    /// Handles the initialization of game dependencies and services.
+    /// </summary>
     public class GameBootstrapper
     {
+        /// <summary>
+        /// Creates and wires up the GameContext with all necessary services (Renderer, Input, Logger, etc.).
+        /// </summary>
         public static GameContext InitializeDependencies(Game1 game, GraphicsDevice graphicsDevice)
         {
             var spriteBatch = new SpriteBatch(graphicsDevice);

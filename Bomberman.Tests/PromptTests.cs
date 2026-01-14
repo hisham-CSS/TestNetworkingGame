@@ -84,22 +84,26 @@ namespace Bomberman.Tests
             
             // User holding Enter when entering state
             _input.SetKeys(Keys.Enter);
+            _input.Update(); // Move to 'Previous' state to simulate holding
+            _input.SetKeys(Keys.Enter); // Ensure it's still down in 'Current'
             
             var state = new PromptState(_context, _manager, "Test", () => triggered = true);
 
-            state.Enter(); // _prevKeyboard captures Enter
+            state.Enter();
             
             // Still holding
             state.Update(new GameTime());
             Assert.That(triggered, Is.False, "Should not trigger if key was already held");
 
             // Release
-            _input.SetKeys();
+            _input.Update(); // Prepare for next frame
+            _input.SetKeys(); // Empty
             state.Update(new GameTime());
             Assert.That(triggered, Is.False);
 
             // Press Again
-            _input.SetKeys(Keys.Enter);
+            _input.Update(); // Previous = Empty
+            _input.SetKeys(Keys.Enter); // Current = Enter
             state.Update(new GameTime());
             Assert.That(triggered, Is.True);
         }

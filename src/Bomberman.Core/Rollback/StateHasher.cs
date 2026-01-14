@@ -6,9 +6,16 @@ using Bomberman.Core;
 
 namespace Bomberman.Core.Rollback
 {
+    /// <summary>
+    /// Utility for calculating deterministic hashes of the game world or snapshots.
+    /// Used for desync detection.
+    /// </summary>
     public static class StateHasher
     {
         // Simple Jenkins One-at-a-time hash or similar lightweight checksum
+        /// <summary>
+        /// Calculates a hash for the current World state.
+        /// </summary>
         public static int Hash(World world)
         {
             int hash = 0;

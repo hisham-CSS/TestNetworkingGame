@@ -10,6 +10,10 @@ using Bomberman.Core.Rollback;
 
 namespace Bomberman.App.States
 {
+    /// <summary>
+    /// Handles the pre-game lobby.
+    /// Manages player connections, slot assignment, and the "Ready" status before starting the match.
+    /// </summary>
     public class LobbyState : IGameState
     {
         private GameContext _context;
