@@ -6,6 +6,10 @@ using Bomberman.Core.Input;
 
 namespace Bomberman.Rollback
 {
+    /// <summary>
+    /// Responsible for detecting discrepancies between local prediction and authoritative remote state.
+    /// Checks for input mismatches (History Divergence) and state desynchronization.
+    /// </summary>
     public class MispredictionDetector
     {
         private readonly IRollbackTelemetry _telemetry;
@@ -15,6 +19,10 @@ namespace Bomberman.Rollback
             _telemetry = telemetry;
         }
 
+        /// <summary>
+        /// Checks if the start frame of an incoming packet is older than the oldest snapshot we possess.
+        /// If so, we cannot effectively rollback or verify history.
+        /// </summary>
         public bool IsInputTooOld(int startFrame, SnapshotStore snapshots)
         {
             int oldestFrame = snapshots.GetOldestFrame();
@@ -56,6 +64,10 @@ namespace Bomberman.Rollback
             }
         }
 
+        /// <summary>
+        /// Compares the local state against a received remote state hash (StateSync/Checksum).
+        /// If a desync is detected (Position threshold or Hash mismatch), triggers a rollback.
+        /// </summary>
         public void DetectStateDesync(int pid, int frame, IntVector2 remotePos, int remoteHash, int currentFrame, SnapshotStore snapshots, ref int earliestMisprediction)
         {
              if (frame < currentFrame && snapshots.TryGet(frame, out GameStateSnapshot? snap))

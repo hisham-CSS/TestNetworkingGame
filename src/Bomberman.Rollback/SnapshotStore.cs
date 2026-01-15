@@ -20,27 +20,44 @@ namespace Bomberman.Rollback
             _maxHistoryFrames = maxHistoryFrames;
         }
 
+        /// <summary>
+        /// Saves a snapshot of the current world state for the given frame.
+        /// Also prunes old snapshots to maintain the maximum history size.
+        /// </summary>
         public void Save(int frame, World world)
         {
             _buffer[frame] = new GameStateSnapshot(frame, world);
             Prune(frame);
         }
 
+        /// <summary>
+        /// Attempts to retrieve a stored snapshot for a specific frame.
+        /// </summary>
         public bool TryGet(int frame, out GameStateSnapshot snapshot)
         {
             return _buffer.TryGetValue(frame, out snapshot);
         }
 
+        /// <summary>
+        /// Checks if a snapshot exists for the given frame.
+        /// </summary>
         public bool Has(int frame)
         {
             return _buffer.ContainsKey(frame);
         }
 
+        /// <summary>
+        /// Clears all stored snapshots.
+        /// </summary>
         public void Clear()
         {
             _buffer.Clear();
         }
 
+        /// <summary>
+        /// Returns the frame index of the oldest snapshot currently stored.
+        /// Returns -1 if the store is empty.
+        /// </summary>
         public int GetOldestFrame()
         {
             int oldest = -1;

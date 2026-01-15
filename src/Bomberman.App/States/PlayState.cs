@@ -15,8 +15,8 @@ namespace Bomberman.App.States
 {
     /// <summary>
     /// The core gameplay state.
-    /// Manages the GameSession, handles the game loop (Update/Draw), integrates with the RollbackSystem,
-    /// and visualizes the ECS world.
+    /// Manages the GameSession, handles the game loop (Update), integrates with the RollbackSystem,
+    /// and delegates rendering to WorldRenderer.
     /// </summary>
     public class PlayState : IGameState
     {

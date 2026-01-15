@@ -6,6 +6,10 @@ using Bomberman.Core.Input;
 
 namespace Bomberman.Rollback
 {
+    /// <summary>
+    /// Orchestrates the process of restoring a game state from a snapshot and re-simulating frames
+    /// up to the current time, applying corrected inputs.
+    /// </summary>
     public class ResimulationRunner
     {
         private readonly IRollbackTelemetry _telemetry;
@@ -17,6 +21,14 @@ namespace Bomberman.Rollback
             _telemetry = telemetry;
         }
 
+        /// <summary>
+        /// Restores the game world to a valid snapshot before the misprediction, then fast-forwards
+        /// the simulation to the current frame using the corrected input buffers.
+        /// </summary>
+        /// <param name="currentFrame">The game loop's current target frame.</param>
+        /// <param name="mispredictedFrame">The earliest frame where a disagreement occurred.</param>
+        /// <param name="simulation">The game simulation engine.</param>
+        /// <param name="snapshotStore">Source of valid snapshots.</param>
         public void PerformRollback(
             int currentFrame, 
             int mispredictedFrame, 

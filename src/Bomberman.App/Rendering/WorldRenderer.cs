@@ -21,6 +21,11 @@ namespace Bomberman.App.Rendering
             _renderer = renderer;
         }
 
+        /// <summary>
+        /// Iterates through the game world entities (Tiles, Bombs, Powerups, Players)
+        /// and renders them using the injected IRenderer.
+        /// </summary>
+        /// <param name="world">The ECS world containing entities and components.</param>
         public void DrawWorld(World world)
         {
             // Cache common components

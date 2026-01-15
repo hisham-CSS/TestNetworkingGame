@@ -53,3 +53,18 @@ Use the provided PowerShell script to launch 4 instances (1 Host + 3 Clients) au
 ## Logging
 - Logs are written to `gamelog.txt` in the execution directory.
 - Debug logs are also printed to the console window.
+
+## Architecture
+
+The project follows a strict separation of concerns:
+
+- **Bomberman.Core**: Pure C# Class Library containing the Game Logic (ECS, Simulation), Components, and Math utilities. Detached from any framework (Monogame/Unity).
+- **Bomberman.Rollback**: Handling of deterministic state management, history buffers (snapshots), and resimulation logic (GGPO-style).
+- **Bomberman.Net**: UDP Networking layer, packet serialization, and connection management.
+- **Bomberman.App**: The Monogame application entry point, handling Input, Rendering (`WorldRenderer`), and the core Game Loop.
+
+### Rollback Networking
+The game uses a predictive rollback architecture:
+1.  **Input Prediction**: Local inputs are applied immediately.
+2.  **State Synchronization**: Hash checks are exchanged to verify consistency.
+3.  **Resimulation**: On divergence, the game rolls back to the last confirmed frame and resimulates with correct inputs (handled by `ResimulationRunner`).

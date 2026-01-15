@@ -8,6 +8,14 @@ namespace Bomberman.Net.Handlers
     {
         private Dictionary<IPEndPoint, (Dictionary<int, byte[]> Chunks, int TotalChunks)> _reassemblyBuffers = new Dictionary<IPEndPoint, (Dictionary<int, byte[]>, int)>();
 
+        /// <summary>
+        /// Processes a StateChunk packet. Buffer fragments until all chunks for a frame are received.
+        /// </summary>
+        /// <param name="sender">The endpoint triggering the reassembly.</param>
+        /// <param name="chunkIndex">Index of the current chunk.</param>
+        /// <param name="totalChunks">Total expected chunks.</param>
+        /// <param name="chunkData">Raw byte data of the chunk.</param>
+        /// <param name="onComplete">Callback invoked with the full reassembled byte array when complete.</param>
         public void HandleChunk(IPEndPoint sender, int chunkIndex, int totalChunks, byte[] chunkData, Action<byte[]> onComplete)
         {
             if (!_reassemblyBuffers.ContainsKey(sender))

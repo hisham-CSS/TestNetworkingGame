@@ -19,33 +19,36 @@ Located in `Bomberman.Core.ECS` and `Bomberman.Core.Game`.
 - **Simulation**: The orchestra conductor. It has a `Tick()` method that runs all systems in a deterministic order.
 
 ### 2. Networking & Rollback
-Located in `Bomberman.Net` and `Bomberman.Core.Rollback`.
+Located in `Bomberman.Net` and `Bomberman.Rollback`.
 - **Protocol**: Custom UDP protocol with packet types defined in `Bomberman.Net.Packets`.
-- **Input Prediction**: Local inputs are applied immediately. Remote inputs are predicted (using last known input) and corrected later.
-- **RollbackSystem**:
-    - Stores snapshots of `World` state every frame.
-    - If a remote input arrives for a past frame that differs from prediction, it:
-        1. Restores the valid snapshot before that frame.
-        2. Re-simulates frames up to current time using the new correct input.
-    - **StateSync**: Periodic or forced full-state synchronization to handle late-joiners or desyncs.
+- **Components**:
+    - `NetworkController`: Manages connections and routes packets.
+    - `PacketReassembler`: Handles reassembly of fragmented `StateChunk` packets.
+- **Rollback Architecture**:
+    - **RollbackSystem**: Coordinator for the rollback process.
+    - **SnapshotStore**: Manages history of `World` snapshots.
+    - **MispredictionDetector**: Compares local prediction vs remote inputs/state hash.
+    - **ResimulationRunner**: Handles restoring state and fast-forwarding simulation.
+    - **Input Prediction**: Local inputs applied immediately; remote inputs predicted/corrected.
 
 ### 3. State Management
 Located in `Bomberman.App.States`.
-- **GameStateManager**: Stack-based or switch-based state machine (currently simple switch).
-- **IGameState**: Interface for states (`MenuState`, `LobbyState`, `PlayState`).
-- **GameContext**: Dependency Injection container passed to all states. Holds references to `IRenderer`, `IInputService`, `NetworkController`, etc.
+- **GameStateManager**: Switch-based state machine.
+- **IGameState**: Interface for `MenuState`, `LobbyState`, `PlayState`.
+- **GameContext**: DI container holding `IRenderer`, `IInputService`, `NetworkController`.
 
 ### 4. Rendering & Input
 Located in `Bomberman.App.Rendering` and `Bomberman.App.Input`.
-- **IRenderer**: Abstraction over Monogame's `SpriteBatch`. Allows decoupling logic from drawing.
-- **IInputService**: Abstraction over `KeyboardState`. Maps keys to game actions (`Up`, `Down`, `PlaceBomb`). Support for Recording/Replaying inputs.
+- **IRenderer**: Abstraction over Monogame's `SpriteBatch`.
+- **WorldRenderer**: Specialized renderer for the ECS `World` (Tiles, Bombs, Players). Decouples visual logic from `PlayState`.
+- **IInputService**: Abstraction over `KeyboardState`. Maps keys to game actions.
 
 ## Data Flow
-1. **Input**: `InputService` captures hardware input -> `InputState` struct.
-2. **Network**: `NetworkController` bundles local input -> Sends to peers via UDP.
-3. **Simulation**: `PlayState` feeds inputs (Local + Remote/Predicted) to `GameSession`.
-4. **ECS Update**: `GameSession` runs `Simulation.Tick()`. Systems update World components.
-5. **Rendering**: `PlayState` reads World components (read-only) -> Calls `IRenderer` to draw.
+1. **Input**: `InputService` captures hardware input -> `InputState`.
+2. **Network**: `NetworkController` bundles input -> UDP.
+3. **Simulation**: `GameSession` (via `RollbackSystem`) feeds inputs to `Simulation`.
+4. **ECS Update**: `Simulation.Tick()` runs Systems.
+5. **Rendering**: `PlayState` calls `WorldRenderer.DrawWorld(World)`.
 
 ## Determinism
 To ensure all clients see the same game:
