@@ -4,9 +4,6 @@ using Bomberman.Core.ECS.Components;
 using Bomberman.Core.Game;
 using System.Collections.Generic;
 using System.IO;
-
-
-
 using Bomberman.Core;
 
 namespace Bomberman.Rollback
@@ -33,7 +30,9 @@ namespace Bomberman.Rollback
         public bool SimulateNetworked { get; set; }
 
         private InputRecorder _recorder;
-        private Dictionary<int, GameStateSnapshot> _snapshotBuffer = new Dictionary<int, GameStateSnapshot>();
+        private SnapshotStore _snapshotStore;
+        private MispredictionDetector _detector;
+        private ResimulationRunner _runner;
         private Dictionary<int, Dictionary<int, InputState>> _remoteInputBuffer = new Dictionary<int, Dictionary<int, InputState>>(); // Frame -> PlayerId -> Input
         private Dictionary<int, InputState> _localInputBuffer = new Dictionary<int, InputState>(); // Frame -> LocalInput
 
@@ -73,6 +72,9 @@ namespace Bomberman.Rollback
             _telemetry = telemetry ?? new NoOpTelemetry();
             _storage = storage;
             _recorder = new InputRecorder(_storage);
+            _snapshotStore = new SnapshotStore(MaxSnapshotFrames);
+            _detector = new MispredictionDetector(_telemetry);
+            _runner = new ResimulationRunner(_gameConfig, _telemetry);
         }
 
         public int GetLastConfirmedFrame(int playerId)
@@ -120,7 +122,7 @@ namespace Bomberman.Rollback
             _totalPlayers = totalPlayers; // Update in case it changed (e.g. from replay)
             Simulation = new Simulation(seed, totalPlayers, _gameConfig);
             // Save initial state (Frame -1) so we can rollback TO Frame 0
-            _snapshotBuffer[-1] = new GameStateSnapshot(-1, Simulation.World);
+            _snapshotStore.Save(-1, Simulation.World);
             // Logger hookup can be done externally or passed in
         }
 
@@ -152,7 +154,7 @@ namespace Bomberman.Rollback
         public void Reset()
         {
             _currentFrame = 0;
-            _snapshotBuffer.Clear();
+            _snapshotStore.Clear();
             _remoteInputBuffer.Clear();
             _localInputBuffer.Clear();
             _lastConfirmedRemoteInputs.Clear();
@@ -165,9 +167,9 @@ namespace Bomberman.Rollback
             _currentFrame = frame;
             // Clear future snapshots if any? 
             // When syncing, we assume we are replacing everything.
-            _snapshotBuffer.Clear();
+            _snapshotStore.Clear();
             // Store current as base snapshot?
-             _snapshotBuffer[frame] = new GameStateSnapshot(frame, Simulation.World);
+             _snapshotStore.Save(frame, Simulation.World);
         }
 
         private int _currentFrame = 0;
@@ -358,16 +360,11 @@ namespace Bomberman.Rollback
                     Simulation.Update(inputs, (float)FixedTimeStep);
 
                     // 5. Save Snapshot
-                    _snapshotBuffer[_currentFrame] = new GameStateSnapshot(_currentFrame, Simulation.World);
+                    _snapshotStore.Save(_currentFrame, Simulation.World);
                     
-                    // 6. Cleanup Old History
+                    // 6. Cleanup Old History (Handled by SnapshotStore, but we need to trim inputs)
                     int oldestFrameToKeep = _currentFrame - MaxSnapshotFrames;
                     
-                    if (_snapshotBuffer.ContainsKey(oldestFrameToKeep - 1)) 
-                    {
-                        _snapshotBuffer.Remove(oldestFrameToKeep - 1);
-                    }
-
                     // Trim Input Buffers
                     // We can safely remove inputs older than the oldest snapshot we can rollback to.
                     if (_localInputBuffer.ContainsKey(oldestFrameToKeep - 1))
@@ -423,159 +420,48 @@ namespace Bomberman.Rollback
         {
              int earliestMisprediction = -1;
              
-             // Check if inputs are too old to rollback to
-             // We need at least one snapshot BEFORE the startFrame to rollback properly?
-             // Actually, we need snapshot at startFrame-1.
-             // If the oldest history we have is Frame 100, and input is for Frame 50 -> Too Old.
-             
-             int oldestFrameWeHave = -1;
-             foreach(var k in _snapshotBuffer.Keys) 
-                 if (oldestFrameWeHave == -1 || k < oldestFrameWeHave) oldestFrameWeHave = k;
-
-             // Allow some margin? 
-             // If inputs start at StartFrame.
-             if (inputs.Length > 0)
+             // Check if inputs are too old
+             if (inputs.Length > 0 && _detector.IsInputTooOld(startFrame - (inputs.Length - 1), _snapshotStore))
              {
-                 int oldestInputFrame = startFrame - (inputs.Length - 1);
-                 // If the NEWEST input in the packet is still too old to matter?
-                 // No, if ANY part of the packet requires a rollback we can't do, we are in trouble.
-                 // Actually, usually we care about the earliest frame we need to effect.
-                 
-                 // If the inputs are ancient, we can't apply them.
-                 // Rollback requires snapshot at (frame-1).
-                 // So if startFrame < oldestFrameWeHave + 1 -> TooOld?
-                 
-                 // Let's use the oldest frame in the batch.
-                 int oldestInBatch = startFrame - (inputs.Length - 1);
-                 
-                 // However, we only care if it differs from what we predicted.
-                 // Use simple check: If startFrame (newest) is older than oldest snapshot... it's definitely too old?
-                 // Wait, we need to check validity of specific frames.
-                 
-                 // Simple heuristic: If startFrame is older than oldest available snapshot, reject.
-                 if (startFrame < oldestFrameWeHave)
-                 {
-                     return InputResult.TooOld;
-                 }
+                 return InputResult.TooOld;
+             }
+             
+             // Process all inputs in the packet (Oldest first) for Buffering
+             for (int i = inputs.Length - 1; i >= 0; i--)
+             {
+                 int frame = startFrame - i;
+                 if (frame < 0) continue;
+                 AddRemoteInput(pid, frame, inputs[i]);
              }
 
-            // Process all inputs in the packet (Oldest first)
-            for (int i = inputs.Length - 1; i >= 0; i--)
-            {
-                int frame = startFrame - i;
-                InputState input = inputs[i];
+             // Detect Mispredictions (Inputs)
+             _detector.DetectInputMisprediction(pid, startFrame, inputs, _currentFrame, _recorder, ref earliestMisprediction);
 
-                if (frame < 0) continue;
+             // Detect Desync (State)
+             _detector.DetectStateDesync(pid, startFrame, remotePos, remoteHash, _currentFrame, _snapshotStore, ref earliestMisprediction);
 
-                AddRemoteInput(pid, frame, input);
+             // Update latest known input for prediction
+             if (inputs.Length > 0)
+             {
+                 _lastConfirmedRemoteInputs[pid] = inputs[0];
+                 _lastConfirmedRemoteFrame[pid] = startFrame;
+             }
 
-                // CHECK FOR MISPREDICTION (INPUTS)
-                if (frame < _currentFrame)
-                {
-                        // Saftey check for history availability before checking misprediction
-                        // If we don't have the recorder history for this frame (cleared), we might skip?
-                        // But we should have it if within snapshot range.
-                        
-                        InputState[] usedInputs = _recorder.GetFrame(frame);
-                        
-                        // If we can't check, we assume success or ignore?
-                        if (usedInputs != null && usedInputs.Length > pid && !input.Equals(usedInputs[pid]))
-                        {
-                            if (earliestMisprediction == -1 || frame < earliestMisprediction)
-                            {
-                                earliestMisprediction = frame;
-                            }
-                            
-                            usedInputs[pid] = input; 
-                            _recorder.UpdateFrame(frame, usedInputs);
-                        }
-                }
-            }
-
-            // CHECK FOR DESYNC (STATE HASH & POSITION)
-            if (startFrame < _currentFrame && _snapshotBuffer.ContainsKey(startFrame))
-            {
-                    // Correction Logic: Check if Player Position matches remote (rough check)
-                    // We need to look up the player in the snapshot by ID (pid)
-                    var snap = _snapshotBuffer[startFrame];
-                    var players = snap.GetState<PlayerComponent>();
-                    var transforms = snap.GetState<TransformComponent>();
-                    
-                    int pIndex = -1;
-                    for(int i=0; i<players.components.Count; i++)
-                    {
-                        if (players.components[i].PlayerId == pid) 
-                        {
-                            pIndex = i; 
-                            break; 
-                        }
-                    }
-                    
-                    if (pIndex != -1)
-                    {
-                        Entity pEntity = players.entities[pIndex];
-                        int tIndex = -1;
-                        for(int k=0; k<transforms.entities.Count; k++)
-                        {
-                            if (transforms.entities[k].Index == pEntity.Index) { tIndex = k; break; }
-                        }
-                        
-                        if (tIndex != -1)
-                        {
-                            IntVector2 localPos = transforms.components[tIndex].Position;
-                            // Distance check using squared distance
-                            // 4 pixels = 400 subpixel units
-                            int curX = localPos.X;
-                            int curY = localPos.Y;
-                            int remX = remotePos.X;
-                            int remY = remotePos.Y;
-                            long distSq = (long)(curX - remX) * (curX - remX) + (long)(curY - remY) * (curY - remY);
-                            long threshold = 400 * 400;
-
-                            if (distSq > threshold) 
-                            {
-                                _telemetry.Log($"[Sync] Correction! Frame {startFrame} Player {pid}. Local:{localPos} Remote:{remotePos}");
-                                var tf = transforms.components[tIndex];
-                                tf.Position = remotePos;
-                                transforms.components[tIndex] = tf; 
-                                
-                                if (earliestMisprediction == -1 || startFrame < earliestMisprediction)
-                                    earliestMisprediction = startFrame;
-                            }
-                        }
-                    }
-
-                    int localHash = StateHasher.Hash(snap);
-                    if (localHash != remoteHash)
-                    {
-                        _telemetry.LogError($"[Sync] CRITICAL DESYNC! Frame {startFrame} Player {pid}. LocalHash:{localHash} RemoteHash:{remoteHash} -> ROLLBACK");
-                        if (earliestMisprediction == -1 || startFrame < earliestMisprediction)
-                            earliestMisprediction = startFrame;
-                    }
-            }
-
-            // Update latest known input for prediction
-            if (inputs.Length > 0)
-            {
-                _lastConfirmedRemoteInputs[pid] = inputs[0];
-                _lastConfirmedRemoteFrame[pid] = startFrame;
-            }
-
-            // Trigger Rollback if needed
-            if (earliestMisprediction != -1)
-            {
-                // Verify we actually CAN rollback to this frame
-                if (!_snapshotBuffer.ContainsKey(earliestMisprediction - 1))
-                {
-                    _telemetry.LogWarning($"[Rollback] Request to rollback to {earliestMisprediction} but too old. Returning TooOld.");
-                    return InputResult.TooOld;
-                }
-                
-                PerformRollback(earliestMisprediction);
-                return InputResult.Misprediction;
-            }
-            
-            return InputResult.Success;
+             // Trigger Rollback if needed
+             if (earliestMisprediction != -1)
+             {
+                 // Verify we actually CAN rollback to this frame
+                 if (!_snapshotStore.Has(earliestMisprediction - 1))
+                 {
+                     _telemetry.LogWarning($"[Rollback] Request to rollback to {earliestMisprediction} but too old. Returning TooOld.");
+                     return InputResult.TooOld;
+                 }
+                 
+                 PerformRollback(earliestMisprediction);
+                 return InputResult.Misprediction;
+             }
+             
+             return InputResult.Success;
         }
 
         /// <summary>
@@ -585,44 +471,20 @@ namespace Bomberman.Rollback
         /// <param name="mispredictedFrame">The frame number where the divergence occurred.</param>
         private void PerformRollback(int mispredictedFrame)
         {
-            _telemetry.LogWarning($"ROLLBACK from frame {_currentFrame} to {mispredictedFrame}");
-            _telemetry.RecordRollback(_currentFrame, mispredictedFrame);
-
-            if (!_snapshotBuffer.TryGetValue(mispredictedFrame - 1, out GameStateSnapshot? snapshot))
-            {
-                _telemetry.LogError($"!!! CRITICAL: Cannot rollback, no snapshot for frame {mispredictedFrame - 1}");
-                return;
-            }
-            
             if (Simulation == null) return;
 
-            snapshot.Restore(Simulation.World);
-
-            for (int frame = mispredictedFrame; frame < _currentFrame; frame++)
-            {
-                InputState[] inputs = new InputState[_totalPlayers];
-                
-                if (_localInputBuffer.ContainsKey(frame)) inputs[_localPlayerId] = _localInputBuffer[frame];
-
-                for (int i = 0; i < _totalPlayers; i++)
-                {
-                    if (i == _localPlayerId) continue;
-                    if (_remoteInputBuffer.ContainsKey(frame) && _remoteInputBuffer[frame].ContainsKey(i))
-                    {
-                        inputs[i] = _remoteInputBuffer[frame][i]; 
-                    }
-                    else
-                    {
-                        inputs[i] = PredictInputForPlayer(i); 
-                    }
-                }
-
-                Simulation.Update(inputs, (float)FixedTimeStep);
-
-                _snapshotBuffer[frame] = new GameStateSnapshot(frame, Simulation.World);
-
-                if (IsRecording) _recorder.UpdateFrame(frame, inputs);
-            }
+            _runner.PerformRollback(
+                _currentFrame, 
+                mispredictedFrame, 
+                Simulation, 
+                _snapshotStore, 
+                _localInputBuffer, 
+                _remoteInputBuffer, 
+                _lastConfirmedRemoteInputs, 
+                _recorder, 
+                _localPlayerId, 
+                _totalPlayers, 
+                IsRecording);
         }
     }
 }

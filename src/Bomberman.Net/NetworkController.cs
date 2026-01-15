@@ -5,6 +5,7 @@ using Bomberman.Core;
 using Bomberman.Core.Input;
 using Bomberman.Rollback;
 using Bomberman.Net.Packets;
+using Bomberman.Net.Handlers;
 
 namespace Bomberman.Net
 {
@@ -44,8 +45,8 @@ namespace Bomberman.Net
 
         private Dictionary<IPEndPoint, DateTime> _lastDataReceived = new Dictionary<IPEndPoint, DateTime>();
         
-        // Chunk Reassembly: [Endpoint] -> (Chunks[Index->Data], TotalChunks)
-        private Dictionary<IPEndPoint, (Dictionary<int, byte[]> Chunks, int TotalChunks)> _reassemblyBuffers = new Dictionary<IPEndPoint, (Dictionary<int, byte[]>, int)>();
+        
+        private PacketReassembler _reassembler = new PacketReassembler();
         
         private DateTime _lastHeartbeatSent = DateTime.MinValue;
         private bool _isClient = false;
@@ -381,48 +382,9 @@ namespace Bomberman.Net
                     
                 case PacketType.StateChunk:
                     var (chunkIndex, totalChunks, chunkData) = NetworkProtocol.ReadStateChunk(data);
-                    
-                    if (!_reassemblyBuffers.ContainsKey(sender))
-                    {
-                        _reassemblyBuffers[sender] = (new Dictionary<int, byte[]>(), totalChunks);
-                    }
-
-                    var buffer = _reassemblyBuffers[sender];
-                    // Validation: If TotalChunks changed, maybe reset?
-                    if (buffer.TotalChunks != totalChunks)
-                    {
-                        // Stale or new sync started? Reset.
-                         _reassemblyBuffers[sender] = (new Dictionary<int, byte[]>(), totalChunks);
-                         buffer = _reassemblyBuffers[sender];
-                    }
-
-                    if (!buffer.Chunks.ContainsKey(chunkIndex))
-                    {
-                        buffer.Chunks[chunkIndex] = chunkData;
-                    }
-
-                    // Check Completion
-                    if (buffer.Chunks.Count == totalChunks)
-                    {
-                        Console.WriteLine($"[Network] StateSync Reassembled ({totalChunks} chunks) from {sender}");
-                        
-                        // Merge
-                        // We need to know total size. Iterate to sum length.
-                        int totalBytes = 0;
-                        for(int i=0; i<totalChunks; i++) totalBytes += buffer.Chunks[i].Length;
-                        
-                        byte[] fullSnapshot = new byte[totalBytes];
-                        int offset = 0;
-                        for(int i=0; i<totalChunks; i++)
-                        {
-                            byte[] c = buffer.Chunks[i];
-                            Array.Copy(c, 0, fullSnapshot, offset, c.Length);
-                            offset += c.Length;
-                        }
-                        
-                        _reassemblyBuffers.Remove(sender);
-                        OnStateSyncReceived?.Invoke(fullSnapshot);
-                    }
+                    _reassembler.HandleChunk(sender, chunkIndex, totalChunks, chunkData, (fullSnapshot) => {
+                         OnStateSyncReceived?.Invoke(fullSnapshot);
+                    });
                     break;
                     
                 case PacketType.StateSync:
