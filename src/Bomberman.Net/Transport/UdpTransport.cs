@@ -47,17 +47,20 @@ namespace Bomberman.Net
             throw new Exception($"Failed to bind to any port starting from {preferredPort} after {MaxRetries} attempts.");
         }
 
+        /// <inheritdoc/>
         public void Connect(string ip, int port)
         {
             _connectedHost = new IPEndPoint(IPAddress.Parse(ip), port);
         }
 
+        /// <inheritdoc/>
         public void SendToConnectedHost(byte[] data)
         {
             if (_connectedHost == null) return;
             SendTo(data, _connectedHost);
         }
 
+        /// <inheritdoc/>
         public void SendTo(byte[] data, IPEndPoint target)
         {
             try
@@ -105,6 +108,7 @@ namespace Bomberman.Net
             _udpClient = null;
         }
 
+        /// <inheritdoc/>
         public void Dispose()
         {
             Close();

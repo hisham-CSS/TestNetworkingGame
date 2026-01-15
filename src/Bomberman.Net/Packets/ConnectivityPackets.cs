@@ -3,6 +3,7 @@ using System.IO;
 
 namespace Bomberman.Net.Packets
 {
+    /// <summary>packet sent by a client to request joining a game.</summary>
     public struct JoinRequestPacket : IPacket
     {
         public PacketType Type => PacketType.JoinRequest;
@@ -20,6 +21,7 @@ namespace Bomberman.Net.Packets
         }
     }
 
+    /// <summary>Packet sent by the server to accept a join request.</summary>
     public struct WelcomePacket : IPacket
     {
         public PacketType Type => PacketType.Welcome;
@@ -46,6 +48,7 @@ namespace Bomberman.Net.Packets
         }
     }
 
+    /// <summary>Keep-alive packet to prevent timeouts.</summary>
     public struct HeartbeatPacket : IPacket
     {
         public PacketType Type => PacketType.Heartbeat;
@@ -61,6 +64,7 @@ namespace Bomberman.Net.Packets
         }
     }
 
+    /// <summary>Packet indicating a disconnection event.</summary>
     public struct DisconnectPacket : IPacket
     {
         public PacketType Type => PacketType.Disconnect;
@@ -80,6 +84,7 @@ namespace Bomberman.Net.Packets
         }
     }
 
+    /// <summary>Broadcast packet sent to find local LAN servers.</summary>
     public struct DiscoveryRequestPacket : IPacket
     {
         public PacketType Type => PacketType.DiscoveryRequest;
@@ -92,6 +97,7 @@ namespace Bomberman.Net.Packets
         public static DiscoveryRequestPacket Deserialize(BinaryReader reader) => new DiscoveryRequestPacket();
     }
 
+    /// <summary>Response from a server to a discovery request.</summary>
     public struct DiscoveryResponsePacket : IPacket
     {
         public PacketType Type => PacketType.DiscoveryResponse;

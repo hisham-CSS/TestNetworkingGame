@@ -24,13 +24,13 @@ namespace Bomberman.Net
         // Events to decouple logic from Program.cs
 
         /// <summary>Event raised when a Welcome packet is received.</summary>
-        public event Action<int, int, int>? OnWelcomeReceived; // assignedId, seed, totalPlayers
+        public event Action<int, int, int>? OnWelcomeReceived;
         /// <summary>Event raised when a LobbyUpdate packet is received.</summary>
-        public event Action<int, int, int>? OnLobbyUpdateReceived; // connectedCount, totalPlayers, slotMask
+        public event Action<int, int, int>? OnLobbyUpdateReceived;
         /// <summary>Event raised when a StartGame packet is received.</summary>
-        public event Action<int, int>? OnStartGameReceived; // seed, totalPlayers
+        public event Action<int, int>? OnStartGameReceived;
         /// <summary>Event raised when a DiscoveryRequest packet is received.</summary>
-        public event Action<System.Net.IPEndPoint, string, int, int>? OnDiscoveryRequestReceived; // sender, header, players, max
+        public event Action<System.Net.IPEndPoint, string, int, int>? OnDiscoveryRequestReceived;
         /// <summary>Event raised when a DiscoveryResponse packet is received.</summary>
         public event Action<System.Net.IPEndPoint, string, int, int>? OnDiscoveryResponseReceived; 
         /// <summary>Event raised when a JoinRequest packet is received.</summary>
@@ -143,15 +143,7 @@ namespace Bomberman.Net
                _lastPingSent = DateTime.Now;
             }
 
-            // Timeout Logic
-            // If Host: Check all clients
-            // If Client: Check Host (but we don't know Host Endpoint explicitly here easily without UdpTransport exposure)
-            // Actually UdpTransport knows host. But NetworkController receives packets from Host.
-            // We need to track Host Endpoint in NetworkController if we are client.
-            // When we receive ANY packet from Host (or anyone if client only talks to host), we update timestamp.
-            
-            // For now, let's just check ConnectedClients (Host Logic).
-            // Client Timeout Logic: If we haven't received anything for > 5s?
+            // Check for connection timeouts
             
             var now = DateTime.Now;
             List<IPEndPoint> timedOut = new List<IPEndPoint>();
@@ -230,12 +222,7 @@ namespace Bomberman.Net
             var packet = NetworkProtocol.CreateDiscoveryRequest();
             for (int p = startPort; p < endPort; p++)
             {
-                // Note: ITransport doesn't expose BroadcastToPort directly anymore to keep it simple.
-                // We can construct the endpoint manually if we know it's UDP.
-                // But abstraction-wise, maybe ITransport SHOULD handle broadcast logic?
-                // For now, I'll assume Udp behavior: 255.255.255.255
-                
-                // Let's use SendTo with Broadcast IP.
+                // Broadcast to potential LAN servers
                 _transport.SendTo(packet, new IPEndPoint(IPAddress.Broadcast, p));
             }
         }
@@ -276,7 +263,7 @@ namespace Bomberman.Net
                 byte[] packet = NetworkProtocol.CreateStateChunk(i, totalChunks, chunkData);
                 _transport.SendTo(packet, target);
                 
-                // Small delay to prevent UDP buffer overflow on sender/receiver?
+                // Small delay to prevent UDP buffer overflow
                 System.Threading.Thread.Sleep(2); 
             }
             Console.WriteLine($"[Network] Sent StateSync to {target} in {totalChunks} chunks.");
@@ -333,15 +320,13 @@ namespace Bomberman.Net
              // Update Timestamp
             _lastDataReceived[sender] = DateTime.Now;
             
-            // If we are client, we should probably track the sender as "Server" if not already?
-            // UdpTransport handles the socket connection.
+
 
             PacketType type = (PacketType)data[0];
 
             switch (type)
             {
                 case PacketType.Heartbeat:
-                    // Just timestamp update (done above)
                     break;
                 
                 case PacketType.Disconnect:
@@ -375,7 +360,6 @@ namespace Bomberman.Net
                     int version = NetworkProtocol.ReadJoinRequest(data);
                     if (version != NetworkProtocol.ProtocolVersion)
                     {
-                         // Send Reject?
                         Console.WriteLine($"[Network] Rejected JoinRequest from {sender}: Protocol Version Mismatch (Incoming: {version}, Local: {NetworkProtocol.ProtocolVersion})");
                         return;
                     }
@@ -398,7 +382,6 @@ namespace Bomberman.Net
                 case PacketType.Welcome:
                     var (assignedId, seed, total) = NetworkProtocol.ReadWelcome(data);
                     OnWelcomeReceived?.Invoke(assignedId, seed, total);
-                    // If client, maybe we should explicitly track Host Endpoint here if needed?
                     break;
 
                 case PacketType.LobbyUpdate:

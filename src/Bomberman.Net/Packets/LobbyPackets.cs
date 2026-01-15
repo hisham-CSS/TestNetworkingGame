@@ -3,6 +3,7 @@ using System.IO;
 
 namespace Bomberman.Net.Packets
 {
+    /// <summary>Provides the client with the current state of the lobby.</summary>
     public struct LobbyUpdatePacket : IPacket
     {
         public PacketType Type => PacketType.LobbyUpdate;
@@ -32,6 +33,7 @@ namespace Bomberman.Net.Packets
         }
     }
 
+    /// <summary>Packet indicating a player's ready status in the lobby.</summary>
     public struct LobbyReadyPacket : IPacket
     {
         public PacketType Type => PacketType.LobbyReady;
@@ -55,6 +57,7 @@ namespace Bomberman.Net.Packets
         }
     }
 
+    /// <summary>Command to start the game session.</summary>
     public struct StartGamePacket : IPacket
     {
         public PacketType Type => PacketType.StartGame;

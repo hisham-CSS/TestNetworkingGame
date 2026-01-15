@@ -27,8 +27,10 @@ namespace Bomberman.Net
             }
         }
 
+        /// <summary>Creates a Join Request packet.</summary>
         public static byte[] CreateJoinRequest() => Serialize(new JoinRequestPacket { Version = ProtocolVersion });
 
+        /// <summary>Parses a Join Request packet to extract the version.</summary>
         public static int ReadJoinRequest(byte[] data)
         {
             using (var ms = new MemoryStream(data))
@@ -39,9 +41,11 @@ namespace Bomberman.Net
             }
         }
 
+        /// <summary>Creates a Welcome packet for a new client.</summary>
         public static byte[] CreateWelcome(int assignedId, int seed, int totalPlayers) 
             => Serialize(new WelcomePacket { AssignedId = assignedId, Seed = seed, TotalPlayers = totalPlayers });
 
+        /// <summary>Parses a Welcome packet.</summary>
         public static (int assignedId, int seed, int totalPlayers) ReadWelcome(byte[] data)
         {
             using (var ms = new MemoryStream(data))
@@ -53,9 +57,11 @@ namespace Bomberman.Net
             }
         }
 
+        /// <summary>Creates a Lobby Update packet with current player counts.</summary>
         public static byte[] CreateLobbyUpdate(int connectedCount, int totalPlayers, int slotMask)
             => Serialize(new LobbyUpdatePacket { ConnectedCount = connectedCount, TotalPlayers = totalPlayers, SlotMask = slotMask });
 
+        /// <summary>Parses a Lobby Update packet.</summary>
         public static (int connectedCount, int totalPlayers, int slotMask) ReadLobbyUpdate(byte[] data)
         {
             using (var ms = new MemoryStream(data))
@@ -67,9 +73,11 @@ namespace Bomberman.Net
             }
         }
 
+        /// <summary>Creates a Start Game packet to signal the session beginning.</summary>
         public static byte[] CreateStartGame(int seed, int totalPlayers)
             => Serialize(new StartGamePacket { Seed = seed, TotalPlayers = totalPlayers });
 
+        /// <summary>Parses a Start Game packet.</summary>
         public static (int seed, int totalPlayers) ReadStartGame(byte[] data)
         {
             using (var ms = new MemoryStream(data))

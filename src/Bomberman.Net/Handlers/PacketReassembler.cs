@@ -25,10 +25,9 @@ namespace Bomberman.Net.Handlers
 
             var buffer = _reassemblyBuffers[sender];
             
-            // Validation: If TotalChunks changed, maybe reset?
+            // If TotalChunks changed, it implies a new sync sequence or stale data; reset buffer.
             if (buffer.TotalChunks != totalChunks)
             {
-                // Stale or new sync started? Reset.
                 _reassemblyBuffers[sender] = (new Dictionary<int, byte[]>(), totalChunks);
                 buffer = _reassemblyBuffers[sender];
             }

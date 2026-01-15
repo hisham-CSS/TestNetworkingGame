@@ -5,6 +5,7 @@ using Bomberman.Core.Input;
 
 namespace Bomberman.Net.Packets
 {
+    /// <summary>Carries input data for a specific player frame.</summary>
     public struct InputPacket : IPacket
     {
         public PacketType Type => PacketType.Input;
@@ -68,6 +69,7 @@ namespace Bomberman.Net.Packets
         }
     }
 
+    /// <summary>Carries a full state snapshot for late join or resync.</summary>
     public struct StateSyncPacket : IPacket
     {
         public PacketType Type => PacketType.StateSync;
@@ -87,6 +89,7 @@ namespace Bomberman.Net.Packets
         }
     }
 
+    /// <summary>Carries a fragment of a large state snapshot.</summary>
     public struct StateChunkPacket : IPacket
     {
         public PacketType Type => PacketType.StateChunk;
