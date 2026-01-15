@@ -3,6 +3,9 @@ using Bomberman.App.GameHost;
 
 namespace Bomberman.App
 {
+    /// <summary>
+    /// The entry point for the application.
+    /// </summary>
     public static class Program
     {
         [STAThread]

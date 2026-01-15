@@ -80,8 +80,7 @@ namespace Bomberman.App.States
                     _scrollOffset = _selection - MaxVisibleItems + 1;
                 }
                 
-                // Handle looping wrap-around for scroll logic (edge case if selection wraps)
-                // If we wrapped to 0, reset scroll
+                // Handle looping wrap-around for scroll logic
                 if (_selection == 0) _scrollOffset = 0;
                 // If we wrapped to end, adjust scroll to show end
                 if (_selection == _replayFiles.Count - 1) 

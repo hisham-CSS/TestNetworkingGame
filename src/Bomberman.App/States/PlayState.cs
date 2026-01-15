@@ -186,9 +186,7 @@ namespace Bomberman.App.States
                     if (_clientSlots[i] != null && _clientSlots[i].Equals(sender))
                     {
                         _clientSlots[i] = null;
-                        int pid = i + 1; // 0 is Host, but client slots start at 0? 
-                        // Wait, Host is 0. 
-                        // Client slots: Slot 0 -> ID 1. Slot 1 -> ID 2.
+                        int pid = i + 1;
                         _context.Logger.Info($"[PlayState] Player {pid} Disconnected: {reason}");
                         _gameSession.DisconnectPlayer(pid);
                         _context.Network.RemoveClient(sender);
@@ -278,11 +276,8 @@ namespace Bomberman.App.States
                 }
             }
             
-            // If we consumed all accumulator and still need catchup?
-            // If we have extraSteps > 0, it means we have DATA to simulate.
-            // Ideally we run those steps even if accumulator is 0, because we are "playing back" history.
-            // BUT: StepSimulation consumes inputs. If we run without accumulator, do we use valid inputs?
-            // Yes, StepSimulation reads/generates inputs for the CURRENT frame.
+            // If we have remaining steps/inputs but no accumulated time, we still process them to catch up.
+            // This effectively "creates time" to synchronize with the host.
             
             if (stepsTaken < maxSteps)
             {
@@ -364,9 +359,7 @@ namespace Bomberman.App.States
                 // We need the endpoint for this PID.
                 if (pid > 0 && pid <= _clientSlots.Length && _clientSlots[pid-1] != null)
                 {
-                    double now = _accumulator; // Use accumulation time or DateTime? Accumulator is per-tick. Use DateTime for wall clock.
-                    // Actually PlayState tracks _accumulator from gameTime.
-                    // Let's use DateTime.Now.TimeOfDay.TotalSeconds
+                    // Use Wall Clock time for sync throttling
                     double nowSec = DateTime.Now.TimeOfDay.TotalSeconds;
                     
                     if (!_lastSyncSent.ContainsKey(pid) || (nowSec - _lastSyncSent[pid]) > 1.0)
@@ -379,8 +372,8 @@ namespace Bomberman.App.States
                         
                         _lastSyncSent[pid] = nowSec;
                         
-                        // Optional: Send a specific "Stop Spamming" packet? 
-                        // Or we just rely on the sync eventually getting there.
+                        
+                        _lastSyncSent[pid] = nowSec;
                     }
                 }
             }
@@ -400,8 +393,7 @@ namespace Bomberman.App.States
         {
              if (_isHost && _context.Network != null)
             {
-                // We assume we know player count here? 
-                // PlayState constructor knows 'playerCount'.
+                 // PlayState knows the total player count from its constructor/session.
                 _context.Network.SendDiscoveryResponse(sender, "Local Game", _context.Network.ConnectedClients.Count() + 1, _gameSession.TotalPlayers);
             }
         }

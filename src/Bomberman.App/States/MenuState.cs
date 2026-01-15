@@ -71,8 +71,7 @@ namespace Bomberman.App.States
                 ExecuteSelection();
             }
 
-            // Legacy H/J/R Hotkeys (Optional: Keep or Remove? Removing for consistency)
-            // ESC
+            // Handle Cancellation
             if (_context.Input.IsMenuCancel())
             {
                 _context.Game.Exit(); // Exit on ESC from Main Menu

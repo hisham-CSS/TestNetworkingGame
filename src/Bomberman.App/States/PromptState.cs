@@ -50,7 +50,7 @@ namespace Bomberman.App.States
             int centerX = _context.Game.GraphicsDevice.Viewport.Width / 2;
             int centerY = _context.Game.GraphicsDevice.Viewport.Height / 2;
 
-            // Draw Box (simulated by text for now)
+            // Draw Message Box
             _context.Renderer.DrawTextCentered("NOTICE", centerX, centerY - 50, Color.Yellow, 4);
             _context.Renderer.DrawTextCentered(_message, centerX, centerY + 20, Color.White, 2);
             _context.Renderer.DrawTextCentered("Press [ENTER] to Continue", centerX, centerY + 100, Color.Gray, 2);

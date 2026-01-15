@@ -9,26 +9,9 @@ namespace Bomberman.App.Input
         private KeyboardState _current;
         private KeyboardState _previous;
 
-        // Call this once per frame if we want stateful tracking (JustPressed)
-        // usage in states currently grabs fresh state. 
-        // For simplicity, we'll grab fresh state here for isDown checks.
-        // But for "Pressed" (trigger), we need previous state.
-        // The existing States manage _prevKeyboard themselves.
-        // To abstract that, this Service needs to be updated every frame explicitly? 
-        // Or specific "IsNewPress" methods?
-        
-        // Let's stick to "IsDown" for now or expose JustPressed logic.
-        // Current interface just asks "IsMenuUp". Is that Down or Pressed?
-        // Menu usually wants Pulse (Pressed).
-        // Let's modify interface to support both or handle state internally if context updates it.
-        
-        // BETTER: allow States to pass their previous state or manage update here?
-        // Managing Update here requires GameContext to call input.Update().
-        // Let's add Update() to interface?
-        
-        // Simpler: Just implement direct checks first (IsDown). 
-        // The states (MenuState) rely on IsNewKeyPress.
-        // So we need IsNewKeyPress abstraction.
+        /// <summary>
+        /// Updates the input service state. Should be called once per frame.
+        /// </summary>
         
         public void Update()
         {
@@ -55,8 +38,7 @@ namespace Bomberman.App.Input
         // Gameplay (Continuous state)
         public InputState GetGameInput(int playerIndex)
         {
-            // For now, only Local Player (Index 0/controlled) maps to Keyboard.
-            // P2/P3/P4 would come from Gamepad if implemented.
+            // Only Local Player (Index 0) maps to Keyboard.
             
             var state = new InputState();
             state.Movement = IntVector2.Zero;
@@ -67,16 +49,7 @@ namespace Bomberman.App.Input
             if (_current.IsKeyDown(Keys.A) || _current.IsKeyDown(Keys.Left)) state.Movement.X -= 1;
             if (_current.IsKeyDown(Keys.D) || _current.IsKeyDown(Keys.Right)) state.Movement.X += 1;
 
-            // Bomb (Space) - Continuous or Pulse?
-            // Game logic usually handles Pulse for planting, but InputState stores "IsDown" often?
-            // Core logic: "if (input.PlaceBomb && canPlace) ..."
-            // Usually we send "PlaceBomb" as true only on the frame it was pressed?
-            // PlayState logic: `if (kState.IsKeyDown(Keys.Space) && !_prev.IsKeyDown(Keys.Space)) _pendingBomb = true`
-            // So PlayState wants a Pulse.
-            
-            // If we return "IsDown", Core needs to handle debouncing.
-            // But PlayState currently handles debouncing.
-            // Let's return IsNewPress for Bomb to match PlayState intent.
+            // Bomb input should be a pulse (IsNewPress) to prevent spamming
             
             state.PlaceBomb = IsNewPress(Keys.Space);
             

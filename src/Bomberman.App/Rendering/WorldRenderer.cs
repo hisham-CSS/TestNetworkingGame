@@ -111,14 +111,13 @@ namespace Bomberman.App.Rendering
 
         private Vector2 ToVec2(IntVector2 v)
         {
-            // Use local constant or access Simulation.SubpixelScale if public static (it is const internal usually?)
-            // Simulation class has: public const int SubpixelScale = 1000;
+            // Use Simulation.SubpixelScale for conversion
             return new Vector2(v.X, v.Y) / (float)Simulation.SubpixelScale;
         }
 
         private TransformComponent FindTransform(Entity entity, List<Entity> transformEntities, List<TransformComponent> transforms)
         {
-            // Linear search for now (ECS optimization later: Entity Index mapping)
+            // Linear search for performance simplicity in this scale
             for(int i=0; i<transformEntities.Count; i++)
             {
                 if(transformEntities[i].Equals(entity))

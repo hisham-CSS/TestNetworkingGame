@@ -117,12 +117,7 @@ namespace Bomberman.App.States
             if (_context.Input.IsMenuCancel())
             {
                 // Back to Menu
-                // If we created the NetworkController just for browsing, maybe we should keep it?
-                // Actually, if we go back to Menu, we might kill it or keep it.
-                // MenuState usually expects null Network or handles it?
-                // For simplicity, let's keep it alive or Dispose if Menu creates a new one.
-                // MenuState.Enter doesn't create one. It waits for Host/Join action.
-                // We'll dispose it here to be clean, as Host mode needs specific port binding.
+                // Ensure Network is closed as Host needs fresh binding
                 _context.Network?.Close();
                 _context.Network = null;
                 
@@ -172,10 +167,10 @@ namespace Bomberman.App.States
             int width = _context.Game.GraphicsDevice.Viewport.Width;
             
             _context.Renderer.DrawTextCentered("SERVER BROWSER", centerX, 50, Color.White, 4); // Match Header Style
-            _context.Renderer.DrawTextCentered("Scanning LAN...", centerX, 100, Color.Gray, 2); // Simpler subtext
+            _context.Renderer.DrawTextCentered("Scanning LAN...", centerX, 100, Color.Gray, 2);
 
             int startY = 150;
-            int lineHeight = 30; // Tighter gap
+            int lineHeight = 30;
 
             if (_servers.Count == 0)
             {

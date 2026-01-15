@@ -54,7 +54,7 @@ namespace Bomberman.App.States
 
             if (_isReplayView)
             {
-                // Simple Exit Logic for Replay View
+                // Replay View Exit Logic
                 if (_context.Input.IsMenuCancel())
                 {
                     _manager.ChangeState(_context.StateFactory.CreateMenu());
@@ -89,7 +89,7 @@ namespace Bomberman.App.States
                 _replayName = _replayName.Substring(0, _replayName.Length - 1);
             }
 
-            // Simple Alpha-Numeric (Very basic)
+            // Alphanumeric Input Logic
             Keys[] keys = kState.GetPressedKeys();
             foreach (Keys key in keys)
             {

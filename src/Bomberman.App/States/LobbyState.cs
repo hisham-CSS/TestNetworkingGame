@@ -47,13 +47,8 @@ namespace Bomberman.App.States
             {
                 _localPlayerId = 0;
                 _networkSeed = new Random().Next();
-                _connectedPlayerCount = 1; // Host is 1
-                
                 // Reserve Slot 0 for Host
-                // (Host endpoint is null effectively, or Loopback? 
-                // Let's just leave it null and assume Slot 0 is Host)
-                // Actually, HandleDisconnected needs to know endpoints.
-                // But Host never disconnects from themselves.
+                _connectedPlayerCount = 1;
             }
             else if (hostEndpoint != null && _context.Network != null)
             {
@@ -211,10 +206,7 @@ namespace Bomberman.App.States
                 if (kState.IsKeyDown(Keys.Enter))
                 {
                     bool allReady = true;
-                    // Host is always ready if they press Enter? Or must toggle?
-                    // Let's say Host must toggle too, OR implicitly ready by pressing Enter.
-                    // For safety: Check all clients used slots.
-                    // Actually, let's enforce: Everyone connected must be Ready.
+                    // Enforce that everyone connected must be Ready
                     for (int i = 0; i < _connectedPlayerCount; i++)
                     {
                         if (!_playerReady.ContainsKey(i) || !_playerReady[i]) allReady = false;
@@ -398,7 +390,6 @@ namespace Bomberman.App.States
                 bool occupied = (slotMask & (1 << i)) != 0;
                 if (occupied)
                 {
-                    // If null, set dummy (unless it's us? No, even us, we don't track our own IP in _lobbySlots on client)
                     if (_lobbySlots[i] == null)
                         _lobbySlots[i] = new IPEndPoint(IPAddress.None, 0); 
                 }
