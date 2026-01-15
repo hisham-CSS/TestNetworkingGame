@@ -10,6 +10,7 @@ namespace Bomberman.App.Input
     public interface IInputService
     {
         // Legacy/Direct Access (optional, can be deprecated)
+
         /// <summary>Returns the raw MonoGame KeyboardState.</summary>
         KeyboardState GetKeyboard();
         
@@ -17,6 +18,7 @@ namespace Bomberman.App.Input
         void Update();
         
         // Menu Abstractions
+
         /// <summary>Checks if the menu 'Up' action was triggered.</summary>
         bool IsMenuUp();
         /// <summary>Checks if the menu 'Down' action was triggered.</summary>
@@ -26,23 +28,25 @@ namespace Bomberman.App.Input
         /// <summary>Checks if the menu 'Right' action was triggered.</summary>
         bool IsMenuRight();
         /// <summary>Checks if the menu 'Select' action was triggered (Enter/Space).</summary>
-        bool IsMenuSelect(); // Enter/Space
+        bool IsMenuSelect();
         /// <summary>Checks if the menu 'Cancel' action was triggered (Esc).</summary>
-        bool IsMenuCancel(); // Esc
+        bool IsMenuCancel();
         /// <summary>Checks if the menu 'Toggle' action was triggered (Space/Ready).</summary>
-        bool IsMenuToggle(); // Space (Ready)
+        bool IsMenuToggle();
         /// <summary>Checks if the 'Debug' toggle action was triggered (F1).</summary>
-        bool IsDebugToggle(); // F1
+        bool IsDebugToggle();
         
         // Menu Specific Hotkeys
-        /// <summary>Checks if the 'Host Game' hotkey was pressed.</summary>
-        bool IsGameHost(); // H
-        /// <summary>Checks if the 'Join Game' hotkey was pressed.</summary>
-        bool IsGameJoin(); // J
-        /// <summary>Checks if the 'Replay' hotkey was pressed.</summary>
-        bool IsGameReplay(); // R
+
+        /// <summary>Checks if the 'Host Game' hotkey was pressed (H).</summary>
+        bool IsGameHost();
+        /// <summary>Checks if the 'Join Game' hotkey was pressed (J).</summary>
+        bool IsGameJoin();
+        /// <summary>Checks if the 'Replay' hotkey was pressed (R).</summary>
+        bool IsGameReplay();
 
         // Gameplay Abstractions
+
         /// <summary>
         /// Retrieves the gameplay input state for a specific player (Movement, Bomb Place).
         /// Does NOT calculate BombTarget (requires World context).

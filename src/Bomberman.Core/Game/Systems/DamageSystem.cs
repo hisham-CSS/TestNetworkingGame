@@ -77,7 +77,7 @@ namespace Bomberman.Core.Game.Systems
                         var p = players[i];
                         p.Alive = false;
                         _world.Players.Set(i, p);
-                        // Log?
+
                         break;
                     }
                 }

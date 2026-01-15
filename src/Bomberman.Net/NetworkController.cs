@@ -22,6 +22,7 @@ namespace Bomberman.Net
         public IReadOnlyList<IPEndPoint> ConnectedClients => _connectedClients;
 
         // Events to decouple logic from Program.cs
+
         /// <summary>Event raised when a Welcome packet is received.</summary>
         public event Action<int, int, int>? OnWelcomeReceived; // assignedId, seed, totalPlayers
         /// <summary>Event raised when a LobbyUpdate packet is received.</summary>
@@ -60,6 +61,7 @@ namespace Bomberman.Net
         private DateTime _lastPingSent = DateTime.MinValue;
 
         // Allow injecting mock transport for testing
+
         /// <summary>
         /// Initializes the NetworkController with the specified transport layer.
         /// </summary>

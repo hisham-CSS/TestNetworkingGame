@@ -2,7 +2,7 @@ namespace Bomberman.Core.ECS.Pools;
 
 using System;
 using System.Collections.Generic;
-using Bomberman.Core.ECS; // For Entity? Wait, Entity is in root Core or Core.ECS? Entity was in Components.cs? No, line 2 in Step 266 said Entity.cs exists!
+using Bomberman.Core.ECS;
 
 /// <summary>
 /// A dense storage pool for ECS components of a specific type.

@@ -22,10 +22,11 @@ namespace Bomberman.Core.Game
         /// <summary>Deterministic Random Number Generator.</summary>
         public DeterministicRandom Rng { get; private set; } 
         
-        /// <summary>Deterministic Random Number Generator.</summary>
 
 
-        public const int SubpixelScale = 100; // 1 unit = 0.01 pixel
+
+        /// <summary>Subpixel resolution for deterministic physics (100 units = 1 pixel).</summary>
+        public const int SubpixelScale = 100;
         
         private readonly GameConfig _config;
         private int ScaledTileSize => _config.TileSize * SubpixelScale;
@@ -48,13 +49,7 @@ namespace Bomberman.Core.Game
             World = new World();
             Rng = new DeterministicRandom(seed);
             
-            // Calculate speed per frame based on config (Speed is pixels/sec)
-            // Units/Frame = (Speed * Subpixel) * FixedTimeStep
-            // But Physics runs on fixed tick? Simulation doesn't enforce tick here, RollbackSystem does.
-            // Assuming FixedTimeStep is constant 1/60 for now in physics calculations or passed in?
-            // Existing code used const int PlayerSpeedPerFrame = 250; 
-            // Let's approximate: 250 means 2.5 pixels/frame? 2.5 * 60 = 150 px/sec.
-            // Config default is 120. Let's use formula.
+            // Calculate speed per frame (Speed * Subpixel * FixedTimeStep)
             int speedPerFrame = (int)(_config.PlayerSpeed * SubpixelScale * _config.FixedTimeStep);
 
             // Initialize Systems
@@ -152,10 +147,8 @@ namespace Bomberman.Core.Game
             _movementSystem.Update(inputs);
 
             // 2. Input Actions (Bomb Placement)
+            // Iterate inputs to find corresponding player
             var players = World.Players.GetAll();
-            // We need to map Input Index -> Player Component
-            // Assumption: inputs[i] is for PlayerId == i
-            // We iterate inputs to find corresponding player
             for (int i = 0; i < inputs.Length; i++)
             {
                 if (inputs[i].PlaceBomb)
