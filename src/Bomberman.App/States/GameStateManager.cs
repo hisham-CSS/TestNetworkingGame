@@ -15,7 +15,7 @@ namespace Bomberman.App.States
         /// <summary>
         /// Transitions to a new state, calling Exit on the current state and Enter on the new one.
         /// </summary>
-        public void ChangeState(IGameState newState)
+        public virtual void ChangeState(IGameState newState)
         {
             if (_currentState != null)
             {

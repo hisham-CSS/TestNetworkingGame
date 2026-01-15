@@ -4,6 +4,7 @@ using Bomberman.Core;
 
 namespace Bomberman.App.Input
 {
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     public class MonogameInputService : IInputService
     {
         private KeyboardState _current;

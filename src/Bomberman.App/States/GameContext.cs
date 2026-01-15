@@ -12,7 +12,7 @@ namespace Bomberman.App.States
     /// </summary>
     public class GameContext
     {
-        public Game1 Game { get; set; }
+        public IGameHost Game { get; set; }
         public NetworkController? Network { get; set; }
         public SpriteBatch SpriteBatch { get; set; }
         public Texture2D PixelTexture { get; set; }
@@ -25,7 +25,7 @@ namespace Bomberman.App.States
         /// <summary>Global toggle for debug overlays (FPS, etc).</summary>
         public bool EnableDebugLogs { get; set; } = true;
 
-        public GameContext(Game1 game, SpriteBatch spriteBatch, Texture2D pixelTexture, PixelFont font, IInputService input, IRenderer renderer, Core.Logging.ILogger logger)
+        public GameContext(IGameHost game, SpriteBatch spriteBatch, Texture2D pixelTexture, PixelFont font, IInputService input, IRenderer renderer, Core.Logging.ILogger logger)
         {
             Game = game;
             SpriteBatch = spriteBatch;

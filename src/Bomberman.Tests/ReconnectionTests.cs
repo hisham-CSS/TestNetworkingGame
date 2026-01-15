@@ -58,7 +58,7 @@ namespace Bomberman.Tests
             byte[] data = GameStateSnapshot.SerializeWorld(50, world, 0);
 
             var newWorld = new World();
-            GameStateSnapshot.RestoreFromBytes(newWorld, null, data);
+            GameStateSnapshot.RestoreFromBytes(newWorld, null!, data);
 
             Assert.That(newWorld.Transforms.Count, Is.EqualTo(1));
             Assert.That(newWorld.Players.Count, Is.EqualTo(1));
@@ -82,7 +82,7 @@ namespace Bomberman.Tests
             // Should throw, not crash the process (JsonException or Generic)
             Assert.Throws(Is.InstanceOf<Exception>(), () => 
             {
-                GameStateSnapshot.RestoreFromBytes(world, null, garbage);
+                GameStateSnapshot.RestoreFromBytes(world, null!, garbage);
             });
         }
 
@@ -94,7 +94,7 @@ namespace Bomberman.Tests
 
             Assert.Throws(Is.InstanceOf<Exception>(), () => 
             {
-                GameStateSnapshot.RestoreFromBytes(world, null, empty);
+                GameStateSnapshot.RestoreFromBytes(world, null!, empty);
             });
         }
     }

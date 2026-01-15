@@ -8,12 +8,15 @@ namespace Bomberman.App.GameHost
     /// The main entry point for the game.
     /// Manages the GameStateManager, GraphicsDevice, and top-level game loop.
     /// </summary>
-    public class Game1 : Game
+    public class Game1 : Game, IGameHost
     {
         private GraphicsDeviceManager _graphics;
         private GameStateManager _stateManager = null!;
         private GameContext _context = null!;
         
+        public int WindowWidth => GraphicsDevice.Viewport.Width;
+        public int WindowHeight => GraphicsDevice.Viewport.Height;
+
         /// <summary>
         /// Initializes the graphics device and content directory.
         /// Sets the window size to match the simulation grid.

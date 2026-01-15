@@ -21,10 +21,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\src\Bomberman.Core\Bomberman.Core.csproj" />
-    <ProjectReference Include="..\src\Bomberman.Net\Bomberman.Net.csproj" />
-    <ProjectReference Include="..\src\Bomberman.App\Bomberman.App.csproj" />
-    <ProjectReference Include="..\src\Bomberman.Rollback\Bomberman.Rollback.csproj" />
+    <ProjectReference Include="..\Bomberman.Core\Bomberman.Core.csproj" />
+    <ProjectReference Include="..\Bomberman.Net\Bomberman.Net.csproj" />
+    <ProjectReference Include="..\Bomberman.App\Bomberman.App.csproj" />
+    <ProjectReference Include="..\Bomberman.Rollback\Bomberman.Rollback.csproj" />
   </ItemGroup>
 
   <ItemGroup>

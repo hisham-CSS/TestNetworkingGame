@@ -141,8 +141,8 @@ namespace Bomberman.App.States
             _context.Renderer.ClearScreen(Color.Black);
             _context.Renderer.BeginDraw();
 
-            int centerX = _context.Game.GraphicsDevice.Viewport.Width / 2;
-            int h = _context.Game.GraphicsDevice.Viewport.Height;
+            int centerX = _context.Game.WindowWidth / 2;
+            int h = _context.Game.WindowHeight;
 
             string title = GetTitle(_isReplayView, _isGameCompleted, _winnerId);
             Color titleColor;

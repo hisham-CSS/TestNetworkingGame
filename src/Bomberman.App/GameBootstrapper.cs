@@ -10,6 +10,7 @@ namespace Bomberman.App
     /// <summary>
     /// Handles the initialization of game dependencies and services.
     /// </summary>
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     public class GameBootstrapper
     {
         /// <summary>

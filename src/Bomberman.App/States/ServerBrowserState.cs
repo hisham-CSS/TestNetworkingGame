@@ -163,8 +163,8 @@ namespace Bomberman.App.States
             _context.Renderer.ClearScreen(Color.DarkSlateGray);
             _context.Renderer.BeginDraw();
 
-            int centerX = _context.Game.GraphicsDevice.Viewport.Width / 2;
-            int width = _context.Game.GraphicsDevice.Viewport.Width;
+            int centerX = _context.Game.WindowWidth / 2;
+            int width = _context.Game.WindowWidth;
             
             _context.Renderer.DrawTextCentered("SERVER BROWSER", centerX, 50, Color.White, 4); // Match Header Style
             _context.Renderer.DrawTextCentered("Scanning LAN...", centerX, 100, Color.Gray, 2);

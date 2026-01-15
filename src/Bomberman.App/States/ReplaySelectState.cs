@@ -115,7 +115,7 @@ namespace Bomberman.App.States
             _context.Renderer.ClearScreen(Color.Black);
             _context.Renderer.BeginDraw();
 
-            int centerX = _context.Game.GraphicsDevice.Viewport.Width / 2;
+            int centerX = _context.Game.WindowWidth / 2;
             int startY = 80;
             int gap = 30;
 

@@ -105,7 +105,7 @@ namespace Bomberman.App.States
             _context.Renderer.ClearScreen(Color.CornflowerBlue);
             _context.Renderer.BeginDraw();
 
-            int centerX = _context.Game.GraphicsDevice.Viewport.Width / 2;
+            int centerX = _context.Game.WindowWidth / 2;
             // Title
             _context.Renderer.DrawTextCentered("BOMBERMAN", centerX, 80, Color.White, 8);
             

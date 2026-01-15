@@ -6,6 +6,7 @@ namespace Bomberman.App
     /// <summary>
     /// The entry point for the application.
     /// </summary>
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
     public static class Program
     {
         [STAThread]

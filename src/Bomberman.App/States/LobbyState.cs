@@ -60,7 +60,7 @@ namespace Bomberman.App.States
         public void Enter()
         {
             _context.Logger.Info($"[LobbyState] Enter. Host={_isHost}");
-            _prevKeyboard = Keyboard.GetState();
+            _prevKeyboard = _context.Input.GetKeyboard();
 
             if (_context.Network != null)
             {
@@ -155,8 +155,9 @@ namespace Bomberman.App.States
         public void Update(GameTime gameTime)
         {
             if (_context.Network != null) _context.Network.Update();
-
-            var kState = Keyboard.GetState();
+            
+            // Use Input Service so tests can Mock it
+            var kState = _context.Input.GetKeyboard();
             if (kState.IsKeyDown(Keys.Escape))
             {
                 // Back to Menu
@@ -423,7 +424,7 @@ namespace Bomberman.App.States
              _context.Renderer.ClearScreen(Color.CornflowerBlue);
              _context.Renderer.BeginDraw();
 
-             int centerX = _context.Game.GraphicsDevice.Viewport.Width / 2;
+             int centerX = _context.Game.WindowWidth / 2;
              
              // If client and waiting for welcome (local ID -1), show connecting
              if (!_isHost && _localPlayerId == -1)
