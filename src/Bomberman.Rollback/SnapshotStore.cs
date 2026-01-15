@@ -71,14 +71,11 @@ namespace Bomberman.Rollback
         private void Prune(int currentFrame)
         {
             int oldestFrameToKeep = currentFrame - _maxHistoryFrames;
-            // Prune one specifically (as done in original logic) or all older?
-            // Original logic: Remove(oldestFrameToKeep - 1)
+            // Prune specific frame to maintain buffer size
             if (_buffer.ContainsKey(oldestFrameToKeep - 1))
             {
                 _buffer.Remove(oldestFrameToKeep - 1);
             }
-            
-            // To be safe, we could prune everything older, but keeping it consistent with original for now.
         }
     }
 }

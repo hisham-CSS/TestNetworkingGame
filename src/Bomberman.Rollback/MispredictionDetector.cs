@@ -26,7 +26,6 @@ namespace Bomberman.Rollback
         public bool IsInputTooOld(int startFrame, SnapshotStore snapshots)
         {
             int oldestFrame = snapshots.GetOldestFrame();
-            // Original logic: if (startFrame < oldestFrameWeHave)
             return startFrame < oldestFrame;
         }
 
@@ -108,10 +107,7 @@ namespace Bomberman.Rollback
                          {
                              _telemetry.Log($"[Sync] Correction! Frame {frame} Player {pid}. Local:{localPos} Remote:{remotePos}");
                              
-                             // We don't "fix" the snapshot here because it's past? 
-                             // Logic says: Update the snapshot so if we *don't* rollback (e.g. later frame?), we are closer?
-                             // But actually, seeing a desync usually triggers a rollback to this frame.
-                             // Original logic set position:
+                              // Correction Logic:
                              var tf = transforms.components[tIndex];
                              tf.Position = remotePos;
                              transforms.components[tIndex] = tf; 

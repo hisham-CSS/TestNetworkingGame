@@ -43,9 +43,7 @@ namespace Bomberman.Rollback
         /// <param name="replayPath">Absolute path to the replay JSON file.</param>
         public GameSession(string replayPath)
         {
-            // Dummy LocalPlayerId (0), will be overridden or ignored during replay view?
-            // Actually RollbackSystem needs a valid ID for some checks, but for replay viewing 
-            // we typically just watch. We'll pass 0.
+            // Replay viewing uses a dummy player ID (0) as we are only observing.
             RollbackSystem = new RollbackSystem(0, 2); 
             RollbackSystem.InitializeFromReplay(replayPath);
         }

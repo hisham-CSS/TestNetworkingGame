@@ -71,11 +71,9 @@ namespace Bomberman.Rollback
                 }
             }
             
-            // 4. Explosions (Timer)
+            // 4. Explosions (Count check creates sufficient divergence for sync)
             var explosions = world.Explosions;
-            hash = Combine(hash, explosions.Count); 
-            // Maybe hash individual explosion timers if specific sync needed, 
-            // but count usually sufficient to catch "Explosion didn't happen"
+            hash = Combine(hash, explosions.Count);
 
             return hash;
         }

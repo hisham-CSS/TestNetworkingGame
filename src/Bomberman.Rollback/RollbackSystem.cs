@@ -94,17 +94,14 @@ namespace Bomberman.Rollback
         {
              int lag = hostFrame - localFrame; // Positive = We are Behind. Negative = We are Ahead.
                 
-             // 1. Catch-Up: We are behind confirmed inputs
+             // 1. Catch-Up: We are behind confirmed inputs (Speed up)
              if (lag > 2) 
              {
-                 // speed up
-                 // Base 1 step + extra
                  return 1 + Math.Min(lag, 8); // Cap at 8x speed
              }
-             // 2. Slow-Down: We are too far ahead (Predicting too much)
+             // 2. Slow-Down: We are too far ahead (Stall)
              else if (lag < -5)
              {
-                 // Stall (0 steps)
                  return 0;
              }
              
@@ -165,10 +162,8 @@ namespace Bomberman.Rollback
         public void SyncToFrame(int frame)
         {
             _currentFrame = frame;
-            // Clear future snapshots if any? 
-            // When syncing, we assume we are replacing everything.
+            _currentFrame = frame;
             _snapshotStore.Clear();
-            // Store current as base snapshot?
              _snapshotStore.Save(frame, Simulation.World);
         }
 
@@ -290,8 +285,7 @@ namespace Bomberman.Rollback
                 int lastFrame = -1;
                 if (_lastConfirmedRemoteFrame.ContainsKey(pid)) lastFrame = _lastConfirmedRemoteFrame[pid];
                 
-                // Fill up to current frame + Buffer?
-                // Just keep them 1 frame ahead of current to avoid throttling
+                // Keep disconnected players 1 frame ahead to avoid throttling
                 int targetFrame = _currentFrame + 1;
                 
                 for (int f = lastFrame + 1; f <= targetFrame; f++)
@@ -308,9 +302,7 @@ namespace Bomberman.Rollback
 
             if (isNetworked)
             {
-                // FRAME PACING / THROTTLING logic?
-                // For now, removing direct dependency. The NetworkController should check throttling before calling Step?
-                // Or we keep throttling logic here but rely on external "LastConfirmedFrame" inputs.
+                // Throttling logic based on confirmed frames
                 
                 int minConfirmedFrame = _currentFrame;
                 for (int i = 0; i < _totalPlayers; i++)
@@ -359,10 +351,10 @@ namespace Bomberman.Rollback
                 {
                     Simulation.Update(inputs, (float)FixedTimeStep);
 
-                    // 5. Save Snapshot
+                    // Save Snapshot
                     _snapshotStore.Save(_currentFrame, Simulation.World);
                     
-                    // 6. Cleanup Old History (Handled by SnapshotStore, but we need to trim inputs)
+                    // Cleanup Old History
                     int oldestFrameToKeep = _currentFrame - MaxSnapshotFrames;
                     
                     // Trim Input Buffers

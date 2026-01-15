@@ -112,12 +112,7 @@ namespace Bomberman.Rollback
             {
                 var state = pool.CaptureState(); // (List<Entity>, List<T>)
                 
-                // We need to serialize the Component List part.
-                // Reflection to get Item2?
-                // Or add a `SerializeState()` method to IComponentPool?
-                
-                // Let's stick to adding Serialize to IComponentPool for cleanliness.
-                // But for now, using dynamic/reflection to avoid touching Core interfaces too much.
+                // Serialize the component list using reflection/dynamic access as we don't have the concrete type T here.
                 
                 dynamic tuple = state;
                 var entities = (List<Entity>)tuple.Item1;
@@ -159,11 +154,7 @@ namespace Bomberman.Rollback
                     Type listType = typeof(List<>).MakeGenericType(pool.ComponentType);
                     object components = System.Text.Json.JsonSerializer.Deserialize(poolDto.JsonComponents, listType, options);
                     
-                    // Reconstruct state tuple
-                    // (List<Entity>, List<T>)
-                    // We can't cast to (List<Entity>, List<T>) easily because T is runtime.
-                    // But `RestoreState` takes `object`.
-                    // The `ComponentPool<T>.RestoreState` expects `(List<Entity>, List<T>)` which is `ValueTuple<...>`.
+                    // Reconstruct state tuple (List<Entity>, List<T>) dynamically using reflection
                     
                     // Create tuple dynamically
                     Type tupleType = typeof(ValueTuple<,>).MakeGenericType(typeof(List<Entity>), listType);

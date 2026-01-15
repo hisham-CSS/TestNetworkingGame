@@ -38,8 +38,7 @@ namespace Bomberman.Rollback
         /// <param name="inputs">Array of inputs for all players.</param>
         public void RecordFrame(InputState[] inputs)
         {
-            // Clone the array to ensure we store a snapshot, just in case
-            // Although structs are value types, the array itself is a reference.
+            // Clone the array to ensure we store a snapshot
             InputState[] snapshot = (InputState[])inputs.Clone();
             _history.Add(snapshot);
         }
@@ -49,7 +48,7 @@ namespace Bomberman.Rollback
         /// </summary>
         public InputState[] GetFrame(int frame)
         {
-            if (frame < 0 || frame >= _history.Count) return new InputState[0]; // Or return empty inputs?
+            if (frame < 0 || frame >= _history.Count) return new InputState[0];
             return _history[frame];
         }
 
