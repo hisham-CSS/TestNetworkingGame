@@ -57,9 +57,16 @@ namespace Bomberman.App.Input
             return state;
         }
 
-        private bool IsNewPress(Keys key)
+        public bool IsNewKeyPress(Keys key)
         {
             return _current.IsKeyDown(key) && !_previous.IsKeyDown(key);
         }
+
+        public bool IsKeyDown(Keys key)
+        {
+            return _current.IsKeyDown(key);
+        }
+
+        private bool IsNewPress(Keys key) => IsNewKeyPress(key);
     }
 }

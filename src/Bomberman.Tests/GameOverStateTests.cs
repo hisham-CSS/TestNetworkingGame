@@ -1,6 +1,10 @@
 using NUnit.Framework;
 using Bomberman.App.States;
 using Bomberman.Tests.Mocks;
+using Bomberman.App.Input;
+using Bomberman.Core.Input;
+using Bomberman.Core.Logging;
+using Moq;
 using Microsoft.Xna.Framework.Input;
 using Microsoft.Xna.Framework;
 using System.Reflection;
@@ -10,16 +14,16 @@ namespace Bomberman.Tests
     [TestFixture]
     public class GameOverStateTests
     {
-        private MockInputService _input;
+        private Mock<IInputService> _input;
         private GameContext _context;
         private GameOverState _state;
 
         [SetUp]
         public void Setup()
         {
-            _input = new MockInputService();
+            _input = new Mock<IInputService>();
             // We need a context with Input
-            _context = new GameContext(new MockGameHost(), null!, null!, null!, _input, new MockRenderer(), new MockLogger());
+            _context = new GameContext(new MockGameHost(), null!, null!, null!, _input.Object, new MockRenderer(), new Mock<ILogger>().Object);
         }
 
         [Test]
@@ -77,7 +81,7 @@ namespace Bomberman.Tests
             // If it relies on `KeyboardState`, we can set keys.
             
             // Let's Assume `Update` handles keys.
-            _input.SetKeys(Keys.A);
+            _input.Setup(x => x.GetKeyboard()).Returns(new KeyboardState(Keys.A));
             _state.Update(new GameTime());
             
             // Check _replayName private field

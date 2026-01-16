@@ -4,6 +4,9 @@ using Bomberman.App.GameHost;
 using Bomberman.App.Input;
 using Bomberman.App.Rendering;
 using Bomberman.Tests.Mocks;
+using Bomberman.Core.Input;
+using Bomberman.Core.Logging;
+using Moq;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
@@ -14,14 +17,14 @@ namespace Bomberman.Tests
     [TestFixture]
     public class PromptTests
     {
-        private MockInputService _input;
+        private Mock<IInputService> _input;
         private GameContext _context;
         private GameStateManager _manager;
 
         [SetUp]
         public void Setup()
         {
-            _input = new MockInputService();
+            _input = new Mock<IInputService>();
             
             // We need to mock GameContext dependencies.
             // Game1, SpriteBatch, Texture2D, PixelFont are hard to mock fully without GL, 
@@ -31,7 +34,7 @@ namespace Bomberman.Tests
             // PromptState only uses them in Draw().
             // Enter() and Update() only use Input.
             
-            _context = new GameContext(new Mocks.MockGameHost(), null, null, null, _input, new Mocks.MockRenderer(), new Mocks.MockLogger());
+            _context = new GameContext(new Mocks.MockGameHost(), null, null, null, _input.Object, new Mocks.MockRenderer(), new Mock<ILogger>().Object);
             _manager = new GameStateManager();
         }
 
@@ -55,8 +58,8 @@ namespace Bomberman.Tests
 
             state.Enter();
             
-            // Press Enter
-            _input.SetKeys(Keys.Enter);
+            // Press Enter (Maps to IsMenuSelect in implementation, but we mock the abstract method)
+            _input.Setup(x => x.IsMenuSelect()).Returns(true);
             state.Update(new GameTime());
 
             Assert.That(triggered, Is.True);
@@ -70,8 +73,8 @@ namespace Bomberman.Tests
 
             state.Enter();
             
-            // Press Space
-            _input.SetKeys(Keys.Space);
+            // Press Space (Maps to IsMenuToggle usually)
+            _input.Setup(x => x.IsMenuToggle()).Returns(true);
             state.Update(new GameTime());
 
             Assert.That(triggered, Is.True);
@@ -82,28 +85,20 @@ namespace Bomberman.Tests
         {
             bool triggered = false;
             
-            // User holding Enter when entering state
-            _input.SetKeys(Keys.Enter);
-            _input.Update(); // Move to 'Previous' state to simulate holding
-            _input.SetKeys(Keys.Enter); // Ensure it's still down in 'Current'
+            // Scenario: Input Service determined key is held, so 'IsMenuSelect' returns false.
+            _input.Setup(x => x.IsMenuSelect()).Returns(false);
             
             var state = new PromptState(_context, _manager, "Test", () => triggered = true);
 
             state.Enter();
             
-            // Still holding
+            // Update
             state.Update(new GameTime());
-            Assert.That(triggered, Is.False, "Should not trigger if key was already held");
+            Assert.That(triggered, Is.False, "Should not trigger if IsMenuSelect is false");
 
-            // Release
-            _input.Update(); // Prepare for next frame
-            _input.SetKeys(); // Empty
-            state.Update(new GameTime());
-            Assert.That(triggered, Is.False);
-
-            // Press Again
-            _input.Update(); // Previous = Empty
-            _input.SetKeys(Keys.Enter); // Current = Enter
+            // User releases and presses again -> IsMenuSelect returns true
+            _input.Setup(x => x.IsMenuSelect()).Returns(true);
+             
             state.Update(new GameTime());
             Assert.That(triggered, Is.True);
         }

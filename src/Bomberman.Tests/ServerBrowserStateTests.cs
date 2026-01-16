@@ -2,6 +2,10 @@ using NUnit.Framework;
 using Bomberman.App.States;
 using Bomberman.Tests.Mocks;
 using Bomberman.Net;
+using Bomberman.App.Input;
+using Bomberman.Core.Input;
+using Bomberman.Core.Logging;
+using Moq;
 using Microsoft.Xna.Framework;
 using System.Net;
 using System.Linq;
@@ -12,7 +16,7 @@ namespace Bomberman.Tests
     [TestFixture]
     public class ServerBrowserStateTests
     {
-        private MockInputService _input;
+        private Mock<IInputService> _input;
         private MockRenderer _renderer;
         private GameContext _context;
         private ServerBrowserState _state;
@@ -25,9 +29,9 @@ namespace Bomberman.Tests
         [SetUp]
         public void Setup()
         {
-            _input = new MockInputService();
+            _input = new Mock<IInputService>();
             _renderer = new MockRenderer();
-            _context = new GameContext(new MockGameHost(), null!, null!, null!, _input, _renderer, new MockLogger());
+            _context = new GameContext(new MockGameHost(), null!, null!, null!, _input.Object, _renderer, new Mock<ILogger>().Object);
             
             _generatorTransport = new MockTransport();
             _generatorNetwork = new NetworkController(_generatorTransport);

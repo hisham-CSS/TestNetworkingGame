@@ -3,8 +3,11 @@ using Bomberman.App.States;
 using Bomberman.Net;
 using Bomberman.Rollback;
 using Bomberman.Core;
+using Bomberman.App.Input;
 using Bomberman.Core.Input;
+using Moq;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Input;
 using Bomberman.Tests.Mocks;
 
 namespace Bomberman.Tests.States
@@ -74,7 +77,7 @@ namespace Bomberman.Tests.States
             // MockInputService defaults IsMenuCancel to false.
             // We need to set keys.
             
-            _context.MockInput.SetKeys(Microsoft.Xna.Framework.Input.Keys.Escape);
+            _context.MockInput.Setup(x => x.IsMenuCancel()).Returns(true);
             _playState.Update(new GameTime());
 
             Assert.That(_stubStateManager.LastChangedState, Is.InstanceOf<MenuState>());

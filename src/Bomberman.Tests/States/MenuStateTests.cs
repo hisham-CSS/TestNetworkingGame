@@ -5,6 +5,10 @@ using Bomberman.Tests.Mocks;
 
 namespace Bomberman.Tests.States
 {
+    using Moq;
+    using Bomberman.App.Input;
+    using Microsoft.Xna.Framework.Input;
+    using Bomberman.Core.Logging;
     [TestFixture]
     public class MenuStateTests
     {
@@ -24,14 +28,16 @@ namespace Bomberman.Tests.States
         public void Enter_ResetsSelection()
         {
             _menuState.Enter();
-            Assert.That(_context.MockLogger.Logs.Count, Is.GreaterThan(0));
+            _menuState.Enter();
+            _context.MockLogger.Verify(x => x.Info(It.IsAny<string>()), Times.AtLeastOnce);
         }
 
         [Test]
         public void ExecuteSelection_Host_CreatesLobby()
         {
             // Default index is 0 (HOST)
-            _context.MockInput.SetKeys(Microsoft.Xna.Framework.Input.Keys.Enter); // Select
+            // Default index is 0 (HOST)
+            _context.MockInput.Setup(x => x.IsMenuSelect()).Returns(true); // Select
             
             _menuState.Update(new GameTime());
 
@@ -42,11 +48,13 @@ namespace Bomberman.Tests.States
         public void ExecuteSelection_Join_CreatesServerBrowser()
         {
             // Move Down to Join (Index 1)
-            _context.MockInput.SetKeys(Microsoft.Xna.Framework.Input.Keys.Down);
+            _context.MockInput.Setup(x => x.IsMenuDown()).Returns(true);
             _menuState.Update(new GameTime());
-            _context.MockInput.Update(); // Latch state
             
-            _context.MockInput.SetKeys(Microsoft.Xna.Framework.Input.Keys.Enter); // Select
+            // Latch state / Release Down
+            _context.MockInput.Setup(x => x.IsMenuDown()).Returns(false);
+            
+            _context.MockInput.Setup(x => x.IsMenuSelect()).Returns(true); // Select
             _menuState.Update(new GameTime());
 
             Assert.That(_stubStateManager.LastChangedState, Is.InstanceOf<ServerBrowserState>());
@@ -56,11 +64,13 @@ namespace Bomberman.Tests.States
         public void ExecuteSelection_Exit_CallsGameExit()
         {
             // Move Up to Exit (Wrap around to 3)
-            _context.MockInput.SetKeys(Microsoft.Xna.Framework.Input.Keys.Up);
+            _context.MockInput.Setup(x => x.IsMenuUp()).Returns(true);
             _menuState.Update(new GameTime());
-            _context.MockInput.Update();
             
-            _context.MockInput.SetKeys(Microsoft.Xna.Framework.Input.Keys.Enter);
+            // Release
+            _context.MockInput.Setup(x => x.IsMenuUp()).Returns(false);
+            
+            _context.MockInput.Setup(x => x.IsMenuSelect()).Returns(true);
             _menuState.Update(new GameTime());
 
             Assert.That(_context.MockGame.ExitCalled, Is.True);

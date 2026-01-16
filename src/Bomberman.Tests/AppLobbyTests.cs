@@ -2,6 +2,10 @@ using NUnit.Framework;
 using Bomberman.App.States;
 using Bomberman.Tests.Mocks;
 using Bomberman.Net;
+using Bomberman.App.Input;
+using Bomberman.Core.Input;
+using Bomberman.Core.Logging;
+using Moq;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using System.Net;
@@ -12,7 +16,7 @@ namespace Bomberman.Tests
     [TestFixture]
     public class AppLobbyTests
     {
-        private MockInputService _input;
+        private Mock<IInputService> _input;
         private MockRenderer _renderer;
         private GameContext _context;
         private LobbyState _state;
@@ -23,9 +27,9 @@ namespace Bomberman.Tests
         [SetUp]
         public void Setup()
         {
-            _input = new MockInputService();
+            _input = new Mock<IInputService>();
             _renderer = new MockRenderer();
-            _context = new GameContext(new MockGameHost(), null!, null!, null!, _input, _renderer, new MockLogger());
+            _context = new GameContext(new MockGameHost(), null!, null!, null!, _input.Object, _renderer, new Mock<ILogger>().Object);
             
             _transport = new MockTransport();
             _context.Network = new NetworkController(_transport);
@@ -86,7 +90,7 @@ namespace Bomberman.Tests
             _state.Enter();
 
             // Press Space
-            _input.SetKeys(Keys.Space);
+            _input.Setup(x => x.GetKeyboard()).Returns(new KeyboardState(Keys.Space));
             _state.Update(new GameTime());
 
             // Should send LobbyReady
@@ -97,13 +101,11 @@ namespace Bomberman.Tests
             Assert.That(amIReady, Is.True);
 
             // Release Space (Pulse)
-            _input.SetKeys(); 
-            _input.Update();
+            _input.Setup(x => x.GetKeyboard()).Returns(new KeyboardState());
             _state.Update(new GameTime());
             
             // Press Space again -> Unready
-            _input.SetKeys(Keys.Space);
-            _input.Update();
+            _input.Setup(x => x.GetKeyboard()).Returns(new KeyboardState(Keys.Space));
             _state.Update(new GameTime());
 
             amIReady = (bool)GetPrivateField(_state, "_amIReady");

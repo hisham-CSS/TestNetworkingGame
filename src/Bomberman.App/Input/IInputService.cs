@@ -16,6 +16,12 @@ namespace Bomberman.App.Input
         
         /// <summary>Updates the internal state of the input service (e.g. previous key states).</summary>
         void Update();
+
+        /// <summary>Checks if a specific key was newly pressed this frame.</summary>
+        bool IsNewKeyPress(Keys key);
+
+        /// <summary>Checks if a specific key is currently down.</summary>
+        bool IsKeyDown(Keys key);
         
         // Menu Abstractions
 
