@@ -2,7 +2,7 @@ using NUnit.Framework;
 using Bomberman.Rollback;
 using System;
 
-namespace Bomberman.Tests
+namespace Bomberman.Tests.Net
 {
     /// <summary>
     /// Tests for network synchronization logic.

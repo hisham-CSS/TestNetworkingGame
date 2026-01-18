@@ -3,7 +3,7 @@ using Bomberman.Core;
 using Bomberman.Core.Game;
 using Bomberman.Core.ECS.Components;
 
-namespace Bomberman.Tests
+namespace Bomberman.Tests.Core
 {
     [TestFixture]
     public class GameLogicTests

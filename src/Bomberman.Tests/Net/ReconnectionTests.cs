@@ -6,7 +6,7 @@ using System;
 using Bomberman.Core.ECS.Components;
 using System.Text.Json;
 
-namespace Bomberman.Tests
+namespace Bomberman.Tests.Net
 {
     [TestFixture]
     public class ReconnectionTests

@@ -5,7 +5,7 @@ using Bomberman.Core;
 using Bomberman.Rollback;
 using Bomberman.Net;
 
-namespace Bomberman.Tests
+namespace Bomberman.Tests.Rollback
 {
     /// <summary>
     /// Tests for the deterministic rollback system.

@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using Bomberman.Core;
 
-namespace Bomberman.Tests
+namespace Bomberman.Tests.Core
 {
     [TestFixture]
     public class IntRectTests

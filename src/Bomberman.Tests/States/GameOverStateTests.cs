@@ -9,7 +9,10 @@ using Microsoft.Xna.Framework.Input;
 using Microsoft.Xna.Framework;
 using System.Reflection;
 
-namespace Bomberman.Tests
+using Bomberman.App.GameHost;
+using Bomberman.App.Rendering;
+
+namespace Bomberman.Tests.States
 {
     [TestFixture]
     public class GameOverStateTests
@@ -22,8 +25,12 @@ namespace Bomberman.Tests
         public void Setup()
         {
             _input = new Mock<IInputService>();
+            var game = new Mock<IGameHost>();
+            game.Setup(g => g.WindowWidth).Returns(800);
+            game.Setup(g => g.WindowHeight).Returns(600);
+            
             // We need a context with Input
-            _context = new GameContext(new MockGameHost(), null!, null!, null!, _input.Object, new MockRenderer(), new Mock<ILogger>().Object);
+            _context = new GameContext(game.Object, null!, null!, null!, _input.Object, new Mock<IRenderer>().Object, new Mock<ILogger>().Object);
         }
 
         [Test]

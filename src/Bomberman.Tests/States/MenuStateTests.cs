@@ -13,15 +13,15 @@ namespace Bomberman.Tests.States
     public class MenuStateTests
     {
         private MockGameContext _context;
-        private StubGameStateManager _stubStateManager;
+        private Mock<GameStateManager> _mockStateManager;
         private MenuState _menuState;
 
         [SetUp]
         public void Setup()
         {
             _context = new MockGameContext();
-            _stubStateManager = new StubGameStateManager();
-            _menuState = new MenuState(_context.Object, _stubStateManager);
+            _mockStateManager = new Mock<GameStateManager>();
+            _menuState = new MenuState(_context.Object, _mockStateManager.Object);
         }
 
         [Test]
@@ -36,12 +36,11 @@ namespace Bomberman.Tests.States
         public void ExecuteSelection_Host_CreatesLobby()
         {
             // Default index is 0 (HOST)
-            // Default index is 0 (HOST)
             _context.MockInput.Setup(x => x.IsMenuSelect()).Returns(true); // Select
             
             _menuState.Update(new GameTime());
 
-            Assert.That(_stubStateManager.LastChangedState, Is.InstanceOf<LobbyState>());
+            _mockStateManager.Verify(x => x.ChangeState(It.IsAny<LobbyState>()), Times.Once);
         }
         
         [Test]
@@ -57,7 +56,7 @@ namespace Bomberman.Tests.States
             _context.MockInput.Setup(x => x.IsMenuSelect()).Returns(true); // Select
             _menuState.Update(new GameTime());
 
-            Assert.That(_stubStateManager.LastChangedState, Is.InstanceOf<ServerBrowserState>());
+            _mockStateManager.Verify(x => x.ChangeState(It.IsAny<ServerBrowserState>()), Times.Once);
         }
 
         [Test]
@@ -73,7 +72,7 @@ namespace Bomberman.Tests.States
             _context.MockInput.Setup(x => x.IsMenuSelect()).Returns(true);
             _menuState.Update(new GameTime());
 
-            Assert.That(_context.MockGame.ExitCalled, Is.True);
+            _context.MockGame.Verify(x => x.Exit(), Times.Once);
         }
     }
 }

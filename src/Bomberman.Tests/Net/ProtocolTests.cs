@@ -4,7 +4,7 @@ using Bomberman.Core.Input;
 using Bomberman.Core;
 using Bomberman.Net;
 
-namespace Bomberman.Tests
+namespace Bomberman.Tests.Net
 {
     /// <summary>
     /// Tests for network protocol serialization and packet integrity.

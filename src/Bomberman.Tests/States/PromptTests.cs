@@ -2,6 +2,7 @@ using System;
 using Bomberman.App.States;
 using Bomberman.App.GameHost;
 using Bomberman.App.Input;
+using Bomberman.App.GameHost;
 using Bomberman.App.Rendering;
 using Bomberman.Tests.Mocks;
 using Bomberman.Core.Input;
@@ -12,7 +13,7 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using NUnit.Framework;
 
-namespace Bomberman.Tests
+namespace Bomberman.Tests.States
 {
     [TestFixture]
     public class PromptTests
@@ -34,7 +35,11 @@ namespace Bomberman.Tests
             // PromptState only uses them in Draw().
             // Enter() and Update() only use Input.
             
-            _context = new GameContext(new Mocks.MockGameHost(), null, null, null, _input.Object, new Mocks.MockRenderer(), new Mock<ILogger>().Object);
+            var mockGame = new Mock<IGameHost>();
+            mockGame.Setup(g => g.WindowWidth).Returns(800);
+            mockGame.Setup(g => g.WindowHeight).Returns(600);
+            
+            _context = new GameContext(mockGame.Object, null, null, null, _input.Object, new Mock<IRenderer>().Object, new Mock<ILogger>().Object);
             _manager = new GameStateManager();
         }
 

@@ -16,7 +16,7 @@ namespace Bomberman.Tests.States
     public class PlayStateTests
     {
         private MockGameContext _context;
-        private StubGameStateManager _stubStateManager;
+        private Mock<GameStateManager> _mockStateManager;
         private PlayState _playState;
         private GameSession _gameSession;
 
@@ -24,10 +24,10 @@ namespace Bomberman.Tests.States
         public void Setup()
         {
             _context = new MockGameContext();
-            _stubStateManager = new StubGameStateManager();
+            _mockStateManager = new Mock<GameStateManager>();
             _gameSession = new GameSession(0, 2, 12345);
             
-            _playState = new PlayState(_context.Object, _stubStateManager, _gameSession);
+            _playState = new PlayState(_context.Object, _mockStateManager.Object, _gameSession);
         }
 
         [TearDown]
@@ -60,7 +60,8 @@ namespace Bomberman.Tests.States
         public void Update_SendsInputPacket_WhenNetworked()
         {
             _playState.Enter();
-            _context.Object.Network = new NetworkController(new MockTransport());
+            var transport = new Mock<ITransport>();
+            _context.Object.Network = new NetworkController(transport.Object);
             
             GameTime gameTime = new GameTime(new System.TimeSpan(0), new System.TimeSpan(0, 0, 0, 0, 17));
             _playState.Update(gameTime);
@@ -80,7 +81,7 @@ namespace Bomberman.Tests.States
             _context.MockInput.Setup(x => x.IsMenuCancel()).Returns(true);
             _playState.Update(new GameTime());
 
-            Assert.That(_stubStateManager.LastChangedState, Is.InstanceOf<MenuState>());
+            _mockStateManager.Verify(x => x.ChangeState(It.IsAny<MenuState>()), Times.Once);
         }
     }
 }

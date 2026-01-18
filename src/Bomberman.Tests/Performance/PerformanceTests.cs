@@ -5,7 +5,7 @@ using Bomberman.Rollback;
 using Bomberman.Core.Input;
 using Bomberman.Core;
 
-namespace Bomberman.Tests
+namespace Bomberman.Tests.Performance
 {
     [TestFixture]
     public class PerformanceTests

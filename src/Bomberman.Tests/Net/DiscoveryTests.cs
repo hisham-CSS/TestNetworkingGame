@@ -4,7 +4,7 @@ using System.Threading;
 using Bomberman.Net;
 using NUnit.Framework;
 
-namespace Bomberman.Tests
+namespace Bomberman.Tests.Net
 {
     [TestFixture]
     public class DiscoveryTests

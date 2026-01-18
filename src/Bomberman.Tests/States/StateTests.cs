@@ -6,7 +6,7 @@ using Bomberman.Core.ECS.Components;
 using Bomberman.Rollback;
 using Bomberman.Net;
 
-namespace Bomberman.Tests
+namespace Bomberman.Tests.States
 {
     public class StateTests
     {

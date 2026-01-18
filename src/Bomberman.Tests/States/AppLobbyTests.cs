@@ -10,33 +10,60 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using System.Net;
 using System.Linq;
+using System.Collections.Generic;
 
-namespace Bomberman.Tests
+using Bomberman.App.Rendering;
+using Bomberman.App.GameHost;
+
+namespace Bomberman.Tests.States
 {
     [TestFixture]
     public class AppLobbyTests
     {
         private Mock<IInputService> _input;
-        private MockRenderer _renderer;
+        private Mock<IRenderer> _renderer;
         private GameContext _context;
         private LobbyState _state;
-        private MockTransport _transport;
-        private MockTransport _remoteTransport; 
-        private NetworkController _remoteNetwork; // To generate packets
+        
+        // Transport Mocks
+        private Mock<ITransport> _transportMock;
+        private List<(byte[] Data, IPEndPoint Endpoint)> _sentPackets;
+
+        private Mock<ITransport> _remoteTransportMock;
+        private List<(byte[] Data, IPEndPoint Endpoint)> _remoteSentPackets; 
+        private NetworkController _remoteNetwork; 
 
         [SetUp]
         public void Setup()
         {
             _input = new Mock<IInputService>();
-            _renderer = new MockRenderer();
-            _context = new GameContext(new MockGameHost(), null!, null!, null!, _input.Object, _renderer, new Mock<ILogger>().Object);
+            _renderer = new Mock<IRenderer>();
             
-            _transport = new MockTransport();
-            _context.Network = new NetworkController(_transport);
+            var mockGame = new Mock<IGameHost>();
+            mockGame.Setup(g => g.WindowWidth).Returns(800);
+            mockGame.Setup(g => g.WindowHeight).Returns(600);
 
-            // Generator setup
-            _remoteTransport = new MockTransport();
-            _remoteNetwork = new NetworkController(_remoteTransport);
+            _context = new GameContext(mockGame.Object, null!, null!, null!, _input.Object, _renderer.Object, new Mock<ILogger>().Object);
+            
+            // Setup Main Transport
+            _transportMock = new Mock<ITransport>();
+            _sentPackets = new List<(byte[] Data, IPEndPoint Endpoint)>();
+            _transportMock.Setup(x => x.SendTo(It.IsAny<byte[]>(), It.IsAny<IPEndPoint>()))
+                .Callback<byte[], IPEndPoint>((data, ep) => _sentPackets.Add((data, ep)));
+            
+            // Allow capturing packets sent via SendToConnectedHost
+            _transportMock.Setup(x => x.SendToConnectedHost(It.IsAny<byte[]>()))
+                .Callback<byte[]>(data => _sentPackets.Add((data, null!)));
+
+            _context.Network = new NetworkController(_transportMock.Object);
+
+            // Setup Remote Transport (Generator)
+            _remoteTransportMock = new Mock<ITransport>();
+            _remoteSentPackets = new List<(byte[] Data, IPEndPoint Endpoint)>();
+            _remoteTransportMock.Setup(x => x.SendTo(It.IsAny<byte[]>(), It.IsAny<IPEndPoint>()))
+                .Callback<byte[], IPEndPoint>((data, ep) => _remoteSentPackets.Add((data, ep)));
+            
+            _remoteNetwork = new NetworkController(_remoteTransportMock.Object);
         }
 
         [TearDown]
@@ -44,8 +71,6 @@ namespace Bomberman.Tests
         {
             _context.Network?.Close();
             _remoteNetwork?.Close();
-            _transport.Dispose();
-            _remoteTransport.Dispose();
         }
 
         [Test]
@@ -53,12 +78,6 @@ namespace Bomberman.Tests
         {
             _state = new LobbyState(_context, new GameStateManager(), true, null);
             _state.Enter();
-            
-            // Use reflection or properties to verify count.
-            // _connectedPlayerCount is private.
-            // But we can verify Draw output if we use MockRenderer? 
-            // MockRenderer is a stub. We'd need to spy on it.
-            // Let's use Reflection for white-box testing of state.
             
             var count = (int)GetPrivateField(_state, "_connectedPlayerCount");
             Assert.That(count, Is.EqualTo(1));
@@ -74,9 +93,7 @@ namespace Bomberman.Tests
             _state.Update(new GameTime());
 
             // Verify a JoinRequest was sent
-            Assert.That(_transport.SentPackets.Count, Is.GreaterThan(0));
-            // Ideally check packet type, but raw bytes are opaque without deserializer.
-            // We assume it sent *something*.
+            Assert.That(_sentPackets.Count, Is.GreaterThan(0));
         }
 
         [Test]
@@ -94,13 +111,15 @@ namespace Bomberman.Tests
             _state.Update(new GameTime());
 
             // Should send LobbyReady
-            Assert.That(_transport.SentPackets.Count, Is.GreaterThan(0));
+            Assert.That(_sentPackets.Count, Is.GreaterThan(0));
             
             // Verify internal state
             var amIReady = (bool)GetPrivateField(_state, "_amIReady");
             Assert.That(amIReady, Is.True);
 
             // Release Space (Pulse)
+            // Clear packets to verify next action
+            _sentPackets.Clear(); 
             _input.Setup(x => x.GetKeyboard()).Returns(new KeyboardState());
             _state.Update(new GameTime());
             
@@ -110,6 +129,9 @@ namespace Bomberman.Tests
 
             amIReady = (bool)GetPrivateField(_state, "_amIReady");
             Assert.That(amIReady, Is.False);
+            
+            // Should have sent another packet
+            Assert.That(_sentPackets.Count, Is.GreaterThan(0));
         }
 
         private object GetPrivateField(object obj, string name)

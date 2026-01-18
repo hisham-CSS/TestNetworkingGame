@@ -11,33 +11,55 @@ using System.Net;
 using System.Linq;
 using System.Collections.Generic;
 
-namespace Bomberman.Tests
+using Bomberman.App.Rendering;
+using Bomberman.App.GameHost;
+
+namespace Bomberman.Tests.States
 {
     [TestFixture]
     public class ServerBrowserStateTests
     {
         private Mock<IInputService> _input;
-        private MockRenderer _renderer;
+        private Mock<IRenderer> _renderer;
         private GameContext _context;
         private ServerBrowserState _state;
-        private MockTransport _transport;
         
+        // Transport Mocks
+        private Mock<ITransport> _transportMock;
+        private List<(byte[] Data, IPEndPoint Endpoint)> _sentPackets;
+
         // Helper to generate packets
-        private MockTransport _generatorTransport;
+        private Mock<ITransport> _generatorTransportMock;
+        private List<(byte[] Data, IPEndPoint Endpoint)> _generatorSentPackets;
         private NetworkController _generatorNetwork;
 
         [SetUp]
         public void Setup()
         {
             _input = new Mock<IInputService>();
-            _renderer = new MockRenderer();
-            _context = new GameContext(new MockGameHost(), null!, null!, null!, _input.Object, _renderer, new Mock<ILogger>().Object);
+            _renderer = new Mock<IRenderer>();
             
-            _generatorTransport = new MockTransport();
-            _generatorNetwork = new NetworkController(_generatorTransport);
+            var mockGame = new Mock<IGameHost>();
+            mockGame.Setup(g => g.WindowWidth).Returns(800);
+            mockGame.Setup(g => g.WindowHeight).Returns(600);
 
-            _transport = new MockTransport();
-            _context.Network = new NetworkController(_transport);
+            _context = new GameContext(mockGame.Object, null!, null!, null!, _input.Object, _renderer.Object, new Mock<ILogger>().Object);
+            
+            // Generator Setup
+            _generatorTransportMock = new Mock<ITransport>();
+            _generatorSentPackets = new List<(byte[] Data, IPEndPoint Endpoint)>();
+            _generatorTransportMock.Setup(x => x.SendTo(It.IsAny<byte[]>(), It.IsAny<IPEndPoint>()))
+                 .Callback<byte[], IPEndPoint>((data, ep) => _generatorSentPackets.Add((data, ep)));
+
+            _generatorNetwork = new NetworkController(_generatorTransportMock.Object);
+
+            // Context Transport Setup
+            _transportMock = new Mock<ITransport>();
+            _sentPackets = new List<(byte[] Data, IPEndPoint Endpoint)>();
+             _transportMock.Setup(x => x.SendTo(It.IsAny<byte[]>(), It.IsAny<IPEndPoint>()))
+                 .Callback<byte[], IPEndPoint>((data, ep) => _sentPackets.Add((data, ep)));
+
+            _context.Network = new NetworkController(_transportMock.Object);
             
             _state = new ServerBrowserState(_context, new GameStateManager()); 
         }
@@ -47,8 +69,6 @@ namespace Bomberman.Tests
         {
             _context.Network?.Close();
             _generatorNetwork?.Close();
-            _transport.Dispose();
-            _generatorTransport.Dispose();
         }
 
         [Test]
@@ -56,7 +76,7 @@ namespace Bomberman.Tests
         {
             _state.Enter();
             // Should send Broadcast
-            Assert.That(_transport.SentPackets.Count, Is.GreaterThan(0));
+            Assert.That(_sentPackets.Count, Is.GreaterThan(0));
             // Check broadcasting range? Maybe later.
         }
 
@@ -70,14 +90,14 @@ namespace Bomberman.Tests
             _generatorNetwork.SendDiscoveryResponse(serverEp, "Test Server", 2, 4); 
             
             // 2. Extract bytes from generator
-            var packet = _generatorTransport.SentPackets.Dequeue(); 
+            var packet = _generatorSentPackets[0]; 
             // The generator thinks it sent it to 'serverEp', but we just want the data.
             
             // 3. Inject into Browser's Transport
             // Browser expects 'OnDiscoveryResponseReceived' event to fire.
             // NetworkController parses 'DiscoveryResponse' packet.
             
-            _transport.SimulateReceive(packet.Data, serverEp);
+            _transportMock.Raise(x => x.PacketReceived += null, packet.Data, serverEp);
             
             // 4. Update Network to process packet
             _context.Network.Update();
