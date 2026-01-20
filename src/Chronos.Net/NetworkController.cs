@@ -17,7 +17,16 @@ namespace Chronos.Net
         private ITransport _transport;
         private List<IPEndPoint> _connectedClients = new List<IPEndPoint>();
         
+        /// <summary>
+        /// Gets the list of currently connected clients (excluding the local host if hosting).
+        /// </summary>
         public IReadOnlyList<IPEndPoint> ConnectedClients => _connectedClients;
+
+        /// <summary>
+        /// Gets the underlying transport layer. 
+        /// Use this to inspect transport state or for debugging/simulation wrappers.
+        /// </summary>
+        public ITransport Transport => _transport;
 
         // Events
         public event Action<int, int, int>? OnWelcomeReceived;
@@ -50,12 +59,22 @@ namespace Chronos.Net
             _transport.PacketReceived += HandlePacket;
         }
 
+        /// <summary>
+        /// Connects to a remote host. This sets the controller to Client mode.
+        /// </summary>
+        /// <param name="ip">The IP address of the host.</param>
+        /// <param name="port">The port of the host.</param>
         public void Connect(string ip, int port)
         {
             _transport.Connect(ip, port);
             _isClient = true;
         }
 
+        /// <summary>
+        /// Manually registers a known client endpoint. 
+        /// Typically called when the host receives a Join packet.
+        /// </summary>
+        /// <param name="client">The client endpoint to add.</param>
         public void AddClient(IPEndPoint client)
         {
             if (!_connectedClients.Contains(client))
@@ -78,6 +97,11 @@ namespace Chronos.Net
             return false;
         }
 
+        /// <summary>
+        /// Updates the network controller.
+        /// This polls the transport, processes incoming packets, manages timeouts, and sends keep-alive pings.
+        /// Should be called once per frame.
+        /// </summary>
         public void Update()
         {
             _transport.Poll();

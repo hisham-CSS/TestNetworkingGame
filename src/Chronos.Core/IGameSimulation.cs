@@ -10,21 +10,22 @@ public interface IGameSimulation<TInput, TState>
     where TState : IGameState
 {
     /// <summary>
-    /// Advances the simulation by one step using the provided inputs.
+    /// Advances the simulation by one fixed time step using the provided inputs.
+    /// This method must be deterministic: given the same state and inputs, it must produce the exact same result.
     /// </summary>
-    /// <param name="inputs">Array of inputs, one for each player ID.</param>
-    /// <param name="dt">Time delta (usually fixed).</param>
+    /// <param name="inputs">Array of inputs, indexed by player ID.</param>
+    /// <param name="dt">The fixed time delta for this step.</param>
     void Update(TInput[] inputs, float dt);
 
     /// <summary>
-    /// Captures the current state of the world.
+    /// Captures the current state of the world into a serializable snapshot.
     /// </summary>
-    /// <returns>A snapshot of the world.</returns>
+    /// <returns>A snapshot object representing the current frame.</returns>
     TState CaptureState();
 
     /// <summary>
-    /// Restores the world to a previous state.
+    /// Restores the world to a previous state using the provided snapshot.
     /// </summary>
-    /// <param name="state">The state to restore.</param>
+    /// <param name="state">The state snapshot to restore.</param>
     void RestoreState(TState state);
 }

@@ -6,8 +6,9 @@ using System.Text;
 namespace Chronos.Net
 {
     /// <summary>
-    /// UDP implementation of the transport layer.
-    /// Handles socket binding, sending, and non-blocking receiving.
+    /// A UDP-based implementation of <see cref="ITransport"/>.
+    /// Uses <see cref="UdpClient"/> for non-blocking communication.
+    /// Supports automatic port binding retries.
     /// </summary>
     public class UdpTransport : ITransport
     {

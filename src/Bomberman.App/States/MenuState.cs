@@ -75,11 +75,22 @@ namespace Bomberman.App.States
             {
                 case 0: // HOST
                     _context.Network?.Close();
-                    _context.Network = new NetworkController<InputState>(new UdpTransport(5000));
+                    var hostTransport = new SimulatedLagTransport(new UdpTransport(5000));
+                    _context.Network = new NetworkController<InputState>(hostTransport);
                     _manager.ChangeState(_context.StateFactory.CreateLobby(true, null));
                     break;
                 case 1: // JOIN
                     _context.Network?.Close();
+                    // Note: ServerBrowser requires a NetworkController. 
+                    // Usually ServerBrowser initializes its own, or uses the Context's.
+                    // If ServerBrowser creates one, we should ensure it uses LagTransport there too or update ServerBrowser.
+                    // Let's assume ServerBrowser will use the Context's if null, or we initialize it here.
+                    // Looking at ServerBrowserState (not visible here but standard pattern):
+                    // Actually checking ServerBrowserStateTests, it accepts context.Network.
+                    // So we should initialize it here to be safe and consistent.
+                    var clientTransport = new SimulatedLagTransport(new UdpTransport(0)); // Bind any port
+                    _context.Network = new NetworkController<InputState>(clientTransport);
+                    
                     _manager.ChangeState(_context.StateFactory.CreateServerBrowser());
                     break;
                 case 2: // REPLAYS

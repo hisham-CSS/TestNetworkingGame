@@ -143,6 +143,8 @@ namespace Bomberman.App.States
 
 
 
+        private KeyboardState _prevKeyboard;
+
         public void Enter()
         {
             _context.Logger.Info($"[PlayState] Enter. P{_localPlayerId} Replay={_isReplayView}");
@@ -236,7 +238,22 @@ namespace Bomberman.App.States
             {
                 _showDebugOverlay = !_showDebugOverlay;
             }
+            
+            // Lag Simulation Controls
+            if (_context.Network != null && _context.Network.Transport is SimulatedLagTransport lagTransport)
+            {
+                if (_context.Input.GetKeyboard().IsKeyDown(Keys.F5) && !_prevKeyboard.IsKeyDown(Keys.F5))
+                {
+                    lagTransport.LatencyMs = Math.Max(0, lagTransport.LatencyMs - 50);
+                }
+                if (_context.Input.GetKeyboard().IsKeyDown(Keys.F6) && !_prevKeyboard.IsKeyDown(Keys.F6))
+                {
+                    lagTransport.LatencyMs += 50;
+                }
+            }
 
+            _prevKeyboard = _context.Input.GetKeyboard();
+            
             // Fixed Update Loop
             _accumulator += gameTime.ElapsedGameTime.TotalSeconds;
 
@@ -514,6 +531,12 @@ namespace Bomberman.App.States
                       _context.Renderer.DrawText($"P{pid} Adv: {status}", x, y, c, 2);
                       y += 20;
                  }
+            }
+
+            if (_context.Network != null && _context.Network.Transport is SimulatedLagTransport lag)
+            {
+                y += 20;
+                _context.Renderer.DrawText($"Simulated Lag: {lag.LatencyMs}ms (F5/F6)", x, y, Color.Orange, 2);
             }
         }
     }
