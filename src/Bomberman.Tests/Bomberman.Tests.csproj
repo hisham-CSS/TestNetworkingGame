@@ -23,9 +23,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Bomberman.Core\Bomberman.Core.csproj" />
-    <ProjectReference Include="..\Bomberman.Net\Bomberman.Net.csproj" />
     <ProjectReference Include="..\Bomberman.App\Bomberman.App.csproj" />
-    <ProjectReference Include="..\Bomberman.Rollback\Bomberman.Rollback.csproj" />
+    <ProjectReference Include="..\Chronos.Core\Chronos.Core.csproj" />
+    <ProjectReference Include="..\Chronos.Net\Chronos.Net.csproj" />
+    <ProjectReference Include="..\Chronos.Rollback\Chronos.Rollback.csproj" />
   </ItemGroup>
 
   <ItemGroup>

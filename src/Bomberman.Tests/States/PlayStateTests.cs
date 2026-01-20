@@ -1,8 +1,9 @@
 using NUnit.Framework;
 using Bomberman.App.States;
-using Bomberman.Net;
-using Bomberman.Rollback;
+using Chronos.Net;
+using Chronos.Rollback;
 using Bomberman.Core;
+using Bomberman.Core.Game;
 using Bomberman.App.Input;
 using Bomberman.Core.Input;
 using Moq;
@@ -61,7 +62,7 @@ namespace Bomberman.Tests.States
         {
             _playState.Enter();
             var transport = new Mock<ITransport>();
-            _context.Object.Network = new NetworkController(transport.Object);
+            _context.Object.Network = new NetworkController<InputState>(transport.Object);
             
             GameTime gameTime = new GameTime(new System.TimeSpan(0), new System.TimeSpan(0, 0, 0, 0, 17));
             _playState.Update(gameTime);

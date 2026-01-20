@@ -2,7 +2,6 @@ using System;
 using Bomberman.App.States;
 using Bomberman.App.GameHost;
 using Bomberman.App.Input;
-using Bomberman.App.GameHost;
 using Bomberman.App.Rendering;
 using Bomberman.Tests.Mocks;
 using Bomberman.Core.Input;

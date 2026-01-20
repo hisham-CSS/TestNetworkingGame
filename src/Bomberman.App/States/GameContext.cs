@@ -1,8 +1,9 @@
 using Microsoft.Xna.Framework.Graphics;
 using Bomberman.App.GameHost;
 using Bomberman.App.Rendering;
-using Bomberman.Net;
+using Chronos.Net;
 using Bomberman.App.Input;
+using Bomberman.Core.Input;
 
 namespace Bomberman.App.States
 {
@@ -13,7 +14,7 @@ namespace Bomberman.App.States
     public class GameContext
     {
         public IGameHost Game { get; set; }
-        public NetworkController? Network { get; set; }
+        public NetworkController<InputState>? Network { get; set; }
         public SpriteBatch SpriteBatch { get; set; }
         public Texture2D PixelTexture { get; set; }
         public PixelFont Font { get; set; }

@@ -2,7 +2,8 @@ using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Bomberman.Net;
+using Chronos.Net;
+using Bomberman.Core.Input;
 using Bomberman.App.Input;
 
 namespace Bomberman.App.States
@@ -11,7 +12,7 @@ namespace Bomberman.App.States
     /// The main menu state.
     /// Handles navigation options to Host Game, Join Game (Browser), Watch Replay, or Quit.
     /// </summary>
-    public class MenuState : IGameState
+    public class MenuState : Bomberman.App.States.IGameState
     {
         private GameContext _context;
         private GameStateManager _manager;
@@ -45,7 +46,6 @@ namespace Bomberman.App.States
             }
             _selectedIndex = 0;
         }
-
         public void Exit()
         {
             _context.Logger.Info("[MenuState] Exit");
@@ -53,38 +53,29 @@ namespace Bomberman.App.States
 
         public void Update(GameTime gameTime)
         {
-            // Navigation
+            if (_context.Input.IsMenuDown())
+            {
+                _selectedIndex++;
+                if (_selectedIndex >= _menuOptions.Length) _selectedIndex = 0;
+            }
             if (_context.Input.IsMenuUp())
             {
                 _selectedIndex--;
                 if (_selectedIndex < 0) _selectedIndex = _menuOptions.Length - 1;
             }
-            else if (_context.Input.IsMenuDown())
-            {
-                _selectedIndex++;
-                if (_selectedIndex >= _menuOptions.Length) _selectedIndex = 0;
-            }
-
-            // Selection
+            
             if (_context.Input.IsMenuSelect())
             {
                 ExecuteSelection();
             }
-
-            // Handle Cancellation
-            if (_context.Input.IsMenuCancel())
-            {
-                _context.Game.Exit(); // Exit on ESC from Main Menu
-            }
         }
-
         private void ExecuteSelection()
         {
             switch (_selectedIndex)
             {
                 case 0: // HOST
                     _context.Network?.Close();
-                    _context.Network = new NetworkController(new UdpTransport(5000));
+                    _context.Network = new NetworkController<InputState>(new UdpTransport(5000));
                     _manager.ChangeState(_context.StateFactory.CreateLobby(true, null));
                     break;
                 case 1: // JOIN

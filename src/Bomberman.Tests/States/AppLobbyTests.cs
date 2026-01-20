@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using Bomberman.App.States;
 using Bomberman.Tests.Mocks;
-using Bomberman.Net;
+using Chronos.Net;
 using Bomberman.App.Input;
 using Bomberman.Core.Input;
 using Bomberman.Core.Logging;
@@ -31,7 +31,7 @@ namespace Bomberman.Tests.States
 
         private Mock<ITransport> _remoteTransportMock;
         private List<(byte[] Data, IPEndPoint Endpoint)> _remoteSentPackets; 
-        private NetworkController _remoteNetwork; 
+        private NetworkController<InputState> _remoteNetwork; 
 
         [SetUp]
         public void Setup()
@@ -55,7 +55,7 @@ namespace Bomberman.Tests.States
             _transportMock.Setup(x => x.SendToConnectedHost(It.IsAny<byte[]>()))
                 .Callback<byte[]>(data => _sentPackets.Add((data, null!)));
 
-            _context.Network = new NetworkController(_transportMock.Object);
+            _context.Network = new NetworkController<InputState>(_transportMock.Object);
 
             // Setup Remote Transport (Generator)
             _remoteTransportMock = new Mock<ITransport>();
@@ -63,7 +63,7 @@ namespace Bomberman.Tests.States
             _remoteTransportMock.Setup(x => x.SendTo(It.IsAny<byte[]>(), It.IsAny<IPEndPoint>()))
                 .Callback<byte[], IPEndPoint>((data, ep) => _remoteSentPackets.Add((data, ep)));
             
-            _remoteNetwork = new NetworkController(_remoteTransportMock.Object);
+            _remoteNetwork = new NetworkController<InputState>(_remoteTransportMock.Object);
         }
 
         [TearDown]

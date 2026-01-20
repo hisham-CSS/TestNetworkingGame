@@ -1,7 +1,8 @@
 using System;
 using System.Diagnostics;
 using NUnit.Framework;
-using Bomberman.Rollback;
+using Chronos.Rollback;
+using Bomberman.Core.Game;
 using Bomberman.Core.Input;
 using Bomberman.Core;
 
@@ -17,7 +18,9 @@ namespace Bomberman.Tests.Performance
             // Simulate a 10-minute match (600 FPS * 600 = 36,000 frames)
             int totalFrames = 36000; 
             int players = 4;
-            var rollback = new RollbackSystem(0, players);
+            var rollback = new RollbackSystem<InputState, GameStateSnapshot>(0, players, 1.0f/60.0f);
+            var sim = new Simulation(12345, players);
+            rollback.AttachSimulation(sim);
             rollback.InitializeSimulation(12345, players);
             rollback.SimulateNetworked = true; // Enable buffers
 
@@ -49,7 +52,7 @@ namespace Bomberman.Tests.Performance
                     InputState[] oldInputs = new InputState[players];
                     oldInputs[1] = new InputState { PlaceBomb = true }; // Remote player did something different
 
-                    rollback.HandleRemoteInput(1, oldFrame, oldInputs, new IntVector2(0,0), 0);
+                    rollback.HandleRemoteInput(1, oldFrame, oldInputs, 0, 0, 0);
                 }
             }
 

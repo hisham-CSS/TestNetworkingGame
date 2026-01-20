@@ -7,8 +7,8 @@ using Bomberman.Core;
 using Bomberman.Core.Input;
 using Bomberman.Core.ECS.Components;
 using Bomberman.Core.Game;
-using Bomberman.Rollback;
-using Bomberman.Net;
+using Chronos.Rollback;
+using Chronos.Net;
 using Bomberman.App.Rendering;
 
 namespace Bomberman.App.States
@@ -18,7 +18,7 @@ namespace Bomberman.App.States
     /// Manages the GameSession, handles the game loop (Update), integrates with the RollbackSystem,
     /// and delegates rendering to WorldRenderer.
     /// </summary>
-    public class PlayState : IGameState
+    public class PlayState : Bomberman.App.States.IGameState
     {
         private GameContext _context;
         private GameStateManager _manager;
@@ -345,15 +345,16 @@ namespace Bomberman.App.States
             // Network Send
             if (_context.Network != null && _gameSession.TryBuildOutgoingBundle(out var bundle))
             {
-                _context.Network.SendInput(bundle);
+                _context.Network.SendInput(bundle.PlayerId, bundle.Frame, bundle.RedundantHistory, bundle.LocalPosX, bundle.LocalPosY, bundle.LocalStateHash);
             }
         }
 
-        private void HandleInputReceived(int pid, int startFrame, InputState[] inputs, IntVector2 remotePos, int remoteHash)
+        private void HandleInputReceived(int pid, int startFrame, InputState[] inputs, int remoteX, int remoteY, int remoteHash)
         {
+            IntVector2 remotePos = new IntVector2(remoteX, remoteY);
             var result = _gameSession.HandleRemoteInput(pid, startFrame, inputs, remotePos, remoteHash);
 
-            if (result == RollbackSystem.InputResult.TooOld && _isHost && _context.Network != null)
+            if (result == InputResult.TooOld && _isHost && _context.Network != null)
             {
                 // Player is desynced beyond recovery (lagged out). Force Resync.
                 // We need the endpoint for this PID.
@@ -381,7 +382,7 @@ namespace Bomberman.App.States
             // Host Relay
             if (_isHost && _context.Network != null && pid != 0)
             {
-                 byte[] packet = NetworkProtocol.CreateInputPacket(pid, startFrame, inputs, remotePos, remoteHash);
+                 byte[] packet = Chronos.Net.Protocol.NetworkProtocol<InputState>.CreateInputPacket(pid, startFrame, inputs, remotePos.X, remotePos.Y, remoteHash);
                  foreach(var client in _context.Network.ConnectedClients)
                  {
                      _context.Network.RelayPacket(client, packet);

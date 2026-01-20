@@ -1,6 +1,6 @@
 using System;
 using System.Net;
-using Bomberman.Net.Handlers;
+using Chronos.Net;
 using NUnit.Framework;
 
 namespace Bomberman.Tests.Net.Handlers
@@ -15,7 +15,7 @@ namespace Bomberman.Tests.Net.Handlers
             var endpoint = new IPEndPoint(IPAddress.Loopback, 12345);
             var data = new byte[] { 1, 2, 3 };
             bool complete = false;
-            byte[] result = null;
+            byte[]? result = null;
 
             reassembler.HandleChunk(endpoint, 0, 1, data, res => {
                 complete = true;
@@ -34,7 +34,7 @@ namespace Bomberman.Tests.Net.Handlers
             var data1 = new byte[] { 1, 2 };
             var data2 = new byte[] { 3, 4 };
             bool complete = false;
-            byte[] result = null;
+            byte[]? result = null;
 
             reassembler.HandleChunk(endpoint, 0, 2, data1, res => complete = true);
             Assert.That(complete, Is.False);
@@ -56,7 +56,7 @@ namespace Bomberman.Tests.Net.Handlers
             var data1 = new byte[] { 1, 2 };
             var data2 = new byte[] { 3, 4 };
             bool complete = false;
-            byte[] result = null;
+            byte[]? result = null;
 
             // Send chunk 1 first (index 1)
             reassembler.HandleChunk(endpoint, 1, 2, data2, res => complete = true);
@@ -92,7 +92,7 @@ namespace Bomberman.Tests.Net.Handlers
             reassembler.HandleChunk(endpoint, 1, 3, dataNew2, res => complete = true); // 2/3
             Assert.That(complete, Is.False);
             
-            byte[] result = null;
+            byte[]? result = null;
             reassembler.HandleChunk(endpoint, 2, 3, dataNew3, res => {
                 complete = true;
                 result = res;

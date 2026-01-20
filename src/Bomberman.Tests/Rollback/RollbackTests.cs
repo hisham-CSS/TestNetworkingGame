@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using Bomberman.Core.Input;
 using Bomberman.Core;
-using Bomberman.Rollback;
-using Bomberman.Net;
+using Bomberman.Core.Game;
+using Chronos.Rollback;
+using Chronos.Net;
+using NUnit.Framework;
 
 namespace Bomberman.Tests.Rollback
 {
@@ -14,12 +16,14 @@ namespace Bomberman.Tests.Rollback
     [TestFixture]
     public class RollbackTests
     {
-        private RollbackSystem _rollback;
+        private RollbackSystem<InputState, GameStateSnapshot> _rollback;
 
         [SetUp]
         public void Setup()
         {
-            _rollback = new RollbackSystem(0, 2);
+            _rollback = new RollbackSystem<InputState, GameStateSnapshot>(0, 2, 1.0f/60.0f);
+            var sim = new Simulation(12345, 2);
+            _rollback.AttachSimulation(sim);
             _rollback.IsRecording = true;
             _rollback.SimulateNetworked = true;
             _rollback.InitializeSimulation(12345, 2);
@@ -28,10 +32,12 @@ namespace Bomberman.Tests.Rollback
         [Test]
         public void TestDeterministicSimulation()
         {
-            var rollback = new RollbackSystem(0, 2);
-            _rollback.IsRecording = true;
-            _rollback.SimulateNetworked = true;
-            _rollback.InitializeSimulation(12345, 2);
+            var rollback = new RollbackSystem<InputState, GameStateSnapshot>(0, 2, 1.0f/60.0f);
+            var sim = new Simulation(12345, 2);
+            rollback.AttachSimulation(sim);
+            rollback.IsRecording = true;
+            rollback.SimulateNetworked = true;
+            rollback.InitializeSimulation(12345, 2);
         }
 
         [Test]
@@ -77,7 +83,7 @@ namespace Bomberman.Tests.Rollback
              // Initial P1 pos
              var p1PosBefore = GetPlayerPosition(1);
 
-             _rollback.HandleRemoteInput(1, 0, packetInputs, IntVector2.Zero, 0);
+             _rollback.HandleRemoteInput(1, 0, packetInputs, 0, 0, 0);
 
              // Assert correctness
              // If rollback happened, P1 should have moved LEFT.
@@ -95,13 +101,14 @@ namespace Bomberman.Tests.Rollback
 
         private IntVector2 GetPlayerPosition(int pid)
         {
-            var pPool = _rollback.Simulation.World.Players;
+            var sim = (Simulation)_rollback.Simulation;
+            var pPool = sim.World.Players;
             for(int i=0; i<pPool.Count; i++)
             {
                 if(pPool.Get(i).PlayerId == pid)
                 {
                     var e = pPool.GetEntity(i);
-                    return _rollback.Simulation.World.Transforms.Get(e).Position;
+                    return sim.World.Transforms.Get(e).Position;
                 }
             }
             return IntVector2.Zero;

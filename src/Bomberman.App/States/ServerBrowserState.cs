@@ -4,7 +4,8 @@ using System.Net;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Microsoft.Xna.Framework.Graphics;
-using Bomberman.Net;
+using Chronos.Net;
+using Bomberman.Core.Input;
 
 namespace Bomberman.App.States
 {
@@ -51,7 +52,7 @@ namespace Bomberman.App.States
             // Ensure NetworkController exists for discovery
             if (_context.Network == null)
             {
-                _context.Network = new NetworkController(new UdpTransport(0)); // Bind to random port
+                _context.Network = new NetworkController<InputState>(new UdpTransport(0)); // Bind to random port
             }
 
             _context.Network.OnDiscoveryResponseReceived += HandleDiscoveryResponse;

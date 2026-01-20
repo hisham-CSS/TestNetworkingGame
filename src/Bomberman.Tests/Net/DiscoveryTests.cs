@@ -1,7 +1,8 @@
 using System;
 using System.Net;
 using System.Threading;
-using Bomberman.Net;
+using Chronos.Net;
+using Bomberman.Core.Input;
 using NUnit.Framework;
 
 namespace Bomberman.Tests.Net
@@ -14,10 +15,10 @@ namespace Bomberman.Tests.Net
         {
             // Setup Host
             int hostPort = 5500;
-            var host = new NetworkController(new UdpTransport(hostPort));
+            var host = new NetworkController<InputState>(new UdpTransport(hostPort));
             
             // Setup Client (Browser)
-            var client = new NetworkController(new UdpTransport(0)); // Random port
+            var client = new NetworkController<InputState>(new UdpTransport(0)); // Random port
             
             bool discoveryRequestReceived = false;
             bool discoveryResponseReceived = false;

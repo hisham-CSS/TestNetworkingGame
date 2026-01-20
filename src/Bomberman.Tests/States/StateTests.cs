@@ -3,8 +3,9 @@ using NUnit.Framework;
 using System.Collections.Generic;
 using Bomberman.Core;
 using Bomberman.Core.ECS.Components;
-using Bomberman.Rollback;
-using Bomberman.Net;
+using Bomberman.Core.Game;
+using Chronos.Rollback;
+using Chronos.Net;
 
 namespace Bomberman.Tests.States
 {

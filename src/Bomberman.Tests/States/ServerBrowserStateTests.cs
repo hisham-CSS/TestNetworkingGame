@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using Bomberman.App.States;
 using Bomberman.Tests.Mocks;
-using Bomberman.Net;
+using Chronos.Net;
 using Bomberman.App.Input;
 using Bomberman.Core.Input;
 using Bomberman.Core.Logging;
@@ -31,7 +31,7 @@ namespace Bomberman.Tests.States
         // Helper to generate packets
         private Mock<ITransport> _generatorTransportMock;
         private List<(byte[] Data, IPEndPoint Endpoint)> _generatorSentPackets;
-        private NetworkController _generatorNetwork;
+        private NetworkController<InputState> _generatorNetwork;
 
         [SetUp]
         public void Setup()
@@ -51,7 +51,7 @@ namespace Bomberman.Tests.States
             _generatorTransportMock.Setup(x => x.SendTo(It.IsAny<byte[]>(), It.IsAny<IPEndPoint>()))
                  .Callback<byte[], IPEndPoint>((data, ep) => _generatorSentPackets.Add((data, ep)));
 
-            _generatorNetwork = new NetworkController(_generatorTransportMock.Object);
+            _generatorNetwork = new NetworkController<InputState>(_generatorTransportMock.Object);
 
             // Context Transport Setup
             _transportMock = new Mock<ITransport>();
@@ -59,7 +59,7 @@ namespace Bomberman.Tests.States
              _transportMock.Setup(x => x.SendTo(It.IsAny<byte[]>(), It.IsAny<IPEndPoint>()))
                  .Callback<byte[], IPEndPoint>((data, ep) => _sentPackets.Add((data, ep)));
 
-            _context.Network = new NetworkController(_transportMock.Object);
+            _context.Network = new NetworkController<InputState>(_transportMock.Object);
             
             _state = new ServerBrowserState(_context, new GameStateManager()); 
         }

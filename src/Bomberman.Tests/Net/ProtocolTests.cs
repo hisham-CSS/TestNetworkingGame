@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using Bomberman.Core.Input;
 using Bomberman.Core;
-using Bomberman.Net;
+using Chronos.Net;
+using Chronos.Net.Protocol;
+using NUnit.Framework;
 
 namespace Bomberman.Tests.Net
 {
@@ -26,18 +28,19 @@ namespace Bomberman.Tests.Net
             InputState[] history = new InputState[] { input1, input2 };
 
             // Act
-            byte[] packet = NetworkProtocol.CreateInputPacket(playerId, currentFrame, history, position, hash);
+            byte[] packet = NetworkProtocol<InputState>.CreateInputPacket(playerId, currentFrame, history, position.X, position.Y, hash);
             
             // Assert
             Assert.That(packet, Is.Not.Null);
             Assert.That(packet.Length, Is.GreaterThan(0));
 
             // Decode
-            var (outPid, outFrame, outHistory, outPos, outHash) = NetworkProtocol.ReadInputPacket(packet);
+            var (outPid, outFrame, outHistory, outX, outY, outHash) = NetworkProtocol<InputState>.ReadInputPacket(packet);
 
             Assert.That(outPid, Is.EqualTo(playerId));
             Assert.That(outFrame, Is.EqualTo(currentFrame));
-            Assert.That(outPos, Is.EqualTo(position));
+            Assert.That(outX, Is.EqualTo(position.X));
+            Assert.That(outY, Is.EqualTo(position.Y));
             Assert.That(outHash, Is.EqualTo(hash));
             Assert.That(outHistory.Length, Is.EqualTo(history.Length));
             
@@ -56,9 +59,9 @@ namespace Bomberman.Tests.Net
             int seed = 54321;
             int totalPlayers = 4;
 
-            byte[] packet = NetworkProtocol.CreateWelcome(assignedId, seed, totalPlayers);
+            byte[] packet = NetworkProtocol<InputState>.CreateWelcome(assignedId, seed, totalPlayers);
             
-            var (outId, outSeed, outTotal) = NetworkProtocol.ReadWelcome(packet);
+            var (outId, outSeed, outTotal) = NetworkProtocol<InputState>.ReadWelcome(packet);
 
             Assert.That(outId, Is.EqualTo(assignedId));
             Assert.That(outSeed, Is.EqualTo(seed));
@@ -71,9 +74,9 @@ namespace Bomberman.Tests.Net
             int seed = 111;
             int totalPlayers = 2;
 
-            byte[] packet = NetworkProtocol.CreateStartGame(seed, totalPlayers);
+            byte[] packet = NetworkProtocol<InputState>.CreateStartGame(seed, totalPlayers);
             
-            var (outSeed, outTotal) = NetworkProtocol.ReadStartGame(packet);
+            var (outSeed, outTotal) = NetworkProtocol<InputState>.ReadStartGame(packet);
 
             Assert.That(outSeed, Is.EqualTo(seed));
             Assert.That(outTotal, Is.EqualTo(totalPlayers));
@@ -85,9 +88,9 @@ namespace Bomberman.Tests.Net
             int pid = 2;
             bool isReady = true;
 
-            byte[] packet = NetworkProtocol.CreateLobbyReady(pid, isReady);
+            byte[] packet = NetworkProtocol<InputState>.CreateLobbyReady(pid, isReady);
             
-            var (outPid, outReady) = NetworkProtocol.ReadLobbyReady(packet);
+            var (outPid, outReady) = NetworkProtocol<InputState>.ReadLobbyReady(packet);
 
             Assert.That(outPid, Is.EqualTo(pid));
             Assert.That(outReady, Is.EqualTo(isReady));

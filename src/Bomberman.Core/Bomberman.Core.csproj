@@ -7,7 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-
+    <ProjectReference Include="..\Chronos.Core\Chronos.Core.csproj" />
+    <ProjectReference Include="..\Chronos.Rollback\Chronos.Rollback.csproj" />
   </ItemGroup>
 
 </Project>

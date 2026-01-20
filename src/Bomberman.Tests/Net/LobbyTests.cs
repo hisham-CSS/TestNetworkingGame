@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
-using Bomberman.Net;
+using Chronos.Net;
+using Bomberman.Core.Input;
 using NUnit.Framework;
 
 namespace Bomberman.Tests.Net
@@ -18,8 +19,8 @@ namespace Bomberman.Tests.Net
             // Setup
             int hostPort = 6000;
 
-            var host = new NetworkController(new UdpTransport(hostPort));
-            var client = new NetworkController(new UdpTransport(0));
+            var host = new NetworkController<InputState>(new UdpTransport(hostPort));
+            var client = new NetworkController<InputState>(new UdpTransport(0));
 
             bool hostReceivedReady = false;
             int readyPid = -1;
@@ -68,8 +69,8 @@ namespace Bomberman.Tests.Net
             // Setup
             int hostPort = 6001;
 
-            var host = new NetworkController(new UdpTransport(hostPort));
-            var client = new NetworkController(new UdpTransport(0));
+            var host = new NetworkController<InputState>(new UdpTransport(hostPort));
+            var client = new NetworkController<InputState>(new UdpTransport(0));
 
             bool clientReceivedUpdate = false;
             int updatedPid = -1;
@@ -117,8 +118,8 @@ namespace Bomberman.Tests.Net
             // Setup
             int hostPort = 6002;
 
-            var host = new NetworkController(new UdpTransport(hostPort));
-            var client = new NetworkController(new UdpTransport(0));
+            var host = new NetworkController<InputState>(new UdpTransport(hostPort));
+            var client = new NetworkController<InputState>(new UdpTransport(0));
 
             bool hostDetectedDisconnect = false;
             string disconnectReason = "";
@@ -157,9 +158,9 @@ namespace Bomberman.Tests.Net
             // Setup
             int hostPort = 6003;
 
-            var host = new NetworkController(new UdpTransport(hostPort));
-            var client1 = new NetworkController(new UdpTransport(0));
-            var client2 = new NetworkController(new UdpTransport(0));
+            var host = new NetworkController<InputState>(new UdpTransport(hostPort));
+            var client1 = new NetworkController<InputState>(new UdpTransport(0));
+            var client2 = new NetworkController<InputState>(new UdpTransport(0));
 
             // Host Logic
             // Simulate minimal Lobby logic: Accept if count < max.

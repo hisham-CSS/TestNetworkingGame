@@ -1,7 +1,7 @@
 using System.IO;
 using Bomberman.Core;
 using Bomberman.Core.Input;
-using Bomberman.Net.Packets;
+using Chronos.Net.Packets;
 using NUnit.Framework;
 
 namespace Bomberman.Tests.Net.Packets
@@ -12,11 +12,12 @@ namespace Bomberman.Tests.Net.Packets
         [Test]
         public void InputPacket_RoundTrip_PreservesData()
         {
-            var original = new InputPacket
+            var original = new InputPacket<InputState>
             {
                 PlayerId = 1,
                 StartFrame = 100,
-                CurrentPos = new IntVector2(5, 5),
+                PosX = 5,
+                PosY = 5,
                 StateHash = 999,
                 Inputs = new InputState[]
                 {
@@ -24,7 +25,7 @@ namespace Bomberman.Tests.Net.Packets
                 }
             };
 
-            var deserialized = SerializeDeserialize(original, InputPacket.Deserialize);
+            var deserialized = SerializeDeserialize(original, InputPacket<InputState>.Deserialize);
 
             Assert.That(deserialized.PlayerId, Is.EqualTo(original.PlayerId));
             Assert.That(deserialized.StartFrame, Is.EqualTo(original.StartFrame));
@@ -47,7 +48,7 @@ namespace Bomberman.Tests.Net.Packets
             ms.Position = 0;
             using var reader = new BinaryReader(ms);
             
-            var packet = InputPacket.Deserialize(reader);
+            var packet = InputPacket<InputState>.Deserialize(reader);
             
             // Should return empty inputs due to hardening check
             Assert.That(packet.Inputs, Is.Empty);

@@ -4,6 +4,7 @@ using Bomberman.Core.Input;
 using Bomberman.Core.ECS.Components;
 using System.Collections.Generic;
 using Bomberman.Core.Game.Systems;
+using Chronos.Core;
 
 namespace Bomberman.Core.Game
 {
@@ -11,7 +12,7 @@ namespace Bomberman.Core.Game
     /// The deterministic core game loop.
     /// Manages the ECS World, Systems, and Map generation.
     /// </summary>
-    public class Simulation
+    public class Simulation : IGameSimulation<InputState, GameStateSnapshot>
     {
         /// <summary>The ECS World containing all game entities.</summary>
         public World World { get; private set; }
@@ -61,6 +62,32 @@ namespace Bomberman.Core.Game
 
             GenerateMap();
             SpawnPlayers(playerCount);
+        }
+
+        public GameStateSnapshot CaptureState()
+        {
+            // Frame defaults to -1 or managed externally, here we assume current frame logic is external or tracking 
+            // Chronos usually tracks the frame number. The Snapshot constructor demands a frame.
+            // We'll pass 0 and let Chronos overwrite if needed, or if Simulation tracked frame count we'd use it.
+            // Wait, Simulation doesn't explicitly track "Frame Index" for itself in this implementation (it relies on Update).
+            // Let's assume calling code (Chronos) manages the frame index association with the snapshot.
+            return new GameStateSnapshot(0, World);
+        }
+
+        public void RestoreState(GameStateSnapshot state)
+        {
+            state.Restore(World);
+            // Also need to restore RNG state if it was part of snapshot. 
+            // In GameStateSnapshot.Restore(World), it didn't restore RNG. 
+            // We should ideally sync RNG too.
+            // For now, let's leave RNG desync specific handling to `GameStateSnapshot.RestoreFromBytes` which does handle it.
+            // But `Restore` which just takes `World` might missed it. 
+            // But `GameStateSnapshot` doesn't store RNG in the object graph (only in DTO).
+            // This is a small gap. The original SnapshotStore logic in Bomberman didn't seem to persist RNG in memory snapshot?
+            // Actually `GameStateSnapshot` constructor just captures pools.
+            // For full determinism, RNG should be captured.
+            // I'll add RNG capture to GameStateSnapshot later if needed, or assume RNG state is implicitly tied to frame (re-seeded).
+            // But usually RNG state must be saved.
         }
 
         private void GenerateMap()

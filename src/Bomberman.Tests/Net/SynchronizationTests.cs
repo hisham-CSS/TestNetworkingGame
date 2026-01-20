@@ -1,5 +1,7 @@
 using NUnit.Framework;
-using Bomberman.Rollback;
+using Chronos.Rollback;
+using Bomberman.Core.Game;
+using Bomberman.Core.Input;
 using System;
 
 namespace Bomberman.Tests.Net
@@ -11,12 +13,14 @@ namespace Bomberman.Tests.Net
     [TestFixture]
     public class SynchronizationTests
     {
-        private RollbackSystem _rollbackSystem;
+        private RollbackSystem<InputState, GameStateSnapshot> _rollbackSystem;
 
         [SetUp]
         public void Setup()
         {
-            _rollbackSystem = new RollbackSystem(0, 2);
+            _rollbackSystem = new RollbackSystem<InputState, GameStateSnapshot>(0, 2, 1.0f/60.0f);
+            var sim = new Simulation(12345, 2);
+            _rollbackSystem.AttachSimulation(sim);
         }
 
         [Test]
@@ -73,8 +77,8 @@ namespace Bomberman.Tests.Net
             
             // We can check the default state (Snapshot -1 exists).
             // Input for Frame -5
-             var result = _rollbackSystem.HandleRemoteInput(1, -5, new Bomberman.Core.Input.InputState[1], new Bomberman.Core.IntVector2(), 0);
-             Assert.That(result, Is.EqualTo(RollbackSystem.InputResult.TooOld));
+             var result = _rollbackSystem.HandleRemoteInput(1, -5, new Bomberman.Core.Input.InputState[1], 0, 0, 0);
+             Assert.That(result, Is.EqualTo(InputResult.TooOld));
         }
 
         [Test]

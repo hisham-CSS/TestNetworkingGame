@@ -4,9 +4,9 @@ using System.Net;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
-using Bomberman.Net;
+using Chronos.Net;
 using Bomberman.Core.Game;
-using Bomberman.Rollback;
+using Bomberman.Core.Input;
 
 namespace Bomberman.App.States
 {
