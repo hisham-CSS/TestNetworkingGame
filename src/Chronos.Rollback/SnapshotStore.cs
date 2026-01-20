@@ -31,7 +31,7 @@ namespace Chronos.Rollback
         /// <summary>
         /// Attempts to retrieve a stored snapshot for a specific frame.
         /// </summary>
-        public bool TryGet(int frame, out TState snapshot)
+        public bool TryGet(int frame, [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out TState snapshot)
         {
             return _buffer.TryGetValue(frame, out snapshot);
         }

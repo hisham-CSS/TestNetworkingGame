@@ -1,8 +1,8 @@
 using System;
+using System.Collections.Generic;
 using Bomberman.Core;
 using Bomberman.Core.Input;
 using Bomberman.Core.ECS.Components;
-using System.Collections.Generic;
 using Bomberman.Core.Game.Systems;
 using Chronos.Core;
 

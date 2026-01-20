@@ -101,7 +101,7 @@ namespace Bomberman.Tests.Rollback
 
         private IntVector2 GetPlayerPosition(int pid)
         {
-            var sim = (Simulation)_rollback.Simulation;
+            var sim = (Simulation)_rollback.Simulation!;
             var pPool = sim.World.Players;
             for(int i=0; i<pPool.Count; i++)
             {

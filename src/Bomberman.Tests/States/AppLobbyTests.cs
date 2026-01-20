@@ -23,7 +23,7 @@ namespace Bomberman.Tests.States
         private Mock<IInputService> _input;
         private Mock<IRenderer> _renderer;
         private GameContext _context;
-        private LobbyState _state;
+        private LobbyState _state = null!;
         
         // Transport Mocks
         private Mock<ITransport> _transportMock;
@@ -79,7 +79,7 @@ namespace Bomberman.Tests.States
             _state = new LobbyState(_context, new GameStateManager(), true, null);
             _state.Enter();
             
-            var count = (int)GetPrivateField(_state, "_connectedPlayerCount");
+            var count = (int)GetPrivateField(_state, "_connectedPlayerCount")!;
             Assert.That(count, Is.EqualTo(1));
         }
 
@@ -102,7 +102,7 @@ namespace Bomberman.Tests.States
             _state = new LobbyState(_context, new GameStateManager(), true, null); // Host
             
             // Add a dummy client so Broadcast sends a packet
-            _context.Network.AddClient(new IPEndPoint(IPAddress.Loopback, 12345));
+            _context.Network!.AddClient(new IPEndPoint(IPAddress.Loopback, 12345));
             
             _state.Enter();
 
@@ -114,7 +114,7 @@ namespace Bomberman.Tests.States
             Assert.That(_sentPackets.Count, Is.GreaterThan(0));
             
             // Verify internal state
-            var amIReady = (bool)GetPrivateField(_state, "_amIReady");
+            var amIReady = (bool)GetPrivateField(_state, "_amIReady")!;
             Assert.That(amIReady, Is.True);
 
             // Release Space (Pulse)
@@ -127,16 +127,16 @@ namespace Bomberman.Tests.States
             _input.Setup(x => x.GetKeyboard()).Returns(new KeyboardState(Keys.Space));
             _state.Update(new GameTime());
 
-            amIReady = (bool)GetPrivateField(_state, "_amIReady");
+            amIReady = (bool)GetPrivateField(_state, "_amIReady")!;
             Assert.That(amIReady, Is.False);
             
             // Should have sent another packet
             Assert.That(_sentPackets.Count, Is.GreaterThan(0));
         }
 
-        private object GetPrivateField(object obj, string name)
+        private object? GetPrivateField(object obj, string name)
         {
-            return obj.GetType().GetField(name, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(obj);
+            return obj.GetType().GetField(name, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(obj);
         }
     }
 }

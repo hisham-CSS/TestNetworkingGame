@@ -19,7 +19,7 @@ namespace Bomberman.Tests.States
     {
         private Mock<IInputService> _input;
         private GameContext _context;
-        private GameOverState _state;
+        private GameOverState _state = null!;
 
         [SetUp]
         public void Setup()
@@ -38,8 +38,8 @@ namespace Bomberman.Tests.States
         {
             _state = new GameOverState(_context, null!, null!, -1, true, false);
             
-            var isReplay = (bool)GetPrivateField(_state, "_isReplayView");
-            var isComplete = (bool)GetPrivateField(_state, "_isGameCompleted");
+            var isReplay = (bool)GetPrivateField(_state, "_isReplayView")!;
+            var isComplete = (bool)GetPrivateField(_state, "_isGameCompleted")!;
 
             Assert.That(isReplay, Is.True);
             Assert.That(isComplete, Is.False);
@@ -50,9 +50,9 @@ namespace Bomberman.Tests.States
         {
             _state = new GameOverState(_context, null!, null!, 1, false, true);
 
-            var isReplay = (bool)GetPrivateField(_state, "_isReplayView");
-            var isComplete = (bool)GetPrivateField(_state, "_isGameCompleted");
-            var winner = (int)GetPrivateField(_state, "_winnerId");
+            var isReplay = (bool)GetPrivateField(_state, "_isReplayView")!;
+            var isComplete = (bool)GetPrivateField(_state, "_isGameCompleted")!;
+            var winner = (int)GetPrivateField(_state, "_winnerId")!;
 
             Assert.That(isReplay, Is.False);
             Assert.That(isComplete, Is.True);
@@ -62,7 +62,7 @@ namespace Bomberman.Tests.States
         [Test]
         public void HandleTextInput_AddsCharacters_ToReplayName()
         {
-            _state = new GameOverState(_context, null, null, 1, false, true);
+            _state = new GameOverState(_context, null!, null!, 1, false, true);
             
             // Invoke HandleTextInput manually since we can't easily trigger the Monogame event
             // But wait, the state uses Window.TextInput event... which is hard to mock.
@@ -108,9 +108,9 @@ namespace Bomberman.Tests.States
             // But we can verify `SaveReplayAndExit` logic.
         }
 
-        private object GetPrivateField(object obj, string name)
+        private object? GetPrivateField(object obj, string name)
         {
-            return obj.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance).GetValue(obj);
+            return obj.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(obj);
         }
     }
 }

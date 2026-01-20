@@ -113,7 +113,7 @@ namespace Bomberman.App.States
                   // Find and remove from slot
                   for(int i=1; i<4; i++) // Slot 0 is Host, ignore
                   {
-                      if (_lobbySlots[i] != null && _lobbySlots[i].Equals(sender))
+                      if (_lobbySlots[i] is IPEndPoint slot && slot.Equals(sender))
                       {
                           _lobbySlots[i] = null;
                           break;
@@ -294,7 +294,7 @@ namespace Bomberman.App.States
              // Check if already in a slot
              for(int i=1; i<4; i++)
              {
-                 if (_lobbySlots[i] != null && _lobbySlots[i].Equals(sender))
+                 if (_lobbySlots[i] is IPEndPoint slot && slot.Equals(sender))
                  {
                      existingSlot = i;
                      break;

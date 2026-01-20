@@ -36,7 +36,7 @@ namespace Chronos.Rollback
             _telemetry.LogWarning($"[Chronos] ROLLBACK from frame {currentFrame} to {mispredictedFrame}");
             _telemetry.RecordRollback(currentFrame, mispredictedFrame);
 
-            if (!snapshotStore.TryGet(mispredictedFrame - 1, out TState snapshot))
+            if (!snapshotStore.TryGet(mispredictedFrame - 1, out var snapshot))
             {
                 _telemetry.LogError($"!!! CRITICAL: Cannot rollback, no snapshot for frame {mispredictedFrame - 1}");
                 return;

@@ -3,13 +3,13 @@ using System.IO;
 using System.Net;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
+using Bomberman.App.Rendering;
 using Bomberman.Core;
 using Bomberman.Core.Input;
 using Bomberman.Core.ECS.Components;
 using Bomberman.Core.Game;
 using Chronos.Rollback;
 using Chronos.Net;
-using Bomberman.App.Rendering;
 
 namespace Bomberman.App.States
 {
@@ -183,13 +183,13 @@ namespace Bomberman.App.States
                 // Find slot
                 for(int i=0; i<_clientSlots.Length; i++)
                 {
-                    if (_clientSlots[i] != null && _clientSlots[i].Equals(sender))
+                    if (_clientSlots[i] is IPEndPoint slot && slot.Equals(sender))
                     {
                         _clientSlots[i] = null;
                         int pid = i + 1;
                         _context.Logger.Info($"[PlayState] Player {pid} Disconnected: {reason}");
                         _gameSession.DisconnectPlayer(pid);
-                        _context.Network.RemoveClient(sender);
+                        _context.Network?.RemoveClient(sender);
                         break;
                     }
                 }
@@ -291,7 +291,7 @@ namespace Bomberman.App.States
                       bool isGameOver = _gameSession.Simulation != null && _gameSession.Simulation.IsGameOver;
                       if (isGameOver) 
                       {
-                            int winner = _gameSession.Simulation.WinnerId;
+                            int winner = _gameSession.Simulation!.WinnerId;
                              _manager.ChangeState(_context.StateFactory.CreateGameOver(_gameSession, winner, _isReplayView, isGameOver));
                             return;
                       }
@@ -410,7 +410,7 @@ namespace Bomberman.App.States
             // Check if already in a slot
             for(int i=0; i<_clientSlots.Length; i++)
             {
-                if (_clientSlots[i] != null && _clientSlots[i].Equals(sender))
+                if (_clientSlots[i] is IPEndPoint slot && slot.Equals(sender))
                 {
                     assignedId = i + 1;
                     break;

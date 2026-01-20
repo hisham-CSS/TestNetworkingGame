@@ -48,7 +48,7 @@ namespace Bomberman.Core
         public bool Equals(IntVector2 other) => X == other.X && Y == other.Y;
 
         /// <inheritdoc/>
-        public override bool Equals(object obj) => obj is IntVector2 other && Equals(other);
+        public override bool Equals(object? obj) => obj is IntVector2 other && Equals(other);
 
         /// <inheritdoc/>
         public override int GetHashCode() => HashCode.Combine(X, Y);

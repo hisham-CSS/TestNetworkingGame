@@ -100,20 +100,20 @@ namespace Bomberman.Tests.States
             _transportMock.Raise(x => x.PacketReceived += null, packet.Data, serverEp);
             
             // 4. Update Network to process packet
-            _context.Network.Update();
+            _context.Network!.Update();
             
             // 5. Check State
-            var list = (System.Collections.IList)GetPrivateField(_state, "_servers");
+            var list = (System.Collections.IList)GetPrivateField(_state, "_servers")!;
             Assert.That(list.Count, Is.EqualTo(1));
             
             // Reflection to check server details?
-            dynamic serverInfo = list[0];
-            Assert.That(serverInfo.Name, Is.EqualTo("Test Server"));
+            object? serverInfo = list[0];
+            Assert.That(((dynamic)serverInfo!).Name, Is.EqualTo("Test Server"));
         }
 
-        private object GetPrivateField(object obj, string name)
+        private object? GetPrivateField(object obj, string name)
         {
-            return obj.GetType().GetField(name, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(obj);
+            return obj.GetType().GetField(name, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(obj);
         }
     }
 }
