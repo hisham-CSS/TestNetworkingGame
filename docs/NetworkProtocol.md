@@ -1,6 +1,6 @@
 # Network Protocol Definition
 
-This document describes the binary protocol used by Bomberman.
+This document describes the binary protocol used by the **Chronos** networking engine (and consumed by Bomberman).
 
 ## Overview
 - **Transport**: UDP
@@ -74,7 +74,9 @@ All packets start with a single byte `PacketType`.
 - `int` Count
 - `int` X, `int` Y (CurrentPos)
 - `int` StateHash
-- List of `InputState`:
-    - `int` MoveX, `int` MoveY
-    - `bool` PlaceBomb
-    - `int` TargetX, `int` TargetY
+- List of `TInput` (Generic Input Struct):
+    - Serialized via `IInputState<T>.Serialize()`
+    - For Bomberman, this includes:
+        - `int` MoveX, `int` MoveY
+        - `bool` PlaceBomb
+        - `int` TargetX, `int` TargetY

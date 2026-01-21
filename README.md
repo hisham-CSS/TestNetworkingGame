@@ -44,6 +44,8 @@ Use the provided PowerShell script to launch 4 instances (1 Host + 3 Clients) au
 - **SPACE**: Place Bomb
 - **ESC**: Open Menu / Leave Game
 - **F1**: Toggle Debug Overlay
+- **F5**: Decrease Simulated Latency (50ms)
+- **F6**: Increase Simulated Latency (50ms)
 
 ## Networking
 - The game uses UDP for communication.
@@ -58,10 +60,13 @@ Use the provided PowerShell script to launch 4 instances (1 Host + 3 Clients) au
 
 The project follows a strict separation of concerns:
 
-- **Bomberman.Core**: Pure C# Class Library containing the Game Logic (ECS, Simulation), Components, and Math utilities. Detached from any framework (Monogame/Unity).
-- **Bomberman.Rollback**: Handling of deterministic state management, history buffers (snapshots), and resimulation logic (GGPO-style).
-- **Bomberman.Net**: UDP Networking layer, packet serialization, and connection management.
-- **Bomberman.App**: The Monogame application entry point, handling Input, Rendering (`WorldRenderer`), and the core Game Loop.
+- **Chronos**: A generic, framework-agnostic rollback networking library.
+    - **Chronos.Core**: core interfaces (`IGameSimulation`, `IInputState`).
+    - **Chronos.Rollback**: Generic GGPO-style rollback engine.
+    - **Chronos.Net**: UDP networking and protocol layer.
+- **Bomberman.Core**: Pure C# Game Logic (ECS, Simulation) implementing `Chronos` interfaces.
+- **Bomberman.App**: Monogame implementation (Rendering, Input, Game Loop).
+- **Bomberman.Tests**: Unit tests for Core and Networking.
 
 ### Rollback Networking
 The game uses a predictive rollback architecture:
