@@ -7,7 +7,24 @@ This document describes the binary protocol used by the **Chronos** networking e
 - **Protocol Version**: 1
 - **Endianness**: Little-Endian (BinaryWriter default)
 
-## Packet Structure
+## Relay Protocol
+When using `RelayTransport`, all game packets are wrapped in a **Relay Header**. This header is read by the `Chronos.RelayServer` to route packets to the correct session.
+
+### Relay Header Structure
+- `byte` (1 Byte) **PacketType**:
+    - `1`: JoinSession
+    - `2`: LeaveSession
+    - `3`: RelayPacket (Wraps a standard Game Packet)
+    - `4`: JoinSessionAck (Handshake confirmation)
+- `ushort` (2 Bytes) **SessionId**: Grouping identifier for the game.
+- `byte` (1 Byte) **SourcePlayerId**: 
+    - `0`: Host
+    - `10-250`: Random ID for handshake
+    - `1-3`: Assigned Player ID
+
+---
+
+## Game Packet Structure
 All packets start with a single byte `PacketType`.
 
 ### Packet Types

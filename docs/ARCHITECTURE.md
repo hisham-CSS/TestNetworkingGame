@@ -4,7 +4,8 @@
 
 This project is divided into two main layers:
 1.  **Chronos**: A generic, reusable framework for deterministic networked games (GGPO-style).
-2.  **Bomberman**: A concrete implementation of a Bomberman clone using Chronos and Monogame.
+2.  **Chronos.RelayServer**: A lightweight, standalone UDP reflector for enabling internet play without port forwarding.
+3.  **Bomberman**: A concrete implementation of a Bomberman clone using Chronos and Monogame.
 
 This separation allows the core networking and rollback logic to be reused for future projects (e.g., a Fighting Game) without modification.
 
@@ -27,7 +28,10 @@ Implements the predictive rollback logic.
 ### Chronos.Net
 Handles the physical networking.
 - **`NetworkController<TInput>`**: High-level manager. Handles connections, packet routing, and synchronizing the game start.
-- **`ITransport`**: Abstraction for UDP. Includes `UdpTransport` (Production) and `SimulatedLagTransport` (Testing).
+- **`ITransport`**: Abstraction for UDP. 
+    - `UdpTransport`: Direct P2P (LAN).
+    - `RelayTransport`: Client for Relay Server (Internet/NAT traversal).
+    - `SimulatedLagTransport`: Wrapper for testing network conditions.
 - **`NetworkProtocol`**: Defines the packet structure (Join, Start, Input, StateSync).
 
 ---

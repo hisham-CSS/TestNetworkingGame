@@ -31,6 +31,12 @@ Use the provided PowerShell script to launch 4 instances (1 Host + 3 Clients) au
 .\launch_test_session.ps1
 ```
 
+### Online Multiplayer (Relay)
+To play over the internet, you must run a Relay Server (or connect to one).
+1. **Deploy Relay Server**: See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+2. **Run Game**: `dotnet run --project src/Bomberman.App`.
+3. Select **HOST GAME (RELAY)** or **JOIN GAME (RELAY)** in the menu.
+
 ## Controls
 
 ### Menus
@@ -64,6 +70,7 @@ The project follows a strict separation of concerns:
     - **Chronos.Core**: core interfaces (`IGameSimulation`, `IInputState`).
     - **Chronos.Rollback**: Generic GGPO-style rollback engine.
     - **Chronos.Net**: UDP networking and protocol layer.
+    - **Chronos.RelayServer**: Standalone UDP Relay Server for NAT traversal.
 - **Bomberman.Core**: Pure C# Game Logic (ECS, Simulation) implementing `Chronos` interfaces.
 - **Bomberman.App**: Monogame implementation (Rendering, Input, Game Loop).
 - **Bomberman.Tests**: Unit tests for Core and Networking.
