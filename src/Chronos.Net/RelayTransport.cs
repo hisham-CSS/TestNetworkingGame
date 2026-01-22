@@ -6,35 +6,42 @@ using Chronos.Net.Protocol;
 
 namespace Chronos.Net
 {
+    /// <summary>
+    /// Implementation of ITransport using a central Relay Server for NAT traversal.
+    /// Wraps all logic for establishing a session, wrapping packets, and "virtualizing" remote endpoints.
+    /// </summary>
     public class RelayTransport : ITransport
     {
-        private UdpClient _udpClient;
+        private IUdpClient _udpClient;
         private IPEndPoint _relayServerEndpoint;
         private ushort _sessionId;
         private byte _localPlayerId;
         
+        /// <inheritdoc />
         public event Action<byte[], IPEndPoint>? PacketReceived;
 
-        public int LocalPort => ((IPEndPoint)_udpClient.Client.LocalEndPoint!).Port;
+        /// <inheritdoc />
+        public int LocalPort => ((IPEndPoint)_udpClient.LocalEndPoint!).Port;
 
         /// <summary>
-        /// 
+        /// Initializes a new instance of the RelayTransport.
+        /// Immediately attempts to connect to the Relay Server.
         /// </summary>
         /// <param name="relayIp">The public IP of the relay server.</param>
         /// <param name="relayPort">The port of the relay server (usually 7777).</param>
         /// <param name="sessionId">The game session ID.</param>
         /// <param name="localPlayerId">
         /// For Host: 0. 
-        /// For Joining Clients: Random byte (10-250) initially, then assigned ID after handshake? 
-        /// Actually, for the simplified architecture, let's just use the assigned PlayerID or a Random ID for specific phases.
+        /// For Joining Clients: Random byte (10-250) initially, then assigned ID after handshake.
         /// </param>
-        public RelayTransport(string relayIp, int relayPort, ushort sessionId, byte localPlayerId)
+        /// <param name="udpClient">Optional IUdpClient for testing. If null, creates a default UdpClientWrapper.</param>
+        public RelayTransport(string relayIp, int relayPort, ushort sessionId, byte localPlayerId, IUdpClient? udpClient = null)
         {
             _relayServerEndpoint = new IPEndPoint(IPAddress.Parse(relayIp), relayPort);
             _sessionId = sessionId;
             _localPlayerId = localPlayerId;
             
-            _udpClient = new UdpClient();
+            _udpClient = udpClient ?? new UdpClientWrapper();
             _udpClient.Connect(_relayServerEndpoint);
             
             // Send Join Packet immediately

@@ -46,9 +46,10 @@ namespace Bomberman.Tests.States
         [Test]
         public void ExecuteSelection_Join_CreatesServerBrowser()
         {
-            // Move Down to Join (Index 1)
+            // Move Down to Join (Index 2 in new menu: Host LAN, Host Relay, Join LAN)
             _context.MockInput.Setup(x => x.IsMenuDown()).Returns(true);
             _menuState.Update(new GameTime());
+            _menuState.Update(new GameTime()); // Down twice
             
             // Latch state / Release Down
             _context.MockInput.Setup(x => x.IsMenuDown()).Returns(false);
@@ -62,7 +63,7 @@ namespace Bomberman.Tests.States
         [Test]
         public void ExecuteSelection_Exit_CallsGameExit()
         {
-            // Move Up to Exit (Wrap around to 3)
+            // Move Up to Exit (Wrap around to last item)
             _context.MockInput.Setup(x => x.IsMenuUp()).Returns(true);
             _menuState.Update(new GameTime());
             

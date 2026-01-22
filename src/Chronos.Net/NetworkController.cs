@@ -29,15 +29,26 @@ namespace Chronos.Net
         public ITransport Transport => _transport;
 
         // Events
+        
+        /// <summary>Fired when a Welcome packet is received from the host.</summary>
         public event Action<int, int, int>? OnWelcomeReceived;
+        /// <summary>Fired when the lobby state is updated (e.g. player count changes).</summary>
         public event Action<int, int, int>? OnLobbyUpdateReceived;
+        /// <summary>Fired when the game start signal is received.</summary>
         public event Action<int, int>? OnStartGameReceived;
+        /// <summary>Fired when a discovery request is received (for LAN browser).</summary>
         public event Action<System.Net.IPEndPoint, string, int, int>? OnDiscoveryRequestReceived;
+        /// <summary>Fired when a discovery response is received (finding a LAN game).</summary>
         public event Action<System.Net.IPEndPoint, string, int, int>? OnDiscoveryResponseReceived; 
+        /// <summary>Fired when a raw join request is received by the host.</summary>
         public event Action<System.Net.IPEndPoint>? OnJoinRequestRaw; 
+        /// <summary>Fired when input data is received from a peer.</summary>
         public event Action<int, int, TInput[], int, int, int>? OnInputReceived; // inputs, posx, posy, hash
+        /// <summary>Fired when a client disconnects or times out.</summary>
         public event Action<IPEndPoint, string>? OnDisconnected; 
+        /// <summary>Fired when a client toggles their ready status in the lobby.</summary>
         public event Action<int, bool>? OnLobbyReadyReceived;
+        /// <summary>Fired when a full state sync packet is received.</summary>
         public event Action<byte[]>? OnStateSyncReceived;
 
         private Dictionary<IPEndPoint, DateTime> _lastDataReceived = new Dictionary<IPEndPoint, DateTime>();

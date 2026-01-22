@@ -6,6 +6,11 @@ using Chronos.Net;
 
 namespace Bomberman.App.States
 {
+    /// <summary>
+    /// A temporary state that displays a connection progress screen.
+    /// Pols the network for a handshake response (Ack) from the Relay Server.
+    /// Handles timeouts and cleanup on failure.
+    /// </summary>
     public class ConnectingState : IGameState
     {
         private GameContext _context;
