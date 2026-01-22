@@ -1,0 +1,17 @@
+{
+	"name": "C# Netplay Dev",
+	"image": "mcr.microsoft.com/devcontainers/dotnet:0-9.0",
+	"features": {
+		"ghcr.io/devcontainers/features/docker-in-docker:2": {}
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-dotnettools.csharp",
+				"ms-vscode.powershell"
+			]
+		}
+	},
+	"forwardPorts": [7777],
+	"postCreateCommand": "echo 'Devcontainer ready. Run scripts/start_relay_codespace.sh to start the servers.'"
+}
