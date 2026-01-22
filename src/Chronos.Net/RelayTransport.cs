@@ -105,6 +105,9 @@ namespace Chronos.Net
 
                     if (!sender.Equals(_relayServerEndpoint)) continue;
 
+                    // Temporary: Log receipt to file to prove firewall issues
+                    try { File.AppendAllText("client_debug.log", $"[{DateTime.Now}] Recv {data.Length} bytes from Relay\n"); } catch {}
+
                     using var ms = new MemoryStream(data);
                     using var reader = new BinaryReader(ms);
                     
