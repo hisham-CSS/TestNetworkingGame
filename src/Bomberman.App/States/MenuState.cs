@@ -23,8 +23,10 @@ namespace Bomberman.App.States
         private int _selectedIndex = 0;
         private string[] _menuOptions = new string[] 
         { 
-            "HOST GAME", 
-            "JOIN GAME", 
+            "HOST GAME (LAN)", 
+            "HOST GAME (RELAY)",
+            "JOIN GAME (LAN)", 
+            "JOIN GAME (RELAY)",
             "REPLAYS", 
             "EXIT" 
         };
@@ -73,30 +75,74 @@ namespace Bomberman.App.States
         {
             switch (_selectedIndex)
             {
-                case 0: // HOST
+                case 0: // HOST (LAN)
                     _context.Network?.Close();
                     var hostTransport = new SimulatedLagTransport(new UdpTransport(5000));
                     _context.Network = new NetworkController<InputState>(hostTransport);
                     _manager.ChangeState(_context.StateFactory.CreateLobby(true, null));
                     break;
-                case 1: // JOIN
+
+                case 1: // HOST (RELAY)
                     _context.Network?.Close();
-                    // Note: ServerBrowser requires a NetworkController. 
-                    // Usually ServerBrowser initializes its own, or uses the Context's.
-                    // If ServerBrowser creates one, we should ensure it uses LagTransport there too or update ServerBrowser.
-                    // Let's assume ServerBrowser will use the Context's if null, or we initialize it here.
-                    // Looking at ServerBrowserState (not visible here but standard pattern):
-                    // Actually checking ServerBrowserStateTests, it accepts context.Network.
-                    // So we should initialize it here to be safe and consistent.
-                    var clientTransport = new SimulatedLagTransport(new UdpTransport(0)); // Bind any port
+                     // Ask for Relay IP (so host can connect to public relay too)
+                     _manager.ChangeState(new TextInputState(_context, _manager, "Enter Relay IP (Default 127.0.0.1):", (ip) => 
+                     {
+                         if (string.IsNullOrEmpty(ip)) ip = "127.0.0.1";
+                         
+                         _manager.ChangeState(new TextInputState(_context, _manager, "Enter Session ID to Host (e.g. 1234):", (sessIdStr) => 
+                        {
+                            if (ushort.TryParse(sessIdStr, out ushort sessionId))
+                            {
+                                var relayTransport = new RelayTransport(ip, 7777, sessionId, 0); // Host is Player 0
+                                _context.Network = new NetworkController<InputState>(relayTransport);
+                                _manager.ChangeState(_context.StateFactory.CreateLobby(true, null));
+                            }
+                            else
+                            {
+                                // Invalid ID, return to menu
+                                _manager.ChangeState(_context.StateFactory.CreateMenu("Invalid Session ID"));
+                            }
+                        }));
+                     }));
+                    break;
+
+                case 2: // JOIN (LAN)
+                    _context.Network?.Close();
+                    var clientTransport = new SimulatedLagTransport(new UdpTransport(0)); 
                     _context.Network = new NetworkController<InputState>(clientTransport);
-                    
                     _manager.ChangeState(_context.StateFactory.CreateServerBrowser());
                     break;
-                case 2: // REPLAYS
+                    
+                case 3: // JOIN (RELAY)
+                     // 1. Ask for IP
+                     _manager.ChangeState(new TextInputState(_context, _manager, "Enter Relay IP (Default 127.0.0.1):", (ip) => 
+                     {
+                         if (string.IsNullOrEmpty(ip)) ip = "127.0.0.1";
+                         
+                         // 2. Ask for Session ID
+                         _manager.ChangeState(new TextInputState(_context, _manager, "Enter Session ID:", (sess) => 
+                         {
+                             if (ushort.TryParse(sess, out ushort sid))
+                             {
+                                 // Join as randomly assigned ID (10-250)
+                                 byte tempId = (byte)new Random().Next(10, 250);
+                                 var transport = new RelayTransport(ip, 7777, sid, tempId);
+                                 _context.Network = new NetworkController<InputState>(transport);
+                                 _context.Network.Connect(ip, 7777); // Critical: Sets _isClient = true
+                                 _manager.ChangeState(_context.StateFactory.CreateLobby(false, null));
+                             }
+                             else
+                             {
+                                 _manager.ChangeState(_context.StateFactory.CreateMenu("Invalid Session ID"));
+                             }
+                         }));
+                     }));
+                    break;
+                    
+                case 4: // REPLAYS
                     _manager.ChangeState(_context.StateFactory.CreateReplaySelect());
                     break;
-                case 3: // EXIT
+                case 5: // EXIT
                     _context.Game.Exit();
                     break;
             }

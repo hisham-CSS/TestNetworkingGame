@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  relay:
+    build: 
+      context: .
+      dockerfile: src/Chronos.RelayServer/Dockerfile
+    image: chronos-relay:latest
+    ports:
+      - "7777:7777/udp"
+    restart: unless-stopped
+    networks:
+      - bomberman-net
+
+networks:
+  bomberman-net:
+    driver: bridge
