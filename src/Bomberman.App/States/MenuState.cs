@@ -95,17 +95,25 @@ namespace Bomberman.App.States
                             {
                                 var relayTransport = new RelayTransport(ip, 7777, sessionId, 0); // Host is Player 0
                                 _context.Network = new NetworkController<InputState>(relayTransport);
-                                _manager.ChangeState(_context.StateFactory.CreateLobby(true, null));
+                                _context.Network.Connect(ip, 7777); 
+                                
+                                // Wait for connection
+                                _manager.ChangeState(new ConnectingState(_context, _manager, 
+                                    onConnected: () => _manager.ChangeState(_context.StateFactory.CreateLobby(true, null)),
+                                    onFailure: () => {
+                                        _context.Network?.Close();
+                                        _context.Network = null;
+                                        _manager.ChangeState(_context.StateFactory.CreateMenu("Connection Failed (Relay Timeout)"));
+                                    }
+                                ));
                             }
                             else
                             {
-                                // Invalid ID, return to menu
                                 _manager.ChangeState(_context.StateFactory.CreateMenu("Invalid Session ID"));
                             }
                         }));
                      }));
                     break;
-
                 case 2: // JOIN (LAN)
                     _context.Network?.Close();
                     var clientTransport = new SimulatedLagTransport(new UdpTransport(0)); 
@@ -128,8 +136,16 @@ namespace Bomberman.App.States
                                  byte tempId = (byte)new Random().Next(10, 250);
                                  var transport = new RelayTransport(ip, 7777, sid, tempId);
                                  _context.Network = new NetworkController<InputState>(transport);
-                                 _context.Network.Connect(ip, 7777); // Critical: Sets _isClient = true
-                                 _manager.ChangeState(_context.StateFactory.CreateLobby(false, null));
+                                 _context.Network.Connect(ip, 7777); 
+                                 
+                                 _manager.ChangeState(new ConnectingState(_context, _manager,
+                                     onConnected: () => _manager.ChangeState(_context.StateFactory.CreateLobby(false, null)),
+                                     onFailure: () => {
+                                         _context.Network?.Close();
+                                         _context.Network = null;
+                                         _manager.ChangeState(_context.StateFactory.CreateMenu("Connection Failed (Relay Timeout)"));
+                                     }
+                                 ));
                              }
                              else
                              {

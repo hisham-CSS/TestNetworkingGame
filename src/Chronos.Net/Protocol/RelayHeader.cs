@@ -7,7 +7,8 @@ namespace Chronos.Net.Protocol
     {
         JoinSession = 1,
         LeaveSession = 2,
-        RelayPacket = 3
+        RelayPacket = 3,
+        JoinSessionAck = 4
     }
 
     public struct RelayHeader

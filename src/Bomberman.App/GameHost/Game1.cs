@@ -34,6 +34,7 @@ namespace Bomberman.App.GameHost
 
         protected override void Initialize()
         {
+            Exiting += (s, e) => _context.Network?.Close();
             base.Initialize();
         }
 

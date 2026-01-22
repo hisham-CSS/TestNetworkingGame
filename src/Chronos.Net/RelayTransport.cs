@@ -94,6 +94,9 @@ namespace Chronos.Net
             catch (Exception) { }
         }
 
+        public event Action? OnConnected;
+        public bool IsConnected { get; private set; } = false;
+
         public void Poll()
         {
             try
@@ -104,9 +107,6 @@ namespace Chronos.Net
                     byte[] data = _udpClient.Receive(ref sender);
 
                     if (!sender.Equals(_relayServerEndpoint)) continue;
-
-                    // Temporary: Log receipt to file to prove firewall issues
-                    try { File.AppendAllText("client_debug.log", $"[{DateTime.Now}] Recv {data.Length} bytes from Relay\n"); } catch {}
 
                     using var ms = new MemoryStream(data);
                     using var reader = new BinaryReader(ms);
@@ -121,6 +121,14 @@ namespace Chronos.Net
                         IPEndPoint virtualSender = new IPEndPoint(IPAddress.Loopback, header.SourcePlayerId);
                         
                         PacketReceived?.Invoke(payload, virtualSender);
+                    }
+                    else if (header.PacketType == RelayPacketType.JoinSessionAck)
+                    {
+                         if (!IsConnected)
+                         {
+                             IsConnected = true;
+                             OnConnected?.Invoke();
+                         }
                     }
                 }
             }

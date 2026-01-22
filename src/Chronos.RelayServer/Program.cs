@@ -101,7 +101,26 @@ namespace Chronos.RelayServer
                 sessionClients.Add(sender);
                 _clientSessions[sender] = header.SessionId;
                 Console.WriteLine($"[Session {header.SessionId}] Client {sender} Joined (PlayerId: {header.SourcePlayerId}). Total: {sessionClients.Count}");
+
+                // Send Ack back to client so they know they are connected
+                SendAck(sender, header.SessionId, header.SourcePlayerId);
             }
+        }
+
+        private static void SendAck(IPEndPoint target, ushort sessionId, byte playerId)
+        {
+             var header = new RelayHeader 
+             { 
+                 PacketType = RelayPacketType.JoinSessionAck,
+                 SessionId = sessionId,
+                 SourcePlayerId = playerId
+             };
+             
+             using var ms = new MemoryStream();
+             using var writer = new BinaryWriter(ms);
+             header.Serialize(writer);
+             byte[] pkt = ms.ToArray();
+             _udpServer?.SendAsync(pkt, pkt.Length, target);
         }
 
         private static void HandleLeave(IPEndPoint sender)
