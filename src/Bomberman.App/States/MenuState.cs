@@ -85,17 +85,25 @@ namespace Bomberman.App.States
                 case 1: // HOST (RELAY)
                     _context.Network?.Close();
                      // Ask for Relay IP (so host can connect to public relay too)
-                     _manager.ChangeState(new TextInputState(_context, _manager, "Enter Relay IP (Default 127.0.0.1):", (ip) => 
+                     _manager.ChangeState(new TextInputState(_context, _manager, "Enter Relay IP (Default 127.0.0.1):", (input) => 
                      {
-                         if (string.IsNullOrEmpty(ip)) ip = "127.0.0.1";
+                         string ip = "127.0.0.1";
+                         int port = 7777;
+
+                         if (!string.IsNullOrEmpty(input))
+                         {
+                             var parts = input.Split(':');
+                             ip = parts[0];
+                             if (parts.Length > 1 && int.TryParse(parts[1], out int p)) port = p;
+                         }
                          
                          _manager.ChangeState(new TextInputState(_context, _manager, "Enter Session ID to Host (e.g. 1234):", (sessIdStr) => 
                         {
                             if (ushort.TryParse(sessIdStr, out ushort sessionId))
                             {
-                                var relayTransport = new RelayTransport(ip, 7777, sessionId, 0); // Host is Player 0
+                                var relayTransport = new RelayTransport(ip, port, sessionId, 0); // Host is Player 0
                                 _context.Network = new NetworkController<InputState>(relayTransport);
-                                _context.Network.Connect(ip, 7777); 
+                                _context.Network.Connect(ip, port); 
                                 
                                 // Wait for connection
                                 _manager.ChangeState(new ConnectingState(_context, _manager, 
@@ -123,9 +131,17 @@ namespace Bomberman.App.States
                     
                 case 3: // JOIN (RELAY)
                      // 1. Ask for IP
-                     _manager.ChangeState(new TextInputState(_context, _manager, "Enter Relay IP (Default 127.0.0.1):", (ip) => 
+                     _manager.ChangeState(new TextInputState(_context, _manager, "Enter Relay IP (Default 127.0.0.1):", (input) => 
                      {
-                         if (string.IsNullOrEmpty(ip)) ip = "127.0.0.1";
+                         string ip = "127.0.0.1";
+                         int port = 7777;
+
+                         if (!string.IsNullOrEmpty(input))
+                         {
+                             var parts = input.Split(':');
+                             ip = parts[0];
+                             if (parts.Length > 1 && int.TryParse(parts[1], out int p)) port = p;
+                         }
                          
                          // 2. Ask for Session ID
                          _manager.ChangeState(new TextInputState(_context, _manager, "Enter Session ID:", (sess) => 
@@ -134,9 +150,9 @@ namespace Bomberman.App.States
                              {
                                  // Join as randomly assigned ID (10-250)
                                  byte tempId = (byte)new Random().Next(10, 250);
-                                 var transport = new RelayTransport(ip, 7777, sid, tempId);
+                                 var transport = new RelayTransport(ip, port, sid, tempId);
                                  _context.Network = new NetworkController<InputState>(transport);
-                                 _context.Network.Connect(ip, 7777); 
+                                 _context.Network.Connect(ip, port); 
                                  
                                  _manager.ChangeState(new ConnectingState(_context, _manager,
                                      onConnected: () => _manager.ChangeState(_context.StateFactory.CreateLobby(false, null)),

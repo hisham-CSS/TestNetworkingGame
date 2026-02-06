@@ -37,7 +37,8 @@ namespace Chronos.Net
         /// <param name="udpClient">Optional IUdpClient for testing. If null, creates a default UdpClientWrapper.</param>
         public RelayTransport(string relayIp, int relayPort, ushort sessionId, byte localPlayerId, IUdpClient? udpClient = null)
         {
-            _relayServerEndpoint = new IPEndPoint(IPAddress.Parse(relayIp), relayPort);
+            var ipAddress = ResolveHost(relayIp);
+            _relayServerEndpoint = new IPEndPoint(ipAddress, relayPort);
             _sessionId = sessionId;
             _localPlayerId = localPlayerId;
             
@@ -46,6 +47,18 @@ namespace Chronos.Net
             
             // Send Join Packet immediately
             SendControlPacket(RelayPacketType.JoinSession);
+        }
+
+        private IPAddress ResolveHost(string host)
+        {
+            if (IPAddress.TryParse(host, out IPAddress ip)) return ip;
+            try 
+            {
+                var entries = Dns.GetHostAddresses(host);
+                if (entries.Length > 0) return entries[0];
+            }
+            catch {}
+            throw new Exception($"Could not resolve host: {host}");
         }
 
         private void SendControlPacket(RelayPacketType type)
@@ -113,12 +126,21 @@ namespace Chronos.Net
                     IPEndPoint sender = new IPEndPoint(IPAddress.Any, 0);
                     byte[] data = _udpClient.Receive(ref sender);
 
-                    if (!sender.Equals(_relayServerEndpoint)) continue;
+                    // Debug Log
+                    // Console.WriteLine($"[Client] Received {data.Length} bytes from {sender}. Expecting: {_relayServerEndpoint}");
+
+                    if (!sender.Equals(_relayServerEndpoint)) 
+                    {
+                         // Temporary: Allow mismatches to see if that's the issue, or just log it.
+                         Console.WriteLine($"[RelayTransport] Ignored packet from {sender} (Expected {_relayServerEndpoint})");
+                         continue;
+                    }
 
                     using var ms = new MemoryStream(data);
                     using var reader = new BinaryReader(ms);
                     
                     var header = RelayHeader.Deserialize(reader);
+                    // Console.WriteLine($"[Client] Received PacketType: {header.PacketType}");
                     
                     if (header.PacketType == RelayPacketType.RelayPacket)
                     {
@@ -140,6 +162,22 @@ namespace Chronos.Net
                 }
             }
             catch (Exception) { }
+
+            // Retry Logic for Handshake
+            if (!IsConnected)
+            {
+               UpdateHandshake();
+            }
+        }
+
+        private DateTime _lastHandshakeTime = DateTime.MinValue;
+        private void UpdateHandshake()
+        {
+            if ((DateTime.Now - _lastHandshakeTime).TotalMilliseconds > 500)
+            {
+                SendControlPacket(RelayPacketType.JoinSession);
+                _lastHandshakeTime = DateTime.Now;
+            }
         }
 
 

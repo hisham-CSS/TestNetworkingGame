@@ -58,6 +58,14 @@ namespace Bomberman.App.States
                     {
                         _currentInput += ".";
                     }
+                    else if (key == Keys.OemMinus || key == Keys.Subtract)
+                    {
+                        _currentInput += "-";
+                    }
+                    else if (key == Keys.OemSemicolon)
+                    {
+                        _currentInput += ":";
+                    }
                     else
                     {
                         string charStr = GetCharFromKey(key);
