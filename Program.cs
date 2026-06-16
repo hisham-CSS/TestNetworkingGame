@@ -8,15 +8,15 @@ namespace Bomberman
 {
     public class Game1 : Game
     {
-        private Texture2D _pixelTexture;
+        private Texture2D _pixelTexture = null!;   // assigned in LoadContent
         private GraphicsDeviceManager _graphics;
-        private SpriteBatch _spriteBatch;
+        private SpriteBatch _spriteBatch = null!;  // assigned in LoadContent
         
-        private Simulation _simulation;
+        private Simulation _simulation = null!;    // assigned in Initialize
         private KeyboardState _previousKeyboardState;
 
         // Week 1: input buffering + determinism verification
-        private InputBuffer _inputBuffer;
+        private InputBuffer _inputBuffer = new InputBuffer();
         private int _frame = 0;
 
         // Fixed Timestep
@@ -39,7 +39,6 @@ namespace Bomberman
         protected override void Initialize()
         {
             _simulation = new Simulation(12345); // Seeded
-            _inputBuffer = new InputBuffer();
 
             // Verify determinism BEFORE the first frame is drawn: record a scripted run,
             // replay it from a fresh world, and confirm the per-frame state hashes match.

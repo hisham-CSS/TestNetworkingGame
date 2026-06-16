@@ -11,4 +11,10 @@
     <PackageReference Include="MonoGame.Framework.DesktopGL" Version="3.8.4.1" />
   </ItemGroup>
 
+  <!-- The unit-test project lives in a subfolder; the SDK would otherwise compile its
+       .cs files (which reference NUnit) into the game exe. Exclude them here. -->
+  <ItemGroup>
+    <Compile Remove="Bomberman.Tests/**/*.cs" />
+  </ItemGroup>
+
 </Project>

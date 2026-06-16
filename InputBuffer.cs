@@ -76,7 +76,7 @@ namespace Bomberman
         {
             for (int i = 0; i < Capacity; i++)
             {
-                _frames[i] = null;
+                _frames[i] = Array.Empty<InputState>(); // avoid null; the frame number marks it invalid
                 _frameNumbers[i] = -1;
             }
             LatestFrame = -1;
