@@ -15,6 +15,10 @@ namespace Bomberman
         private Simulation _simulation;
         private KeyboardState _previousKeyboardState;
 
+        // Week 1: input buffering + determinism verification
+        private InputBuffer _inputBuffer;
+        private int _frame = 0;
+
         // Fixed Timestep
         private const float FixedTimeStep = 1f / 60f;
         private double _accumulator = 0.0;
@@ -35,6 +39,13 @@ namespace Bomberman
         protected override void Initialize()
         {
             _simulation = new Simulation(12345); // Seeded
+            _inputBuffer = new InputBuffer();
+
+            // Verify determinism BEFORE the first frame is drawn: record a scripted run,
+            // replay it from a fresh world, and confirm the per-frame state hashes match.
+            DeterminismHarness.Verify(12345, out string report);
+            Console.WriteLine(report);
+
             base.Initialize();
         }
 
@@ -73,7 +84,17 @@ namespace Bomberman
 
                 while (_accumulator >= FixedTimeStep)
                 {
+                    // Record this frame's inputs into the 256-frame ring buffer (enables replay).
+                    _inputBuffer.Record(_frame, inputs);
+
                     _simulation.Update(inputs, FixedTimeStep);
+
+                    // Per-frame state hash; logged once per simulated second as a determinism heartbeat.
+                    int stateHash = StateHasher.Hash(_simulation.World);
+                    if (_frame % 60 == 0)
+                        Console.WriteLine($"[frame {_frame}] state hash = 0x{stateHash:X8}");
+
+                    _frame++;
                     _accumulator -= FixedTimeStep;
                 }
 
