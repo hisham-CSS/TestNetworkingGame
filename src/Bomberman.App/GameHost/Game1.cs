@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -6,60 +7,73 @@ using Microsoft.Xna.Framework.Input;
 using Bomberman.Core;
 using Bomberman.Net;
 using Bomberman.Net.Lockstep;
+using Bomberman.Net.Protocol;
 
 namespace Bomberman.App
 {
     /// <summary>
-    /// The View layer. In single-player it owns a threaded SimulationLoop (Week 2). In networked
-    /// play (Week 3) it instead drives a LockstepSession on the main thread, because a lockstep peer
-    /// must gate each frame on the other player's input and cannot free-run.
-    ///
-    /// Controls: [H] host on 5000, [J] join 127.0.0.1:5000, [F] find LAN host, [R] toggle ready.
+    /// The View layer. It now renders real screens (menu, lobby, LAN server browser) using PixelFont,
+    /// not just colored rectangles. Single-player runs the Week 2 threaded loop; networked play drives
+    /// a LockstepSession on the main thread (a lockstep peer must gate each frame on the other player).
     /// </summary>
     public class Game1 : Game
     {
-        private enum AppMode { SinglePlayer, Lobby, NetPlaying }
+        private enum Mode { Menu, SinglePlayer, HostLobby, Browser, ClientLobby, NetPlaying }
 
         private const int HostPort = 5000;
-        private const int DiscoveryStart = 5000;
-        private const int DiscoveryEnd = 5010;
+        private const int DiscoveryStart = 5000, DiscoveryEnd = 5010;
         private const int TotalPlayers = 2;
+        private const int W = 480, H = 416;
 
         private readonly GraphicsDeviceManager _graphics;
         private SpriteBatch _spriteBatch = null!;
         private Texture2D _pixel = null!;
-        private KeyboardState _previousKeyboardState;
+        private KeyboardState _prev;
+
+        private Mode _mode = Mode.Menu;
 
         // Single-player (Week 2 path)
-        private GameSession _session = null!;
-        private SimulationLoop _loop = null!;
+        private GameSession? _session;
+        private SimulationLoop? _loop;
 
-        // Networked (Week 3 path)
-        private AppMode _mode = AppMode.SinglePlayer;
+        // Menu
+        private readonly string[] _menu = { "HOST GAME", "FIND LAN GAME", "SINGLE PLAYER", "QUIT" };
+        private int _menuIndex;
+
+        // Networking / lobby
+        private NetworkController<InputState>? _net;
         private bool _isHost;
         private int _seed = 12345;
-        private NetworkController<InputState>? _net;
+        private int _localPlayerId;
+        private bool _peerConnected;
+        private string _peerLabel = "WAITING...";
+        private readonly bool[] _ready = new bool[TotalPlayers];
+
+        // Server browser
+        private class Server { public IPEndPoint Ep = null!; public string Name = ""; public int Players, Max; public DateTime Seen; }
+        private readonly List<Server> _servers = new();
+        private int _serverIndex;
+        private DateTime _lastDiscovery = DateTime.MinValue;
+
+        // Net play
         private GameSession? _netSession;
         private LockstepSession? _lockstep;
-        private bool _localReady, _remoteReady, _peerConnected;
-        private string _status = "Single-player. [H]ost  [J]oin  [F]ind";
+        private string _hud = "";
 
         public Game1()
         {
             _graphics = new GraphicsDeviceManager(this);
             Content.RootDirectory = "Content";
             IsMouseVisible = true;
-            _graphics.PreferredBackBufferWidth = 480;
-            _graphics.PreferredBackBufferHeight = 416;
+            _graphics.PreferredBackBufferWidth = W;
+            _graphics.PreferredBackBufferHeight = H;
         }
 
         protected override void Initialize()
         {
-            _session = new GameSession(_seed);
             DeterminismHarness.Verify(_seed, out string report);
             Console.WriteLine(report);
-            _loop = new SimulationLoop(_session);
-            _loop.Start();
+            _mode = Mode.Menu;
             base.Initialize();
         }
 
@@ -70,122 +84,200 @@ namespace Bomberman.App
             _pixel.SetData(new[] { Color.White });
         }
 
-        // ---------------- Networking setup ----------------
+        // ---------------- transitions ----------------
+
+        private void StartSinglePlayer()
+        {
+            _session = new GameSession(_seed);
+            _loop = new SimulationLoop(_session);
+            _loop.Start();
+            _mode = Mode.SinglePlayer;
+        }
 
         private void StartHost()
         {
-            _loop.Stop();
             _isHost = true;
-            _mode = AppMode.Lobby;
+            _localPlayerId = 0;
+            _seed = new Random().Next();
+            _peerConnected = false; _peerLabel = "WAITING...";
+            _ready[0] = _ready[1] = false;
             _net = new NetworkController<InputState>(new UdpTransport(HostPort));
-            _status = "Hosting. Waiting for a player to join...";
 
-            // A client found us via LAN discovery: answer with our details.
             _net.OnDiscoveryRequestReceived += (sender, _, __, ___) =>
-                _net!.SendDiscoveryResponse(sender, "Bomberman Host", _peerConnected ? 2 : 1, TotalPlayers);
+                _net!.SendDiscoveryResponse(sender, "BOMBERMAN HOST", _peerConnected ? 2 : 1, TotalPlayers);
 
-            // A client wants in: register it, assign player id 1, and welcome it with the shared seed.
             _net.OnJoinRequestRaw += sender =>
             {
                 _net!.AddClient(sender);
                 _peerConnected = true;
+                _peerLabel = sender.Address.ToString();
                 _net.SendWelcome(sender, assignedId: 1, seed: _seed, totalPlayers: TotalPlayers);
-                _status = "Player joined. [R] to ready up.";
+                _net.BroadcastLobbyUpdate(2, TotalPlayers, 0b11);
             };
+            _net.OnLobbyReadyReceived += (pid, ready) => { if (pid >= 0 && pid < TotalPlayers) _ready[pid] = ready; };
+            _net.OnDisconnected += (_, __) => { _peerConnected = false; _peerLabel = "WAITING..."; _ready[1] = false; };
 
-            _net.OnLobbyReadyReceived += (pid, ready) => { if (pid == 1) _remoteReady = ready; };
-            _net.OnInputReceived += (_, __, ___, ____, _____, ______) => { };
+            _mode = Mode.HostLobby;
         }
 
-        private void StartJoin(string hostIp)
+        private void StartBrowser()
         {
-            _loop.Stop();
             _isHost = false;
-            _mode = AppMode.Lobby;
-            _net = new NetworkController<InputState>(new UdpTransport(0)); // any free port
-            _status = $"Joining {hostIp}...";
-
-            _net.OnWelcomeReceived += (assignedId, seed, total) =>
+            _servers.Clear(); _serverIndex = 0;
+            _net = new NetworkController<InputState>(new UdpTransport(0));
+            _net.OnDiscoveryResponseReceived += (sender, name, cur, max) =>
             {
-                _seed = seed;            // adopt the host's seed so both sims match from frame 0
-                _peerConnected = true;
-                _status = "Connected. [R] to ready up.";
+                var ep = new IPEndPoint(sender.Address, HostPort);
+                var s = _servers.Find(v => v.Ep.Equals(ep));
+                if (s == null) { s = new Server { Ep = ep }; _servers.Add(s); }
+                s.Name = name; s.Players = cur; s.Max = max; s.Seen = DateTime.Now;
             };
-            _net.OnLobbyReadyReceived += (pid, ready) => { if (pid == 0) _remoteReady = ready; };
-            _net.OnStartGameReceived += (seed, total) => { _seed = seed; BeginMatch(); };
-
-            _net.Connect(hostIp, HostPort);
-            _net.SendJoinRequest();
+            _mode = Mode.Browser;
+            BroadcastDiscovery();
         }
 
-        private void FindLanHost()
+        private void BroadcastDiscovery()
         {
-            if (_net == null) { StartJoin("127.0.0.1"); }
-            _status = "Searching LAN for a host...";
-            _net!.OnDiscoveryResponseReceived += (sender, name, cur, max) =>
+            // LAN broadcast for real networks...
+            _net?.BroadcastDiscoveryRequest(DiscoveryStart, DiscoveryEnd);
+            // ...plus a direct loopback probe so two instances on ONE machine find each other
+            // (UDP broadcast does not reliably loop back to 127.0.0.1).
+            if (_net != null)
+                for (int p = DiscoveryStart; p < DiscoveryEnd; p++)
+                    _net.RelayPacket(new IPEndPoint(IPAddress.Loopback, p), NetworkProtocol<InputState>.CreateDiscoveryRequest());
+            _lastDiscovery = DateTime.Now;
+        }
+
+        private void JoinServer(IPEndPoint host)
+        {
+            _isHost = false;
+            _localPlayerId = 1;
+            _peerConnected = false; _peerLabel = host.Address.ToString();
+            _ready[0] = _ready[1] = false;
+
+            _net!.OnWelcomeReceived += (assignedId, seed, total) =>
             {
-                _status = $"Found {name} at {sender.Address}";
-                _net!.Connect(sender.Address.ToString(), HostPort);
-                _net!.SendJoinRequest();
+                _localPlayerId = assignedId;
+                _seed = seed;
+                _peerConnected = true;
             };
-            _net!.BroadcastDiscoveryRequest(DiscoveryStart, DiscoveryEnd);
+            _net.OnLobbyReadyReceived += (pid, ready) => { if (pid >= 0 && pid < TotalPlayers) _ready[pid] = ready; };
+            _net.OnStartGameReceived += (seed, total) => { _seed = seed; BeginMatch(); };
+            _net.OnDisconnected += (_, __) => { _peerConnected = false; };
+
+            _net.Connect(host.Address.ToString(), host.Port);
+            _net.SendJoinRequest();
+            _mode = Mode.ClientLobby;
         }
 
         private void BeginMatch()
         {
             _netSession = new GameSession(_seed);
-            int localId = _isHost ? 0 : 1;
-            int delay = LockstepSession.CalculateInputDelay(_net!.LastPingMs); // pick delay from measured RTT
-            _lockstep = new LockstepSession(_netSession, _net, localId, delay);
-            _mode = AppMode.NetPlaying;
-            _status = $"Playing (P{localId}, delay {delay}f)";
+            int delay = LockstepSession.CalculateInputDelay(_net!.LastPingMs);
+            _lockstep = new LockstepSession(_netSession, _net, _localPlayerId, delay);
+            _mode = Mode.NetPlaying;
         }
 
-        // ---------------- Update ----------------
+        private void LeaveToMenu()
+        {
+            try { _net?.Close(); } catch { }
+            _net = null; _netSession = null; _lockstep = null;
+            _loop?.Stop(); _loop = null; _session = null;
+            _peerConnected = false; _servers.Clear();
+            _mode = Mode.Menu;
+        }
+
+        // ---------------- update ----------------
 
         protected override void Update(GameTime gameTime)
         {
             var k = Keyboard.GetState();
+            _net?.Update();
 
-            if (_mode == AppMode.SinglePlayer)
+            switch (_mode)
             {
-                if (Pressed(k, Keys.H)) StartHost();
-                else if (Pressed(k, Keys.J)) StartJoin("127.0.0.1");
-                else if (Pressed(k, Keys.F)) FindLanHost();
-                else _loop.SubmitInput(ReadInput(k));
-            }
-            else
-            {
-                _net!.Update();
-
-                if (_mode == AppMode.Lobby)
-                {
-                    if (Pressed(k, Keys.R))
-                    {
-                        _localReady = !_localReady;
-                        _net.SendLobbyReady(_isHost ? 0 : 1, _localReady);
-                    }
-                    // Host starts the match once both peers are connected and ready.
-                    if (_isHost && _peerConnected && _localReady && _remoteReady)
-                    {
-                        _net.BroadcastStartGame(_seed, TotalPlayers);
-                        BeginMatch();
-                    }
-                }
-                else if (_mode == AppMode.NetPlaying)
-                {
-                    // Capture local input, schedule + send it, then advance as many frames as we have
-                    // both players' inputs for. Missing remote input => stall (we simply stop stepping).
-                    _lockstep!.SubmitLocalInput(ReadInput(k));
-                    while (_lockstep.TryAdvance() == LockstepStep.Stepped) { }
-                    _status = _lockstep.IsStalledWaitingForRemote
-                        ? $"Frame {_lockstep.CurrentFrame} - stalling (waiting for peer)"
-                        : $"Frame {_lockstep.CurrentFrame} - ping {_net.LastPingMs}ms";
-                }
+                case Mode.Menu: UpdateMenu(k); break;
+                case Mode.SinglePlayer:
+                    if (Pressed(k, Keys.Escape)) LeaveToMenu();
+                    else _loop!.SubmitInput(ReadInput(k));
+                    break;
+                case Mode.HostLobby: UpdateHostLobby(k); break;
+                case Mode.Browser: UpdateBrowser(k); break;
+                case Mode.ClientLobby: UpdateClientLobby(k); break;
+                case Mode.NetPlaying: UpdateNetPlaying(k); break;
             }
 
-            _previousKeyboardState = k;
+            _prev = k;
             base.Update(gameTime);
+        }
+
+        private void UpdateMenu(KeyboardState k)
+        {
+            if (Pressed(k, Keys.Down)) _menuIndex = (_menuIndex + 1) % _menu.Length;
+            if (Pressed(k, Keys.Up)) _menuIndex = (_menuIndex + _menu.Length - 1) % _menu.Length;
+            if (Pressed(k, Keys.H)) { _menuIndex = 0; }
+            if (Pressed(k, Keys.F)) { _menuIndex = 1; }
+            if (Pressed(k, Keys.Enter) || Pressed(k, Keys.Space))
+            {
+                switch (_menuIndex)
+                {
+                    case 0: StartHost(); break;
+                    case 1: StartBrowser(); break;
+                    case 2: StartSinglePlayer(); break;
+                    case 3: Exit(); break;
+                }
+            }
+        }
+
+        private void UpdateHostLobby(KeyboardState k)
+        {
+            if (Pressed(k, Keys.Escape)) { LeaveToMenu(); return; }
+            if (Pressed(k, Keys.R))
+            {
+                _ready[0] = !_ready[0];
+                _net!.SendLobbyReady(0, _ready[0]); // host broadcasts its ready
+            }
+            if (_peerConnected && _ready[0] && _ready[1])
+            {
+                _net!.BroadcastStartGame(_seed, TotalPlayers);
+                BeginMatch();
+            }
+        }
+
+        private void UpdateBrowser(KeyboardState k)
+        {
+            if (Pressed(k, Keys.Escape)) { LeaveToMenu(); return; }
+            if (DateTime.Now - _lastDiscovery > TimeSpan.FromSeconds(2)) BroadcastDiscovery();
+            _servers.RemoveAll(s => DateTime.Now - s.Seen > TimeSpan.FromSeconds(5));
+            if (_servers.Count > 0)
+            {
+                if (Pressed(k, Keys.Down)) _serverIndex = (_serverIndex + 1) % _servers.Count;
+                if (Pressed(k, Keys.Up)) _serverIndex = (_serverIndex + _servers.Count - 1) % _servers.Count;
+                if (_serverIndex >= _servers.Count) _serverIndex = 0;
+                if (Pressed(k, Keys.Enter)) JoinServer(_servers[_serverIndex].Ep);
+            }
+        }
+
+        private void UpdateClientLobby(KeyboardState k)
+        {
+            if (Pressed(k, Keys.Escape)) { LeaveToMenu(); return; }
+            if (!_peerConnected) _net!.SendJoinRequest(); // keep retrying until welcomed
+            if (Pressed(k, Keys.R))
+            {
+                _ready[_localPlayerId] = !_ready[_localPlayerId];
+                _net!.SendLobbyReady(_localPlayerId, _ready[_localPlayerId]); // client -> host
+            }
+            // Host decides start and sends StartGame (handled by OnStartGameReceived).
+        }
+
+        private void UpdateNetPlaying(KeyboardState k)
+        {
+            if (Pressed(k, Keys.Escape)) { LeaveToMenu(); return; }
+            _lockstep!.SubmitLocalInput(ReadInput(k));
+            while (_lockstep.TryAdvance() == LockstepStep.Stepped) { }
+            _hud = _lockstep.IsStalledWaitingForRemote
+                ? $"FRAME {_lockstep.CurrentFrame}  STALLING"
+                : $"FRAME {_lockstep.CurrentFrame}  PING {_net!.LastPingMs}MS";
         }
 
         private InputState ReadInput(KeyboardState k)
@@ -196,31 +288,119 @@ namespace Bomberman.App
             if (k.IsKeyDown(Keys.A) || k.IsKeyDown(Keys.Left)) m.X -= 1;
             if (k.IsKeyDown(Keys.D) || k.IsKeyDown(Keys.Right)) m.X += 1;
             if (m != Vector2.Zero) m.Normalize();
-            bool bomb = k.IsKeyDown(Keys.Space) && !_previousKeyboardState.IsKeyDown(Keys.Space);
+            bool bomb = k.IsKeyDown(Keys.Space) && !_prev.IsKeyDown(Keys.Space);
             return new InputState { Movement = m, PlaceBomb = bomb };
         }
 
-        private bool Pressed(KeyboardState k, Keys key) => k.IsKeyDown(key) && !_previousKeyboardState.IsKeyDown(key);
+        private bool Pressed(KeyboardState k, Keys key) => k.IsKeyDown(key) && !_prev.IsKeyDown(key);
 
-        // ---------------- Draw ----------------
+        // ---------------- draw ----------------
+
+        private static readonly Color BG = new(14, 23, 38);
+        private static readonly Color CYAN = new(34, 211, 238);
+        private static readonly Color AMBER = new(251, 191, 36);
+        private static readonly Color WHITE = new(230, 237, 247);
+        private static readonly Color MUT = new(120, 140, 170);
+        private static readonly Color GREEN = new(52, 211, 153);
+        private static readonly Color REDC = new(248, 113, 113);
+
+        private void T(string s, float x, float y, float px, Color c) => PixelFont.Draw(_spriteBatch, _pixel, s, x, y, px, c);
+        private void TC(string s, float y, float px, Color c) => PixelFont.DrawCentered(_spriteBatch, _pixel, s, W / 2f, y, px, c);
 
         protected override void Draw(GameTime gameTime)
         {
-            GraphicsDevice.Clear(Color.CornflowerBlue);
-
-            RenderSnapshot? snap = _mode == AppMode.NetPlaying
-                ? _netSession?.CaptureRenderSnapshot()
-                : _loop.LatestSnapshot;
-            if (snap == null) { base.Draw(gameTime); return; }
-
+            GraphicsDevice.Clear(BG);
             _spriteBatch.Begin(samplerState: SamplerState.PointClamp);
+            switch (_mode)
+            {
+                case Mode.Menu: DrawMenu(); break;
+                case Mode.HostLobby: DrawLobby(true); break;
+                case Mode.ClientLobby: DrawLobby(false); break;
+                case Mode.Browser: DrawBrowser(); break;
+                case Mode.SinglePlayer: DrawGame(_session); break;
+                case Mode.NetPlaying: DrawGame(_netSession); DrawHud(); break;
+            }
+            _spriteBatch.End();
+            base.Draw(gameTime);
+        }
 
+        private void DrawMenu()
+        {
+            TC("BOMBERMAN", 70, 6, CYAN);
+            TC("LOCKSTEP NETWORKING", 130, 2, MUT);
+            for (int i = 0; i < _menu.Length; i++)
+            {
+                bool sel = i == _menuIndex;
+                float y = 200 + i * 34;
+                if (sel) T(">", W / 2f - 110, y, 3, AMBER);
+                TC(_menu[i], y, 3, sel ? AMBER : WHITE);
+            }
+            TC("UP / DOWN  +  ENTER", 380, 2, MUT);
+        }
+
+        private void DrawLobby(bool host)
+        {
+            TC(host ? "LOBBY - HOSTING" : "LOBBY - JOINING", 40, 4, CYAN);
+            TC(host ? "PORT 5000" : "HOST " + _peerLabel, 86, 2, MUT);
+
+            string[] who = host
+                ? new[] { "YOU (HOST)", _peerConnected ? _peerLabel : "WAITING..." }
+                : new[] { _peerLabel, _peerConnected ? "YOU" : "CONNECTING..." };
+
+            for (int i = 0; i < TotalPlayers; i++)
+            {
+                float y = 150 + i * 50;
+                bool me = i == _localPlayerId;
+                bool present = i == 0 ? (host || _peerConnected) : (host ? _peerConnected : true);
+                T("P" + i, 60, y, 3, me ? AMBER : WHITE);
+                T(who[i], 120, y, 2, present ? WHITE : MUT);
+                if (present)
+                    T(_ready[i] ? "READY" : "NOT READY", 120, y + 22, 2, _ready[i] ? GREEN : REDC);
+            }
+
+            TC("PRESS R TO " + (_ready[_localPlayerId] ? "UNREADY" : "READY"), 300, 2, AMBER);
+            if (host && _peerConnected && _ready[0] && _ready[1]) TC("STARTING...", 330, 2, GREEN);
+            else if (host && !_peerConnected) TC("WAITING FOR A PLAYER TO JOIN", 330, 2, MUT);
+            TC("ESC TO CANCEL", 380, 2, MUT);
+        }
+
+        private void DrawBrowser()
+        {
+            TC("FIND LAN GAME", 40, 4, CYAN);
+            if (_servers.Count == 0)
+            {
+                TC("SCANNING...", 180, 3, MUT);
+            }
+            else
+            {
+                for (int i = 0; i < _servers.Count; i++)
+                {
+                    var s = _servers[i];
+                    bool sel = i == _serverIndex;
+                    float y = 130 + i * 40;
+                    if (sel) T(">", 40, y, 3, AMBER);
+                    T(s.Name, 70, y, 2, sel ? AMBER : WHITE);
+                    T(s.Players + "/" + s.Max, 360, y, 2, MUT);
+                }
+                TC("ENTER TO JOIN", 350, 2, AMBER);
+            }
+            TC("ESC TO CANCEL", 380, 2, MUT);
+        }
+
+        private void DrawHud()
+        {
+            T(_hud, 8, 8, 2, _lockstep!.IsStalledWaitingForRemote ? REDC : GREEN);
+            T("P" + _localPlayerId, W - 40, 8, 2, AMBER);
+        }
+
+        private void DrawGame(GameSession? src)
+        {
+            var snap = src?.CaptureRenderSnapshot();
+            if (snap == null) return;
             foreach (var t in snap.Tiles)
             {
-                if (t.Variant == (int)TileComponent.TileType.Solid)
-                    Rect(t.Position, t.Size, Color.DarkGray);
-                else if (t.Variant == (int)TileComponent.TileType.Destructible && !t.Flag)
-                    Rect(t.Position, t.Size, Color.Brown);
+                if (t.Variant == (int)TileComponent.TileType.Solid) Rect(t.Position, t.Size, Color.DarkGray);
+                else if (t.Variant == (int)TileComponent.TileType.Destructible && !t.Flag) Rect(t.Position, t.Size, Color.Brown);
             }
             foreach (var b in snap.Bombs)
             {
@@ -230,15 +410,11 @@ namespace Bomberman.App
             foreach (var p in snap.Powerups)
             {
                 Color c = p.Variant == (int)PowerupComponent.PowerupType.Range ? Color.Yellow
-                        : p.Variant == (int)PowerupComponent.PowerupType.Capacity ? Color.Black
-                        : Color.White;
+                        : p.Variant == (int)PowerupComponent.PowerupType.Capacity ? Color.Black : Color.White;
                 Rect(p.Position, p.Size, c);
             }
             foreach (var e in snap.Explosions) Rect(e.Position, e.Size, Color.OrangeRed);
             foreach (var pl in snap.Players) if (pl.Flag) Rect(pl.Position, pl.Size, Color.Blue);
-
-            _spriteBatch.End();
-            base.Draw(gameTime);
         }
 
         private void Rect(Vector2 position, Vector2 size, Color color)
