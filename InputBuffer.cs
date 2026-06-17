@@ -43,10 +43,8 @@ namespace Bomberman
         /// </summary>
         public void Record(int frame, InputState[] inputs)
         {
-            int slot = frame & Mask;
-            _frames[slot] = (InputState[])inputs.Clone();
-            _frameNumbers[slot] = frame;
-            if (frame > LatestFrame) LatestFrame = frame;
+            // TODO (LA1 - Input buffer): store inputs for this frame in the 256-frame ring.
+            //  slot = frame & Mask;  clone the array;  record the frame number;  update LatestFrame.
         }
 
         /// <summary>
@@ -55,12 +53,8 @@ namespace Bomberman
         /// </summary>
         public bool TryGet(int frame, out InputState[] inputs)
         {
-            int slot = frame & Mask;
-            if (frame >= 0 && _frameNumbers[slot] == frame && _frames[slot] != null)
-            {
-                inputs = _frames[slot];
-                return true;
-            }
+            // TODO (LA1 - Input buffer): return inputs for `frame` only if the slot still holds it.
+            //  slot = frame & Mask;  valid only if frame >= 0 and _frameNumbers[slot] == frame.
             inputs = Array.Empty<InputState>();
             return false;
         }

@@ -24,53 +24,11 @@ namespace Bomberman
     {
         public static int Hash(World world)
         {
-            int hash = 0;
-
-            // 1) Players: id, alive, stats, and position bits.
-            var players = world.Players.GetAll();
-            var playerEntities = world.Players.GetEntities();
-            hash = Combine(hash, players.Count); // count itself is part of the state
-            for (int i = 0; i < players.Count; i++)
-            {
-                var p = players[i];
-                hash = Combine(hash, (int)p.PlayerId);
-                hash = Combine(hash, p.Alive ? 1 : 0);
-                hash = Combine(hash, p.BombRange);
-                hash = Combine(hash, p.BombCapacity);
-                hash = CombinePosition(hash, world, playerEntities[i]);
-            }
-
-            // 2) Bombs: owner, countdown timer, and position bits.
-            var bombs = world.Bombs.GetAll();
-            var bombEntities = world.Bombs.GetEntities();
-            hash = Combine(hash, bombs.Count);
-            for (int i = 0; i < bombs.Count; i++)
-            {
-                var b = bombs[i];
-                hash = Combine(hash, (int)b.OwnerId);
-                hash = Combine(hash, b.Timer);
-                hash = CombinePosition(hash, world, bombEntities[i]);
-            }
-
-            // 3) Tiles: only the destructible crates change, so hash their destroyed flag.
-            var tiles = world.Tiles.GetAll();
-            hash = Combine(hash, tiles.Count);
-            for (int i = 0; i < tiles.Count; i++)
-            {
-                if (tiles[i].Type == TileComponent.TileType.Destructible)
-                    hash = Combine(hash, tiles[i].Destroyed ? 1 : 0);
-            }
-
-            // 4) Powerups: count + type (a dropped/eaten powerup must change the hash).
-            var powerups = world.Powerups.GetAll();
-            hash = Combine(hash, powerups.Count);
-            for (int i = 0; i < powerups.Count; i++)
-                hash = Combine(hash, (int)powerups[i].Type);
-
-            // 5) Explosions: count is enough divergence (they live 30 frames then vanish).
-            hash = Combine(hash, world.Explosions.Count);
-
-            return Finalize(hash);
+            // TODO (LA1 - Determinism): produce a deterministic hash of the whole World.
+            //  Mix in (via Combine, provided below): players (id, alive, range, capacity, position bits),
+            //  bombs (owner, timer, position bits), destructible tiles' Destroyed flags, powerups,
+            //  and the explosion count. Return Finalize(hash). Same inputs + seed must give the same hash.
+            return 0;
         }
 
         /// <summary>Mix in the bit-pattern of an entity's Transform position, if it has one.</summary>

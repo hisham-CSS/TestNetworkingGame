@@ -116,35 +116,8 @@ namespace Bomberman
         /// <summary>Lose condition: if an active explosion overlaps a living player, the player dies.</summary>
         private void CheckPlayerDeaths()
         {
-            var players = World.Players.GetAll();
-            var playerEntities = World.Players.GetEntities();
-            var explosions = World.Explosions.GetAll();
-            var explosionEntities = World.Explosions.GetEntities();
-            var transformEntities = World.Transforms.GetEntities();
-            var transforms = World.Transforms.GetAll();
-
-            Rectangle RectOf(Entity e)
-            {
-                for (int t = 0; t < transformEntities.Count; t++)
-                    if (transformEntities[t].Equals(e))
-                        return new Rectangle((int)transforms[t].Position.X, (int)transforms[t].Position.Y,
-                                             (int)transforms[t].Size.X, (int)transforms[t].Size.Y);
-                return Rectangle.Empty;
-            }
-
-            for (int i = 0; i < players.Count; i++)
-            {
-                if (!players[i].Alive) continue;
-                Rectangle pr = RectOf(playerEntities[i]);
-                for (int e = 0; e < explosions.Count; e++)
-                {
-                    if (pr.Intersects(RectOf(explosionEntities[e])))
-                    {
-                        var p = players[i]; p.Alive = false; World.Players.Set(i, p);
-                        break;
-                    }
-                }
-            }
+            // TODO (LA1 - Lose condition): if an active explosion overlaps a living player,
+            //  set that player's Alive = false (World.Players.Set). Use Rectangle.Intersects.
         }
 
         private void UpdatePlayers(InputState[] inputs, float dt)
@@ -184,58 +157,11 @@ namespace Bomberman
 
                 transforms[transformIndex] = transform;
 
-                // Powerup Pickup Collision
-                // Naive O(N) check against all powerups
-                var powerups = World.Powerups.GetAll();
-                var powerupEntities = World.Powerups.GetEntities();
-                var powerupTransforms = World.Transforms.GetAll();
-                var powerupTransformEntities = World.Transforms.GetEntities();
-                
-                Rectangle playerRect = new Rectangle((int)transform.Position.X, (int)transform.Position.Y, (int)transform.Size.X, (int)transform.Size.Y);
-
-                // Collect for removal to avoid concurrent modification
-                List<Entity> eatenPowerups = new List<Entity>();
-
-                for(int p=0; p<powerups.Count; p++)
-                {
-                    // Find transform for this powerup
-                    // Optimization: In a real ECS we'd cache this or iterate differently
-                    int pTransIdx = -1;
-                    for(int pt=0; pt<powerupTransformEntities.Count; pt++) {
-                        if (powerupTransformEntities[pt].Equals(powerupEntities[p])) {
-                            pTransIdx = pt;
-                            break;
-                        }
-                    }
-                    if (pTransIdx == -1) continue;
-
-                    var pTrans = powerupTransforms[pTransIdx];
-                    Rectangle pRect = new Rectangle((int)pTrans.Position.X, (int)pTrans.Position.Y, (int)pTrans.Size.X, (int)pTrans.Size.Y);
-
-                    if (playerRect.Intersects(pRect))
-                    {
-                        // Apply Effect
-                        var playerComp = players[i];
-                        if (powerups[p].Type == PowerupComponent.PowerupType.Range)
-                        {
-                            playerComp.BombRange++;
-                        }
-                        else if (powerups[p].Type == PowerupComponent.PowerupType.Capacity)
-                        {
-                            playerComp.BombCapacity++;
-                        }
-                        World.Players.Set(i, playerComp); // Update player stats
-
-                        eatenPowerups.Add(powerupEntities[p]);
-                    }
-                }
-
-                 foreach(var ep in eatenPowerups)
-                 {
-                     World.Powerups.Remove(ep);
-                     World.Transforms.Remove(ep);
-                 }
-
+                // TODO (LA1 - Gameplay): powerup pickup.
+                //  - Build the player's AABB (Rectangle) from its transform.
+                //  - For each powerup, find its transform and test Intersects.
+                //  - On overlap: Range -> BombRange++, Capacity -> BombCapacity++ (World.Players.Set),
+                //    then remove the powerup entity (from Powerups and Transforms).
 
                 // Bomb Placement
                 if (input.PlaceBomb)
@@ -329,145 +255,36 @@ namespace Bomberman
 
         private void TryPlaceBomb(Vector2 playerPosition, PlayerComponent player, Entity playerEntity)
         {
-            // Snap center of player to grid
-            Vector2 center = playerPosition + new Vector2(12, 12); // Assuming 24x24 player
-            int gridX = (int)(center.X / TileSize);
-            int gridY = (int)(center.Y / TileSize);
-            
-            Vector2 snapPos = new Vector2(gridX * TileSize, gridY * TileSize);
-
-            // Check if bomb already exists there
-            var bombs = World.Bombs.GetAll();
-            var bombEntities = World.Bombs.GetEntities();
-            var transformEntities = World.Transforms.GetEntities();
-            var allTransforms = World.Transforms.GetAll();
-            
-            // Check Capacity
-            int activeBombs = 0;
-            for(int i=0; i<bombs.Count; i++)
-            {
-                if (bombs[i].OwnerId == player.PlayerId) activeBombs++;
-            }
-
-            if (activeBombs >= player.BombCapacity) return;
-
-            for(int i=0; i<bombs.Count; i++)
-            {
-                var bombEntity = bombEntities[i];
-                 for(int t=0; t<transformEntities.Count; t++)
-                 {
-                     if(transformEntities[t].Equals(bombEntity))
-                     {
-                         if(allTransforms[t].Position == snapPos) return; // Bomb exists
-                         break;
-                     }
-                 }
-            }
-
-            // Spawn Bomb
-            Entity bomb = World.CreateEntity();
-            // Use Player Stats
-            World.Bombs.Add(bomb, new BombComponent { Timer = 180, MaxTimer = 180, Range = player.BombRange, OwnerId = player.PlayerId });
-            World.Transforms.Add(bomb, new TransformComponent { Position = snapPos, Size = new Vector2(TileSize, TileSize) });
+            // TODO (LA1 - Gameplay): place a bomb for this player.
+            //  1. Respect BombCapacity (count this owner's active bombs first).
+            //  2. Snap the bomb to the tile grid under the player's center.
+            //  3. Don't stack two bombs on the same tile.
+            //  4. Spawn a bomb entity (World.Bombs.Add + World.Transforms.Add) with
+            //     Timer = 180, Range = player.BombRange, OwnerId = player.PlayerId.
         }
 
         private void UpdateBombs()
         {
-            var bombList = World.Bombs.GetAll();
-            var bombEntities = World.Bombs.GetEntities();
-            
-            // Snapshot phase: Collect bombs that need to explode
-            // We store the Component (value type copy) and Entity (ID)
-            List<(Entity entity, BombComponent component)> explosions = new List<(Entity, BombComponent)>();
-
-            for (int i = 0; i < bombList.Count; i++)
-            {
-                var bomb = bombList[i];
-                bomb.Timer--;
-                World.Bombs.Set(i, bomb);
-
-                if (bomb.Timer <= 0)
-                {
-                   explosions.Add((bombEntities[i], bomb));
-                }
-            }
-
-            // Action phase: Explode and Remove
-            // Since we extracted the data, we don't care about live indices anymore.
-            // We just ask the world to remove the specific entities.
-            foreach (var explosion in explosions)
-            {
-                Explode(explosion.entity, explosion.component);
-                World.Bombs.Remove(explosion.entity);
-                World.Transforms.Remove(explosion.entity);
-            }
+            // TODO (LA1 - Gameplay): tick bombs and trigger explosions.
+            //  - Decrement each bomb's Timer (World.Bombs.Set).
+            //  - When Timer <= 0, call Explode(entity, bomb), then remove the bomb
+            //    (collect expired bombs first to avoid mutating the pool while iterating).
         }
 
         private void Explode(Entity bombEntity, BombComponent bombComp)
         {
-             // Get Bomb Position
-             var transformEntities = World.Transforms.GetEntities();
-             var allTransforms = World.Transforms.GetAll();
-             Vector2 bombPos = Vector2.Zero;
-             
-             for(int t=0; t<transformEntities.Count; t++) {
-                 if(transformEntities[t].Equals(bombEntity)) {
-                     bombPos = allTransforms[t].Position;
-                     break;
-                 }
-             }
-
-             // Create Center Explosion
-             SpawnExplosion(bombPos);
-
-             // Directions: Up, Down, Left, Right
-             Vector2[] dirs = { new Vector2(0, -1), new Vector2(0, 1), new Vector2(-1, 0), new Vector2(1, 0) };
-             
-             foreach(var dir in dirs)
-             {
-                 for(int r=1; r<=bombComp.Range; r++)
-                 {
-                     Vector2 checkPos = bombPos + (dir * r * TileSize);
-                     if(ExplosionHit(checkPos)) break; // Stop propagation if hit something (wall/block)
-                     SpawnExplosion(checkPos);
-                 }
-             }
+            // TODO (LA1 - Gameplay): explosion propagation.
+            //  - Spawn a center explosion at the bomb position (SpawnExplosion).
+            //  - For each cardinal direction, walk outward up to bombComp.Range:
+            //      if ExplosionHit(pos) is true (wall/crate) stop; otherwise SpawnExplosion(pos).
         }
         
         private bool ExplosionHit(Vector2 pos)
         {
-            // Check walls/boxes
-            Rectangle checkRect = new Rectangle((int)pos.X + 2, (int)pos.Y + 2, TileSize - 4, TileSize - 4); // Small shrink to avoid edge cases
-            
-            var tiles = World.Tiles.GetAll();
-            var tileTransforms = World.Transforms.GetAll();
-            var tileEntities = World.Tiles.GetEntities();
-
-            for (int i = 0; i < tiles.Count; i++)
-            {
-                var tPos = tileTransforms[i].Position;
-                Rectangle tileRect = new Rectangle((int)tPos.X, (int)tPos.Y, TileSize, TileSize);
-                
-                if (checkRect.Intersects(tileRect))
-                {
-                    if (tiles[i].Type == TileComponent.TileType.Solid) return true; // Stop
-                    
-                    if (tiles[i].Type == TileComponent.TileType.Destructible && !tiles[i].Destroyed)
-                    {
-                         var tile = tiles[i];
-                        tile.Destroyed = true; // Destroy it
-                        World.Tiles.Set(i, tile);
-                        
-                        // Drop Powerup if seeded
-                        if (tile.HiddenPowerup != PowerupComponent.PowerupType.None)
-                        {
-                            SpawnPowerup(tileTransforms[i].Position, tile.HiddenPowerup);
-                        }
-
-                        return true; // Stop after destroying one
-                    }
-                }
-            }
+            // TODO (LA1 - Gameplay): return true if the blast is blocked at pos.
+            //  - Solid tile -> return true.
+            //  - Destructible crate -> mark Destroyed, drop HiddenPowerup if any, return true.
+            //  - Otherwise the blast continues -> return false.
             return false;
         }
 
