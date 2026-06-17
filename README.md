@@ -30,7 +30,7 @@ once you implement `Hash` and the gameplay systems, the record -> replay check b
 
 ## Build & run  (.NET 9 SDK + MonoGame DesktopGL)
     dotnet run        # Menu: press ENTER to play.  In game: WASD/arrows move, SPACE drops a bomb.
-    dotnet test
+    dotnet test Bomberman.Tests
 
 ## Submission (per the LA1 rubric)
 Tag your completed repo `v1.0-bomberman-ecs`; submit the playable build, source, and the 1-2 page
