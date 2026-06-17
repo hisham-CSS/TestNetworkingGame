@@ -2,7 +2,7 @@ using System;
 using System.Text;
 using Microsoft.Xna.Framework;
 
-namespace Bomberman
+namespace Bomberman.Core
 {
     /// <summary>
     /// Self-contained, headless proof that the simulation is deterministic and that the

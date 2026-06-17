@@ -1,7 +1,7 @@
 using System;
 using Microsoft.Xna.Framework;
 
-namespace Bomberman
+namespace Bomberman.Core
 {
     /// <summary>
     /// Produces a deterministic integer hash ("checksum") of the whole World. Two simulations

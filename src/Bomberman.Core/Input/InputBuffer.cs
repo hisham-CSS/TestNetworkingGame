@@ -1,6 +1,6 @@
 using System;
 
-namespace Bomberman
+namespace Bomberman.Core
 {
     /// <summary>
     /// Fixed-capacity circular (ring) buffer that stores the inputs for one simulation frame
