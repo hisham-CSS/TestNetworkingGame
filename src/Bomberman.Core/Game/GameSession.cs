@@ -11,7 +11,7 @@ namespace Bomberman.Core
         public InputBuffer InputBuffer { get; } = new InputBuffer();
         public int CurrentFrame { get; private set; }
 
-        public GameSession(int seed) { Simulation = new Simulation(seed); }
+        public GameSession(int seed, int numPlayers = 1) { Simulation = new Simulation(seed, numPlayers); }
 
         /// <summary>Record this frame's inputs, advance the simulation one fixed tick.</summary>
         public void Step(InputState[] inputs, float dt)

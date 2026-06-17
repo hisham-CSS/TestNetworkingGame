@@ -195,7 +195,7 @@ namespace Bomberman.App
 
         private void BeginMatch()
         {
-            _netSession = new GameSession(_seed);
+            _netSession = new GameSession(_seed, TotalPlayers);
             int delay = LockstepSession.CalculateInputDelay(_net!.LastPingMs);
             _lockstep = new LockstepSession(_netSession, _net, _localPlayerId, delay);
             _mode = Mode.NetPlaying;
@@ -337,8 +337,8 @@ namespace Bomberman.App
             switch (_mode)
             {
                 case Mode.Menu: DrawMenu(); break;
-                case Mode.HostLobby: DrawLobby(true); break;
-                case Mode.ClientLobby: DrawLobby(false); break;
+                case Mode.HostLobby:
+                case Mode.ClientLobby: DrawLobby(_isHost); break;
                 case Mode.Browser: DrawBrowser(); break;
                 case Mode.SinglePlayer: DrawGame(_session); break;
                 case Mode.NetPlaying: DrawGame(_netSession); DrawHud(); break;
@@ -438,7 +438,14 @@ namespace Bomberman.App
                 Rect(p.Position, p.Size, c);
             }
             foreach (var e in snap.Explosions) Rect(e.Position, e.Size, Color.OrangeRed);
-            foreach (var pl in snap.Players) if (pl.Flag) Rect(pl.Position, pl.Size, Color.Blue);
+            foreach (var pl in snap.Players)
+            {
+                if (!pl.Flag) continue;                         // Flag = alive
+                Color c = pl.Variant == 0 ? Color.DodgerBlue    // Variant = PlayerId
+                        : pl.Variant == 1 ? Color.Crimson
+                        : pl.Variant == 2 ? Color.MediumSeaGreen : Color.Gold;
+                Rect(pl.Position, pl.Size, c);
+            }
         }
 
         private void Rect(Vector2 position, Vector2 size, Color color)

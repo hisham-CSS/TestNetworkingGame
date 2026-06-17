@@ -34,6 +34,7 @@ namespace Bomberman.Net
                     _localPort = port;
                     _udpClient.EnableBroadcast = true;     // needed for LAN discovery
                     _udpClient.Client.Blocking = false;    // never block the game loop on recv
+                    DisableUdpConnReset(_udpClient);       // Windows: don't throw on ICMP port-unreachable
                     Console.WriteLine($"[Bomberman.Net] Bound to port {port}");
                     return;
                 }
@@ -43,6 +44,22 @@ namespace Bomberman.Net
                 }
             }
             throw new Exception($"Failed to bind to any port starting from {preferredPort} after {MaxRetries} attempts.");
+        }
+
+        /// <summary>
+        /// Windows-only quirk: after we send a datagram to a closed port (e.g. probing a LAN port range
+        /// for hosts), the OS posts an ICMP "port unreachable" and the NEXT Receive on this socket throws
+        /// SocketException 10054 ("forcibly closed"). Disabling SIO_UDP_CONNRESET stops that, so one peer
+        /// probing empty ports can no longer break its own receive loop. No-op on Linux/macOS.
+        /// </summary>
+        private static void DisableUdpConnReset(UdpClient client)
+        {
+            try
+            {
+                const int SIO_UDP_CONNRESET = -1744830452; // 0x9800000C
+                client.Client.IOControl(SIO_UDP_CONNRESET, new byte[] { 0, 0, 0, 0 }, null);
+            }
+            catch { /* not supported on this platform; safe to ignore */ }
         }
 
         /// <inheritdoc/>
@@ -75,21 +92,26 @@ namespace Bomberman.Net
         /// when the socket is empty, Available is 0 and we return immediately.</summary>
         public void Poll()
         {
-            try
+            while (_udpClient != null && _udpClient.Available > 0)
             {
-                while (_udpClient != null && _udpClient.Available > 0)
+                IPEndPoint sender = new IPEndPoint(IPAddress.Any, 0);
+                byte[] data;
+                try
                 {
-                    IPEndPoint sender = new IPEndPoint(IPAddress.Any, 0);
-                    byte[] data = _udpClient.Receive(ref sender);
-
-                    PacketReceived?.Invoke(data, sender);
-
-                    if (_udpClient == null) break; // a callback may have disposed us
+                    data = _udpClient.Receive(ref sender);
                 }
-            }
-            catch (SocketException e)
-            {
-                Console.WriteLine($"Socket Error: {e.Message}");
+                catch (SocketException e) when (e.SocketErrorCode == SocketError.ConnectionReset)
+                {
+                    continue; // a previous send hit a closed port; ignore and keep draining
+                }
+                catch (SocketException e)
+                {
+                    Console.WriteLine($"Socket Error: {e.Message}");
+                    break;
+                }
+
+                PacketReceived?.Invoke(data, sender);
+                if (_udpClient == null) break; // a callback may have disposed us
             }
         }
 

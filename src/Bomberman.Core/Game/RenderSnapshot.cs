@@ -52,7 +52,7 @@ namespace Bomberman.Core
             for (int i = 0; i < exps.Count; i++) { var tr = Find(expsE[i]); snap.Explosions.Add(new RenderItem { Position = tr.Position, Size = tr.Size }); }
 
             var pls = world.Players.GetAll(); var plsE = world.Players.GetEntities();
-            for (int i = 0; i < pls.Count; i++) { var tr = Find(plsE[i]); snap.Players.Add(new RenderItem { Position = tr.Position, Size = tr.Size, Flag = pls[i].Alive }); }
+            for (int i = 0; i < pls.Count; i++) { var tr = Find(plsE[i]); snap.Players.Add(new RenderItem { Position = tr.Position, Size = tr.Size, Variant = (int)pls[i].PlayerId, Flag = pls[i].Alive }); }
 
             return snap;
         }

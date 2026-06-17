@@ -11,11 +11,11 @@ namespace Bomberman.Core
         private const int MapHeight = 13;
         private const int TileSize = 32;
 
-        public Simulation(int seed)
+        public Simulation(int seed, int numPlayers = 1)
         {
             World = new World();
             GenerateMap(seed);
-            SpawnPlayers();
+            SpawnPlayers(numPlayers);
         }
 
         private void GenerateMap(int seed)
@@ -75,7 +75,7 @@ namespace Bomberman.Core
             return false;
         }
 
-        private void SpawnPlayers()
+        private void SpawnPlayers(int count)
         {
             var spawnPoints = new[]
             {
@@ -85,7 +85,8 @@ namespace Bomberman.Core
                 new Vector2(MapWidth - 2, MapHeight - 2)
             };
 
-            for (int i = 0; i < 1; i++) // Just 1 player for now, extensible to 4
+            int n = Math.Clamp(count, 1, spawnPoints.Length);
+            for (int i = 0; i < n; i++) // one player per corner (2 for networked lockstep)
             {
                 var player = World.CreateEntity();
                 World.Players.Add(player, new PlayerComponent { PlayerId = (uint)i, Alive = true, BombRange = 1, BombCapacity = 1 });
