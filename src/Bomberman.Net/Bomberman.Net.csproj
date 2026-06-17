@@ -4,4 +4,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+  <!-- Week 3: the net layer now needs the engine's input/session types (IInputState, InputState,
+       GameSession) to serialize inputs and drive lockstep. It depends on the Core interface, not on
+       MonoGame directly (that comes transitively via Core). -->
+  <ItemGroup>
+    <ProjectReference Include="..\Bomberman.Core\Bomberman.Core.csproj" />
+  </ItemGroup>
 </Project>
