@@ -202,7 +202,12 @@ namespace Bomberman.Net
         private void HandlePacket(byte[] data, IPEndPoint sender)
         {
             if (data.Length == 0) return;
-            _lastDataReceived[sender] = DateTime.Now;
+
+            // Only track liveness for endpoints we actually have a session with: connected clients,
+            // or (on a client) the host. A one-off discovery probe must NOT land in the timeout map,
+            // or it would later fire a spurious OnDisconnected and tear down a healthy lobby.
+            if (_lastDataReceived.ContainsKey(sender) || _isClient)
+                _lastDataReceived[sender] = DateTime.Now;
 
             PacketType type = NetworkProtocol<TInput>.ReadType(data);
             switch (type)

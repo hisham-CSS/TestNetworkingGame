@@ -47,6 +47,8 @@ namespace Bomberman.App
         private int _localPlayerId;
         private bool _peerConnected;
         private string _peerLabel = "WAITING...";
+        private IPEndPoint? _peerEp;
+        private string _serverName = "HOST GAME";
         private readonly bool[] _ready = new bool[TotalPlayers];
 
         // Server browser
@@ -99,25 +101,40 @@ namespace Bomberman.App
             _isHost = true;
             _localPlayerId = 0;
             _seed = new Random().Next();
-            _peerConnected = false; _peerLabel = "WAITING...";
+            _peerConnected = false; _peerLabel = "WAITING..."; _peerEp = null;
             _ready[0] = _ready[1] = false;
+            _serverName = MakeServerName();
             _net = new NetworkController<InputState>(new UdpTransport(HostPort));
 
             _net.OnDiscoveryRequestReceived += (sender, _, __, ___) =>
-                _net!.SendDiscoveryResponse(sender, "BOMBERMAN HOST", _peerConnected ? 2 : 1, TotalPlayers);
+                _net!.SendDiscoveryResponse(sender, _serverName, _peerConnected ? 2 : 1, TotalPlayers);
 
             _net.OnJoinRequestRaw += sender =>
             {
                 _net!.AddClient(sender);
                 _peerConnected = true;
+                _peerEp = sender;
                 _peerLabel = sender.Address.ToString();
                 _net.SendWelcome(sender, assignedId: 1, seed: _seed, totalPlayers: TotalPlayers);
                 _net.BroadcastLobbyUpdate(2, TotalPlayers, 0b11);
             };
             _net.OnLobbyReadyReceived += (pid, ready) => { if (pid >= 0 && pid < TotalPlayers) _ready[pid] = ready; };
-            _net.OnDisconnected += (_, __) => { _peerConnected = false; _peerLabel = "WAITING..."; _ready[1] = false; };
+            // Only the actual peer disconnecting tears down the lobby (ignore stale/unknown endpoints).
+            _net.OnDisconnected += (ep, __) =>
+            {
+                if (_peerEp != null && ep.Equals(_peerEp))
+                { _peerConnected = false; _peerLabel = "WAITING..."; _ready[1] = false; _peerEp = null; }
+            };
 
             _mode = Mode.HostLobby;
+        }
+
+        private static string MakeServerName()
+        {
+            var sb = new System.Text.StringBuilder("HOST ");
+            foreach (char c in Environment.MachineName.ToUpperInvariant())
+                if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) sb.Append(c);
+            return sb.Length > 5 ? sb.ToString() : "HOST GAME";
         }
 
         private void StartBrowser()
@@ -127,10 +144,13 @@ namespace Bomberman.App
             _net = new NetworkController<InputState>(new UdpTransport(0));
             _net.OnDiscoveryResponseReceived += (sender, name, cur, max) =>
             {
-                var ep = new IPEndPoint(sender.Address, HostPort);
-                var s = _servers.Find(v => v.Ep.Equals(ep));
-                if (s == null) { s = new Server { Ep = ep }; _servers.Add(s); }
-                s.Name = name; s.Players = cur; s.Max = max; s.Seen = DateTime.Now;
+                // Dedupe by host identity (name): one host can answer from BOTH its loopback and LAN
+                // address on a single machine. Prefer a loopback endpoint so local joins are reliable.
+                var s = _servers.Find(v => v.Name == name);
+                if (s == null) { s = new Server { Name = name, Ep = new IPEndPoint(sender.Address, HostPort) }; _servers.Add(s); }
+                if (IPAddress.IsLoopback(sender.Address) || !IPAddress.IsLoopback(s.Ep.Address))
+                    s.Ep = new IPEndPoint(sender.Address, HostPort);
+                s.Players = cur; s.Max = max; s.Seen = DateTime.Now;
             };
             _mode = Mode.Browser;
             BroadcastDiscovery();
