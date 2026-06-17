@@ -102,6 +102,49 @@ namespace Bomberman
             UpdatePlayers(inputs, dt);
             UpdateBombs();
             UpdateExplosions();
+            CheckPlayerDeaths(); // lose condition: an explosion overlapping a player kills it
+        }
+
+        /// <summary>True while at least one player is still alive (game continues).</summary>
+        public bool AnyPlayerAlive()
+        {
+            var players = World.Players.GetAll();
+            for (int i = 0; i < players.Count; i++) if (players[i].Alive) return true;
+            return false;
+        }
+
+        /// <summary>Lose condition: if an active explosion overlaps a living player, the player dies.</summary>
+        private void CheckPlayerDeaths()
+        {
+            var players = World.Players.GetAll();
+            var playerEntities = World.Players.GetEntities();
+            var explosions = World.Explosions.GetAll();
+            var explosionEntities = World.Explosions.GetEntities();
+            var transformEntities = World.Transforms.GetEntities();
+            var transforms = World.Transforms.GetAll();
+
+            Rectangle RectOf(Entity e)
+            {
+                for (int t = 0; t < transformEntities.Count; t++)
+                    if (transformEntities[t].Equals(e))
+                        return new Rectangle((int)transforms[t].Position.X, (int)transforms[t].Position.Y,
+                                             (int)transforms[t].Size.X, (int)transforms[t].Size.Y);
+                return Rectangle.Empty;
+            }
+
+            for (int i = 0; i < players.Count; i++)
+            {
+                if (!players[i].Alive) continue;
+                Rectangle pr = RectOf(playerEntities[i]);
+                for (int e = 0; e < explosions.Count; e++)
+                {
+                    if (pr.Intersects(RectOf(explosionEntities[e])))
+                    {
+                        var p = players[i]; p.Alive = false; World.Players.Set(i, p);
+                        break;
+                    }
+                }
+            }
         }
 
         private void UpdatePlayers(InputState[] inputs, float dt)
