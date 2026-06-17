@@ -67,6 +67,9 @@ namespace Bomberman.App
             _graphics = new GraphicsDeviceManager(this);
             Content.RootDirectory = "Content";
             IsMouseVisible = true;
+            // Keep updating (and sending heartbeats) when the window loses focus. Otherwise tabbing to
+            // the other window to ready up would stall this peer and the lobby would time out.
+            InactiveSleepTime = TimeSpan.Zero;
             _graphics.PreferredBackBufferWidth = W;
             _graphics.PreferredBackBufferHeight = H;
         }
@@ -352,7 +355,8 @@ namespace Bomberman.App
             {
                 bool sel = i == _menuIndex;
                 float y = 200 + i * 34;
-                if (sel) T(">", W / 2f - 110, y, 3, AMBER);
+                float left = W / 2f - PixelFont.MeasureWidth(_menu[i], 3) / 2f;
+                if (sel) T(">", left - 26, y, 3, AMBER);   // sits clear to the LEFT of the item
                 TC(_menu[i], y, 3, sel ? AMBER : WHITE);
             }
             TC("UP / DOWN  +  ENTER", 380, 2, MUT);
