@@ -1,70 +1,52 @@
-# Bomberman Clone
+# Week 5 - Client-Side Prediction & Rollback  (branch week5-rollback)
 
-A deterministic, networked multiplayer Bomberman clone built with **Monogame** and **.NET 9**.
-Developed using a custom Entity-Component-System (ECS) and Rollback Networking (GGPO-style).
+This is the course's final netcode: the real, framework-agnostic **Chronos** library plus the Bomberman
+game that drives it. The checkpoint is `ba2e936` ("split up network and rollback code into its own
+generic library"), with one addition for this week: run-length input compression.
 
-## Requirements
-- .NET 9.0 SDK
-- Windows (DirectX) - *Primary Target*
-- (Optional) Linux/Mac (DesktopGL) - *Support experimental*
+> Note on lineage: Weeks 1-4 built Bomberman on a deliberately simplified engine to teach each idea in
+> isolation. Week 5 is the capstone and works in the production Chronos codebase, where those ideas come
+> together at full fidelity. `main` builds further on this commit by adding a relay server for internet
+> play (a deployment topic beyond this unit).
 
-## Build Instructions
-1. Clone the repository.
-2. Open terminal in the root directory.
-3. Run the following command:
-   ```bash
-   dotnet build
-   ```
+## The Chronos library (framework-agnostic)
+    src/Chronos.Core/        interfaces only, no game or engine dependency
+        IInputState, IGameState, IDeterministicState, IGameSimulation<TInput,TState>
+    src/Chronos.Net/         transport, binary protocol, packets, NetworkController (generic over TInput)
+        Protocol/InputCompression.cs   Week 5: run-length input compression
+        Packets/CompressedInputPacket  Week 5: the compressed input packet (PacketType 14)
+    src/Chronos.Rollback/    the rollback engine (generic over TInput, TState)
+        RollbackSystem        prediction, snapshot history, misprediction-driven rollback, time sync
+        MispredictionDetector input-history divergence + state-hash desync detection
+        ResimulationRunner    restore a snapshot, replay corrected inputs to the present
+        SnapshotStore, RollbackConfig, InputRecorder, telemetry
+    src/Bomberman.Core/      the GAME: ECS, Simulation, GameStateSnapshot, StateHasher. Implements the
+                             Chronos.Core interfaces (InputState : IInputState, etc.)
+    src/Bomberman.App/       MonoGame view: menu, lobby, and PlayState driving the RollbackSystem
+    src/Bomberman.Tests/     unit + integration tests (rollback, sync, protocol, lobby, ...)
 
-## Running the Game
+## How rollback works (the heart of the week)
+1. **Predict.** When the remote input for the current frame has not arrived, predict it (repeat their
+   last confirmed input) and keep simulating. The local game never stalls waiting for the network.
+2. **Snapshot.** Every simulated frame is captured into the SnapshotStore.
+3. **Detect.** When the real remote input arrives (`HandleRemoteInput`), the MispredictionDetector finds
+   the earliest frame where our prediction was wrong (input history) or where state hashes disagree.
+4. **Roll back & resimulate.** The ResimulationRunner restores the snapshot just before that frame and
+   replays the corrected inputs forward to the present. If predictions were right, nothing visibly
+   changes; if wrong, the world snaps to the correct state.
+5. **Time sync.** A bounded prediction window (`MaxPredictionFrames`) and frame-advantage stepping
+   (`CalculateTargetSteps`) keep the two peers' frame counts close.
 
-### Single Instance (Manual)
-Run the application directly:
-```bash
-cd src/Bomberman.App
-dotnet run
-```
+This is also the proper fix for the lockstep "window-drag freeze": a stalled peer no longer blocks the
+other, because the other predicts ahead and reconciles when the real inputs arrive.
 
-### Local Multiplayer Test Session
-Use the provided PowerShell script to launch 4 instances (1 Host + 3 Clients) automatically:
-```powershell
-.\launch_test_session.ps1
-```
+## Week 5 addition: input delta compression
+`Chronos.Net.Protocol.InputCompression` run-length encodes the redundant input history that rollback
+sends each frame. A player's input rarely changes frame to frame, so encoding runs instead of every
+frame shrinks input packets by 70%+ (often 90%+) with no loss. `NetworkController.SendInput` now sends
+the `CompressedInputPacket`; the raw `InputPacket` is kept as the uncompressed reference.
 
-## Controls
-
-### Menus
-- **UP / DOWN**: Navigate
-- **ENTER**: Select / Confirm
-- **ESC**: Back / Exit
-
-### Gameplay
-- **W, A, S, D**: Movement (P1)
-- **Arrow Keys**: Movement (P2)
-- **SPACE**: Place Bomb
-- **ESC**: Open Menu / Leave Game
-- **F1**: Toggle Debug Overlay
-
-## Networking
-- The game uses UDP for communication.
-- **Port**: Host binds to UDP port 5000 by default. Clients use random ports.
-- **Localhost**: The game supports loopback networking for local testing.
-
-## Logging
-- Logs are written to `gamelog.txt` in the execution directory.
-- Debug logs are also printed to the console window.
-
-## Architecture
-
-The project follows a strict separation of concerns:
-
-- **Bomberman.Core**: Pure C# Class Library containing the Game Logic (ECS, Simulation), Components, and Math utilities. Detached from any framework (Monogame/Unity).
-- **Bomberman.Rollback**: Handling of deterministic state management, history buffers (snapshots), and resimulation logic (GGPO-style).
-- **Bomberman.Net**: UDP Networking layer, packet serialization, and connection management.
-- **Bomberman.App**: The Monogame application entry point, handling Input, Rendering (`WorldRenderer`), and the core Game Loop.
-
-### Rollback Networking
-The game uses a predictive rollback architecture:
-1.  **Input Prediction**: Local inputs are applied immediately.
-2.  **State Synchronization**: Hash checks are exchanged to verify consistency.
-3.  **Resimulation**: On divergence, the game rolls back to the last confirmed frame and resimulates with correct inputs (handled by `ResimulationRunner`).
+## Build / run / test  (.NET 9 SDK + MonoGame DesktopGL)
+    dotnet build Bomberman.sln
+    dotnet run --project src/Bomberman.App
+    dotnet test                                # incl. RollbackTests, SynchronizationTests, DeltaCompressionTests

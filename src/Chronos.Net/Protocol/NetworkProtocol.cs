@@ -56,6 +56,31 @@ namespace Chronos.Net.Protocol
 
 
         // --- Input ---
+        // --- Input (Week 5: run-length compressed variant) ---
+        public static byte[] CreateCompressedInputPacket(int playerId, int startFrame, TInput[] inputs, int posX, int posY, int stateHash)
+        {
+            return Serialize(new Packets.CompressedInputPacket<TInput>
+            {
+                PlayerId = playerId,
+                StartFrame = startFrame,
+                Inputs = inputs,
+                PosX = posX,
+                PosY = posY,
+                StateHash = stateHash
+            });
+        }
+
+        public static (int pid, int startFrame, TInput[] inputs, int posX, int posY, int hash) ReadCompressedInputPacket(byte[] data)
+        {
+            using (var ms = new System.IO.MemoryStream(data))
+            using (var reader = new System.IO.BinaryReader(ms))
+            {
+                reader.ReadByte();
+                var p = Packets.CompressedInputPacket<TInput>.Deserialize(reader);
+                return (p.PlayerId, p.StartFrame, p.Inputs, p.PosX, p.PosY, p.StateHash);
+            }
+        }
+
         public static byte[] CreateInputPacket(int playerId, int startFrame, TInput[] inputs, int posX, int posY, int stateHash)
         {
             return Serialize(new InputPacket<TInput>

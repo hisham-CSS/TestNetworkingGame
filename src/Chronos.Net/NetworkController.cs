@@ -174,7 +174,8 @@ namespace Chronos.Net
 
         public void SendInput(int pid, int frame, TInput[] history, int x, int y, int hash)
         {
-            byte[] packet = NetworkProtocol<TInput>.CreateInputPacket(pid, frame, history, x, y, hash);
+            // Week 5: send the run-length compressed input packet (bandwidth optimization).
+            byte[] packet = NetworkProtocol<TInput>.CreateCompressedInputPacket(pid, frame, history, x, y, hash);
             if (pid == 0) Broadcast(packet);
             else _transport.SendToConnectedHost(packet);
         }
@@ -264,6 +265,11 @@ namespace Chronos.Net
                 case PacketType.Input:
                     var (pid, frame, inputs, px, py, hash) = NetworkProtocol<TInput>.ReadInputPacket(data);
                     OnInputReceived?.Invoke(pid, frame, inputs, px, py, hash);
+                    break;
+
+                case PacketType.InputCompressed:
+                    var (cpid, cframe, cinputs, cpx, cpy, chash) = NetworkProtocol<TInput>.ReadCompressedInputPacket(data);
+                    OnInputReceived?.Invoke(cpid, cframe, cinputs, cpx, cpy, chash);
                     break;
 
                 case PacketType.LobbyReady:

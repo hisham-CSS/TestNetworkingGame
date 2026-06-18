@@ -18,6 +18,7 @@ namespace Chronos.Net.Packets
         StateSync = 10,
         StateChunk = 11,
         Ping = 12,
-        Pong = 13
+        Pong = 13,
+        InputCompressed = 14   // Week 5: run-length compressed input history (bandwidth optimization)
     }
 }

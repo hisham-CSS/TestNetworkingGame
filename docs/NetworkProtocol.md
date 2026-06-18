@@ -78,3 +78,11 @@ All packets start with a single byte `PacketType`.
     - `int` MoveX, `int` MoveY
     - `bool` PlaceBomb
     - `int` TargetX, `int` TargetY
+
+## Week 5: compressed input (PacketType 14)
+The rollback netcode sends `InputCompressed` instead of the raw `Input` packet. The payload is identical
+(PlayerId, StartFrame, history, PosX, PosY, StateHash) except the input history is run-length encoded:
+a run of frames with the same input is stored as `(runLength, oneInput)` instead of one entry per frame.
+Because a player's input rarely changes frame to frame, this shrinks the redundant input history by well
+over 70% with no loss (decode reproduces the exact sequence). The raw `Input` packet is retained as the
+uncompressed reference.
