@@ -201,7 +201,17 @@ namespace Bomberman.App.States
                         _context.Logger.Info($"[PlayState] Player {pid} Disconnected: {reason}");
                         _gameSession.DisconnectPlayer(pid);
                         _context.Network.RemoveClient(sender);
-                        Flash($"PLAYER {pid} DISCONNECTED", 4.0);   // match continues; that player goes idle
+
+                        bool opponentsRemain = false;
+                        for (int k = 0; k < _clientSlots.Length; k++) if (_clientSlots[k] != null) opponentsRemain = true;
+                        if (!opponentsRemain)
+                        {
+                            // No one left to play against: end the match into the overlay.
+                            _manager.ChangeState(_context.StateFactory.CreateGameOver(
+                                _gameSession, _localPlayerId, false, false, $"PLAYER {pid + 1} DISCONNECTED"));
+                            return;
+                        }
+                        Flash($"PLAYER {pid} DISCONNECTED", 4.0);   // others remain; that player goes idle
                         break;
                     }
                 }

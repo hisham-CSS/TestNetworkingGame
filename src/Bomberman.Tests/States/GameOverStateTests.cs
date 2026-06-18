@@ -60,52 +60,29 @@ namespace Bomberman.Tests.States
         }
 
         [Test]
-        public void HandleTextInput_AddsCharacters_ToReplayName()
+        public void MenuOptions_ReplayView_OffersRewatch()
         {
-            _state = new GameOverState(_context, null, null, 1, false, true);
-            
-            // Invoke HandleTextInput manually since we can't easily trigger the Monogame event
-            // But wait, the state uses Window.TextInput event... which is hard to mock.
-            // Actually, looking at code: It subscribes to Window.TextInput in Enter()
-            // and Unsubscribes in Exit().
-            // The method HandleTextInput is private request? 
-            // The coverage XML showed `HandleTextInput(KeyboardState)`?
-            // Wait, looking at file content:
-            // `public void HandleTextInput(KeyboardState)`?
-            // No, code says:
-            // "simple Alpha-Numeric... Update()" ???
-            // Let's re-read the code logic.
-            // Ah, line 85 in coverage info for HandleTextInput.
-            // It seems it processes `KeyboardState` in `HandleTextInput` but `Update` calls it?
-            
-            // Let's assume we can call `Update` which calls `HandleTextInput` or we use reflection.
-            // Wait, if `HandleTextInput` takes `KeyboardState`, it might be public? 
-            // In the XML it has signature `(KeyboardState)`.
-            // Let's assume it's private and called by Update.
-            
-            // If I look at `GameOverState.cs`, the Update method calls checks but how does it get text?
-            // If it uses `Game.Window.TextInput`, we can't test it easily.
-            // If it relies on `KeyboardState`, we can set keys.
-            
-            // Let's Assume `Update` handles keys.
-            _input.Setup(x => x.GetKeyboard()).Returns(new KeyboardState(Keys.A));
-            _state.Update(new GameTime());
-            
-            // Check _replayName private field
-            // This is brittle. If it relies on `Window.TextInput` event, `MockInputService` won't help unless `Update` reads it.
-            // Most Monogame text input uses the Event now.
-            // If the code uses checking Keys.A, Keys.B... that's old school.
-            // Code snippet: "// Simple Alpha-Numeric (Very basic)"
-            // implies it might loop keys?
+            _state = new GameOverState(_context, null!, null!, -1, isReplayView: true, isGameCompleted: true);
+            var options = (string[])GetPrivateField(_state, "_options");
+            Assert.That(options, Does.Contain("REWATCH"));
+            Assert.That(options, Does.Contain("RETURN TO MENU"));
         }
-        
+
         [Test]
-        public void GetTitle_ReturnsCorrectString()
+        public void MenuOptions_LiveGame_OffersSaveReplay()
         {
-            // Since we can't verify Draw, let's verify the logic via the Helper if we extract it, 
-            // or by reflection on the result logic (which isn't stored).
-            // We'll stick to logic initialization tests as "Good Enough" for UI classes without extracting logic.
-            // But we can verify `SaveReplayAndExit` logic.
+            _state = new GameOverState(_context, null!, null!, 1, isReplayView: false, isGameCompleted: true);
+            var options = (string[])GetPrivateField(_state, "_options");
+            Assert.That(options, Does.Contain("SAVE REPLAY"));
+            Assert.That(options, Does.Contain("RETURN TO MENU"));
+        }
+
+        [Test]
+        public void Disconnection_EndReason_IsStored()
+        {
+            _state = new GameOverState(_context, null!, null!, 0, false, false, "PLAYER 2 DISCONNECTED");
+            var reason = (string)GetPrivateField(_state, "_endReason");
+            Assert.That(reason, Is.EqualTo("PLAYER 2 DISCONNECTED"));
         }
 
         private object GetPrivateField(object obj, string name)

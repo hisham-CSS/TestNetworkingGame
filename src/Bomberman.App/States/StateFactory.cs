@@ -44,7 +44,7 @@ namespace Bomberman.App.States
         public PlayState CreateReplay(GameSession session) 
             => new PlayState(_context, _manager, session);
 
-        public GameOverState CreateGameOver(GameSession session, int winnerId, bool isReplayView, bool isGameCompleted) 
-            => new GameOverState(_context, _manager, session, winnerId, isReplayView, isGameCompleted);
+        public GameOverState CreateGameOver(GameSession session, int winnerId, bool isReplayView, bool isGameCompleted, string? endReason = null) 
+            => new GameOverState(_context, _manager, session, winnerId, isReplayView, isGameCompleted, endReason);
     }
 }

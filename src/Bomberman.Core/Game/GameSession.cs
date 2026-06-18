@@ -21,6 +21,9 @@ namespace Bomberman.Core.Game
         
         public int TotalPlayers { get; private set; }
 
+        /// <summary>The replay file this session is playing back, if any (enables REWATCH).</summary>
+        public string? ReplayPath { get; private set; }
+
         private const float FixedStep = 1.0f / 60.0f; // Could come from Config
 
         /// <summary>
@@ -49,6 +52,7 @@ namespace Bomberman.Core.Game
         /// </summary>
         public GameSession(string replayPath)
         {
+            ReplayPath = replayPath;
             // Replay viewing uses a dummy player ID (0)
             RollbackSystem = new RollbackSystem<InputState, GameStateSnapshot>(0, 2, FixedStep);
             
