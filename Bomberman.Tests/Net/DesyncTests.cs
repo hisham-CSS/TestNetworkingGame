@@ -58,15 +58,31 @@ namespace Bomberman.Tests.Net
             }
             var authoritative = host.CaptureState();
 
-            // Corrupt the client (as ForceDesync would).
-            var tr = client.Simulation.World.Transforms.Get(0);
-            tr.Position += new Vector2(3, 0);
-            client.Simulation.World.Transforms.Set(0, tr);
+            // Corrupt the client the way ForceDesync does: nudge the PLAYER's transform. (The hash
+            // covers player/bomb positions, not tile positions, so we must move a player to diverge.)
+            NudgePlayer0(client, new Vector2(3, 0));
             Assert.That(client.CaptureState().Hash, Is.Not.EqualTo(authoritative.Hash));
 
             // Resync: client restores the host's snapshot (shipped as bytes).
             client.RestoreState(GameStateSnapshot.Deserialize(authoritative.Serialize()));
             Assert.That(client.CaptureState().Hash, Is.EqualTo(authoritative.Hash));
         }
-    }
+    
+        private static void NudgePlayer0(GameSession session, Vector2 delta)
+        {
+            var world = session.Simulation.World;
+            var pents = world.Players.GetEntities();
+            var tents = world.Transforms.GetEntities();
+            var tlist = world.Transforms.GetAll();
+            var player0 = pents[0];
+            for (int t = 0; t < tents.Count; t++)
+                if (tents[t].Equals(player0))
+                {
+                    var tr = tlist[t];
+                    tr.Position += delta;
+                    world.Transforms.Set(t, tr);
+                    return;
+                }
+        }
+}
 }
