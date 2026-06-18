@@ -38,7 +38,7 @@ namespace Bomberman.Tests.States
             mockGame.Setup(g => g.WindowWidth).Returns(800);
             mockGame.Setup(g => g.WindowHeight).Returns(600);
             
-            _context = new GameContext(mockGame.Object, null, null, null, _input.Object, new Mock<IRenderer>().Object, new Mock<ILogger>().Object);
+            _context = new GameContext(mockGame.Object, null!, null!, null!, _input.Object, new Mock<IRenderer>().Object, new Mock<ILogger>().Object);
             _manager = new GameStateManager();
         }
 

@@ -22,7 +22,7 @@ namespace Bomberman.Tests.States
         private Mock<IInputService> _input;
         private Mock<IRenderer> _renderer;
         private GameContext _context;
-        private ServerBrowserState _state;
+        private ServerBrowserState _state = null!;
         
         // Transport Mocks
         private Mock<ITransport> _transportMock;
@@ -100,7 +100,7 @@ namespace Bomberman.Tests.States
             _transportMock.Raise(x => x.PacketReceived += null, packet.Data, serverEp);
             
             // 4. Update Network to process packet
-            _context.Network.Update();
+            _context.Network!.Update();
             
             // 5. Check State
             var list = (System.Collections.IList)GetPrivateField(_state, "_servers");
@@ -113,7 +113,7 @@ namespace Bomberman.Tests.States
 
         private object GetPrivateField(object obj, string name)
         {
-            return obj.GetType().GetField(name, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(obj);
+            return obj.GetType().GetField(name, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(obj)!;
         }
     }
 }

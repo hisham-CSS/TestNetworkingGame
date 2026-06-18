@@ -23,7 +23,7 @@ namespace Bomberman.Tests.States
         private Mock<IInputService> _input;
         private Mock<IRenderer> _renderer;
         private GameContext _context;
-        private LobbyState _state;
+        private LobbyState _state = null!;
         
         // Transport Mocks
         private Mock<ITransport> _transportMock;
@@ -102,7 +102,7 @@ namespace Bomberman.Tests.States
             _state = new LobbyState(_context, new GameStateManager(), true, null); // Host
             
             // Add a dummy client so Broadcast sends a packet
-            _context.Network.AddClient(new IPEndPoint(IPAddress.Loopback, 12345));
+            _context.Network!.AddClient(new IPEndPoint(IPAddress.Loopback, 12345));
             
             _state.Enter();
 
@@ -136,7 +136,7 @@ namespace Bomberman.Tests.States
 
         private object GetPrivateField(object obj, string name)
         {
-            return obj.GetType().GetField(name, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(obj);
+            return obj.GetType().GetField(name, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(obj)!;
         }
     }
 }

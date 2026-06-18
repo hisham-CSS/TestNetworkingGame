@@ -19,7 +19,7 @@ namespace Bomberman.Tests.States
     {
         private Mock<IInputService> _input;
         private GameContext _context;
-        private GameOverState _state;
+        private GameOverState _state = null!;
 
         [SetUp]
         public void Setup()
@@ -87,7 +87,7 @@ namespace Bomberman.Tests.States
 
         private object GetPrivateField(object obj, string name)
         {
-            return obj.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance).GetValue(obj);
+            return obj.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(obj)!;
         }
     }
 }
