@@ -39,6 +39,17 @@ namespace Bomberman.App.States
         // Rate Limiting for StateSync
         private System.Collections.Generic.Dictionary<int, double> _lastSyncSent = new System.Collections.Generic.Dictionary<int, double>();
 
+        // Usability: transient on-screen status + "waiting" indicator.
+        private string _statusMsg = "";
+        private double _statusUntilSec = 0;
+        private bool _waiting = false;
+
+        private void Flash(string msg, double seconds = 2.5)
+        {
+            _statusMsg = msg;
+            _statusUntilSec = DateTime.Now.TimeOfDay.TotalSeconds + seconds;
+        }
+
         public PlayState(GameContext context, GameStateManager manager, int localPlayerId, int playerCount, int seed, IPEndPoint?[]? lobbySlots = null)
         {
             _context = context;
@@ -190,6 +201,7 @@ namespace Bomberman.App.States
                         _context.Logger.Info($"[PlayState] Player {pid} Disconnected: {reason}");
                         _gameSession.DisconnectPlayer(pid);
                         _context.Network.RemoveClient(sender);
+                        Flash($"PLAYER {pid} DISCONNECTED", 4.0);   // match continues; that player goes idle
                         break;
                     }
                 }
@@ -198,8 +210,8 @@ namespace Bomberman.App.States
             {
                 // Client: If we receive Disconnect, it's likely from Host (or we timed out host)
                 _context.Logger.Info($"[PlayState] Disconnected from Host: {reason}");
-                // Force return to menu
-                _manager.ChangeState(_context.StateFactory.CreateMenu());
+                // Force return to menu, telling the player why.
+                _manager.ChangeState(_context.StateFactory.CreateMenu("DISCONNECTED FROM HOST"));
             }
         }
 
@@ -244,6 +256,7 @@ namespace Bomberman.App.States
 
             // Synchronization Logic (Catch-Up & Slow-Down) - Client Only
             int maxSteps = 1;
+            _waiting = false;
 
             if (!_isHost && _context.Network != null && !_isReplayView)
             {
@@ -252,6 +265,7 @@ namespace Bomberman.App.States
                 int myFrame = _gameSession.CurrentFrame;
                 
                 maxSteps = _gameSession.RollbackSystem.CalculateTargetSteps(myFrame, hostFrame);
+                _waiting = (maxSteps == 0);   // too far ahead of a lagging peer: holding for them
             }
             
             int stepsTaken = 0;
@@ -370,13 +384,16 @@ namespace Bomberman.App.States
                         
                         byte[] snapshot = GameStateSnapshot.SerializeWorld(_gameSession.CurrentFrame, _gameSession.Simulation!.World, _gameSession.Simulation.Rng.State);
                         _context.Network.SendStateSync(endpoint!, snapshot);
-                        
-                        _lastSyncSent[pid] = nowSec;
-                        
-                        
+                        Flash($"RESYNCING P{pid}", 1.5);
                         _lastSyncSent[pid] = nowSec;
                     }
                 }
+            }
+
+            else if (result == InputResult.TooOld && !_isHost)
+            {
+                // We fell outside the rollback buffer; the host will push an authoritative StateSync.
+                Flash("RESYNCING...", 1.5);
             }
 
             // Host Relay
@@ -463,6 +480,7 @@ namespace Bomberman.App.States
              
              // Sync Rollback System
              _gameSession.RollbackSystem.SyncToFrame(frame);
+             Flash("RESYNCING...", 1.5);
         }
 
         // --- Drawing ---
@@ -497,6 +515,11 @@ namespace Bomberman.App.States
             if (_gameSession.RollbackSystem.IsRecording)
                 _context.Renderer.DrawText("REC", _context.Game.WindowWidth - 100, 8, Rendering.Theme.Bad, 2);
             _context.Renderer.DrawText("[F1] STATS", 8, _context.Game.WindowHeight - 18, Rendering.Theme.Muted, 1);
+
+            if (_waiting)
+                _context.Renderer.DrawTextCentered("WAITING FOR PLAYER...", _context.Game.WindowWidth / 2, 60, Rendering.Theme.Bad, 2);
+            if (_statusMsg != "" && DateTime.Now.TimeOfDay.TotalSeconds < _statusUntilSec)
+                _context.Renderer.DrawTextCentered(_statusMsg, _context.Game.WindowWidth / 2, 90, Rendering.Theme.Accent, 2);
         }
 
         private void DrawDebugStats()
