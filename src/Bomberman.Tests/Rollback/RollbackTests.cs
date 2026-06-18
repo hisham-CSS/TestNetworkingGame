@@ -127,5 +127,16 @@ namespace Bomberman.Tests.Rollback
             Assert.That(bundle.Frame, Is.EqualTo(0)); // Should send Frame 0
             Assert.That(bundle.RedundantHistory.Length, Is.EqualTo(1));
         }
-    }
+    
+        [Test]
+        public void PredictionWindow_StaysWithinSnapshotBuffer()
+        {
+            // If we can predict further ahead than the snapshot buffer holds, a misprediction could need
+            // a snapshot that has already been evicted -> rollback skipped -> the client desyncs forever.
+            // The prediction window must stay safely below the snapshot history length.
+            var config = RollbackConfig.Default;
+            Assert.That(config.MaxPredictionFrames, Is.LessThan(config.MaxSnapshotFrames),
+                "Prediction window must stay within the snapshot buffer so every rollback target is buffered.");
+        }
+}
 }

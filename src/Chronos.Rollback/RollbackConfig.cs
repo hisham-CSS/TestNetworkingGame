@@ -12,8 +12,15 @@ namespace Chronos.Rollback
         
         // --- Prediction ---
 
-        /// <summary>Maximum frames ahead of the last confirmed frame we can simulate.</summary>
-        public int MaxPredictionFrames { get; set; } = 60 * 60 * 10; // "Unlimited"
+        /// <summary>
+        /// Maximum frames we may predict ahead of the last confirmed remote frame before we STALL.
+        /// This MUST stay well below <see cref="MaxSnapshotFrames"/>: if we predicted further ahead than
+        /// the snapshot buffer can hold, a misprediction could need a snapshot that has already been
+        /// evicted, the rollback would be skipped, and the client would desync permanently. Capping the
+        /// window (GGPO uses 8) guarantees every rollback target is still buffered, so we stall briefly
+        /// instead of diverging. Tunable for latency, but keep it far under MaxSnapshotFrames.
+        /// </summary>
+        public int MaxPredictionFrames { get; set; } = 8;
         
         // --- Input ---
 
