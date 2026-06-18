@@ -126,14 +126,16 @@ namespace Bomberman.App.States
             _context.Renderer.DrawTexture(new Rectangle(0, 0, w, h), new Color(8, 12, 22, 210));
 
             int cx = w / 2;
+            int maxTextWidth = w - 24;   // keep a small margin on both edges
 
-            // 3) headline + status
+            // 3) headline + status (auto-fit so long strings like "PLAYER 2 DISCONNECTED" stay on screen)
             Color headColor = _endReason != null ? Theme.Bad
                             : (_winnerId == -1 ? Theme.Muted : Theme.Accent);
-            _context.Renderer.DrawTextCentered(Headline(), cx, 70, headColor, 4);
+            string head = Headline();
+            _context.Renderer.DrawTextCentered(head, cx, 70, headColor, FitScale(head, 4, maxTextWidth));
 
             string info = SubInfo();
-            if (info != "") _context.Renderer.DrawTextCentered(info, cx, 120, Theme.Text, 2);
+            if (info != "") _context.Renderer.DrawTextCentered(info, cx, 120, Theme.Text, FitScale(info, 2, maxTextWidth));
 
             // 4) menu
             int startY = 240, gap = 34;
@@ -147,6 +149,16 @@ namespace Bomberman.App.States
             _context.Renderer.DrawTextCentered("[UP/DOWN] SELECT    [ENTER] CONFIRM    [ESC] MENU", cx, h - 30, Theme.Muted, 1);
 
             _context.Renderer.EndDraw();
+        }
+
+        /// <summary>Largest scale (down to 1) at which <paramref name="text"/> fits in maxWidth.
+        /// PixelFont advances 6 px per character per scale (5 px glyph + 1 px spacing).</summary>
+        private static int FitScale(string text, int maxScale, int maxWidth)
+        {
+            if (string.IsNullOrEmpty(text)) return maxScale;
+            for (int sc = maxScale; sc > 1; sc--)
+                if (text.Length * 6 * sc <= maxWidth) return sc;
+            return 1;
         }
 
         private string Headline()
