@@ -43,6 +43,10 @@ namespace Bomberman.App.States
         private string _statusMsg = "";
         private double _statusUntilSec = 0;
         private bool _waiting = false;
+        // Watchdog: if the host stops delivering INPUTS (not just heartbeats/pongs) for this long, the
+        // connection is effectively dead even if the transport still looks alive.
+        private double _lastHostProgressSec = 0;
+        private int _lastHostConfirmedFrame = -1;
 
         private void Flash(string msg, double seconds = 2.5)
         {
@@ -157,6 +161,8 @@ namespace Bomberman.App.States
         public void Enter()
         {
             _context.Logger.Info($"[PlayState] Enter. P{_localPlayerId} Replay={_isReplayView}");
+            _lastHostProgressSec = DateTime.Now.TimeOfDay.TotalSeconds;
+            _lastHostConfirmedFrame = -1;
             if (_context.Network != null)
             {
                 _context.Network.OnInputReceived += HandleInputReceived;
@@ -276,6 +282,25 @@ namespace Bomberman.App.States
                 
                 maxSteps = _gameSession.RollbackSystem.CalculateTargetSteps(myFrame, hostFrame);
                 _waiting = (maxSteps == 0);   // too far ahead of a lagging peer: holding for them
+
+                // Connection watchdog: a frozen/crashed/dropped host stops advancing its confirmed
+                // frame. (The transport can still look alive because the host keeps answering our pings,
+                // so we cannot rely on the heartbeat timeout here.) If no new host input arrives for 5s,
+                // give up and return to the menu instead of waiting forever.
+                double nowSec = DateTime.Now.TimeOfDay.TotalSeconds;
+                if (hostFrame > _lastHostConfirmedFrame)
+                {
+                    _lastHostConfirmedFrame = hostFrame;
+                    _lastHostProgressSec = nowSec;
+                }
+                else if (nowSec - _lastHostProgressSec > 5.0)
+                {
+                    _context.Logger.Info("[PlayState] Host stopped sending inputs for 5s. Connection lost.");
+                    _context.Network.Close();
+                    _context.Network = null;
+                    _manager.ChangeState(_context.StateFactory.CreateMenu("DISCONNECTED FROM HOST"));
+                    return;
+                }
             }
             
             int stepsTaken = 0;
