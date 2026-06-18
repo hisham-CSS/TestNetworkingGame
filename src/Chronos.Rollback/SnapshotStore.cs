@@ -33,7 +33,9 @@ namespace Chronos.Rollback
         /// </summary>
         public bool TryGet(int frame, out TState snapshot)
         {
-            return _buffer.TryGetValue(frame, out snapshot);
+            if (_buffer.TryGetValue(frame, out var s)) { snapshot = s; return true; }
+            snapshot = default!;
+            return false;
         }
 
         /// <summary>

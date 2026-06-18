@@ -107,7 +107,7 @@ namespace Bomberman.Tests.States
             Assert.That(list.Count, Is.EqualTo(1));
             
             // Reflection to check server details?
-            dynamic serverInfo = list[0];
+            dynamic serverInfo = list[0]!;
             Assert.That(serverInfo.Name, Is.EqualTo("Test Server"));
         }
 

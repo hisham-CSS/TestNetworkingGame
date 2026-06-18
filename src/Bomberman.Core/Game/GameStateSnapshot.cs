@@ -112,7 +112,7 @@ namespace Bomberman.Core.Game
                 
                 dto.Pools.Add(new PoolDto
                 {
-                    ComponentType = pool.ComponentType.FullName,
+                    ComponentType = pool.ComponentType.FullName ?? "",
                     Entities = entities,
                     JsonComponents = jsonComponents
                 });
@@ -139,12 +139,12 @@ namespace Bomberman.Core.Game
                 if (pool != null)
                 {
                     Type listType = typeof(List<>).MakeGenericType(pool.ComponentType);
-                    object components = System.Text.Json.JsonSerializer.Deserialize(poolDto.JsonComponents, listType, options);
+                    object? components = System.Text.Json.JsonSerializer.Deserialize(poolDto.JsonComponents, listType, options);
                     
                     Type tupleType = typeof(ValueTuple<,>).MakeGenericType(typeof(List<Entity>), listType);
-                    object stateTuple = Activator.CreateInstance(tupleType, poolDto.Entities, components);
+                    object? stateTuple = Activator.CreateInstance(tupleType, poolDto.Entities, components);
                     
-                    pool.RestoreState(stateTuple);
+                    if (stateTuple != null) pool.RestoreState(stateTuple);
                 }
             }
 
