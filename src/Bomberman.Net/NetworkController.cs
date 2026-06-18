@@ -31,6 +31,7 @@ namespace Bomberman.Net
         public event Action<IPEndPoint, string>? OnDisconnected;
         public event Action<int, bool>? OnLobbyReadyReceived;
         public event Action<byte[]>? OnStateSyncReceived;
+        public event Action<int, int, int, int>? OnChecksumReceived; // Week 4: frame, hash, posX, posY
 
         private readonly Dictionary<IPEndPoint, DateTime> _lastDataReceived = new Dictionary<IPEndPoint, DateTime>();
         private readonly PacketReassembler _reassembler = new PacketReassembler();
@@ -180,6 +181,20 @@ namespace Bomberman.Net
             else _transport.SendToConnectedHost(packet);
         }
 
+        /// <summary>Week 4: announce our state hash for a confirmed frame (client -> host, or host -> all).</summary>
+        public void SendChecksum(int frame, int hash, int posX, int posY)
+        {
+            byte[] packet = NetworkProtocol<TInput>.CreateChecksum(frame, hash, posX, posY);
+            if (_isClient) _transport.SendToConnectedHost(packet);
+            else Broadcast(packet);
+        }
+
+        /// <summary>Week 4 resync: host pushes its authoritative snapshot to every client.</summary>
+        public void BroadcastStateSync(byte[] snapshot)
+        {
+            foreach (var client in _connectedClients) SendStateSync(client, snapshot);
+        }
+
         public void SendLobbyReady(int pid, bool isReady)
         {
             var packet = NetworkProtocol<TInput>.CreateLobbyReady(pid, isReady);
@@ -282,6 +297,11 @@ namespace Bomberman.Net
                     long pongTimestamp = NetworkProtocol<TInput>.ReadPong(data);
                     long rttTicks = DateTime.Now.Ticks - pongTimestamp;
                     LastPingMs = (int)(rttTicks / TimeSpan.TicksPerMillisecond);
+                    break;
+
+                case PacketType.Checksum:
+                    var (cf, ch, cx, cy) = NetworkProtocol<TInput>.ReadChecksum(data);
+                    OnChecksumReceived?.Invoke(cf, ch, cx, cy);
                     break;
             }
         }

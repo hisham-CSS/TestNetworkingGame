@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using Microsoft.Xna.Framework;
 using Bomberman.Core;
+using Bomberman.Net.Desync;
 
 namespace Bomberman.Net.Lockstep
 {
@@ -19,14 +21,10 @@ namespace Bomberman.Net.Lockstep
     /// The rule: the simulation may only advance frame F once we hold BOTH players' inputs for F.
     /// Send inputs, not state; if anything is missing, STALL (hold the frame) rather than guess.
     ///
-    /// Two settings of <see cref="InputDelay"/> show the whole progression taught this week:
-    ///   * InputDelay = 0  -> pure stall lockstep (the Week-3 prototype): every frame waits a full
-    ///                        round-trip for the peer, so a slow link visibly hitches.
-    ///   * InputDelay = d  -> delay-based lockstep: local input captured now is scheduled to APPLY at
-    ///                        frame (now + d). Because it was sent d frames early, by the time the sim
-    ///                        reaches that frame the remote input has usually arrived, hiding latency.
-    ///
-    /// This is the Bomberman-specific driver; Week 5 generalises it into the Chronos rollback library.
+    /// Week 4 additions: after each confirmed frame we capture a snapshot (for its hash, and for resync),
+    /// announce that hash to the peer via a Checksum packet, and compare incoming checksums to detect a
+    /// desync. The host is authoritative: when it detects a divergence it pushes its snapshot of that
+    /// frame back to the client, which restores it (a hard resync). Week 5 turns this into rollback.
     /// </summary>
     public sealed class LockstepSession
     {
@@ -40,14 +38,24 @@ namespace Bomberman.Net.Lockstep
         public int RemotePlayerId { get; }
         public int InputDelay { get; private set; }
 
+        /// <summary>Player 0 (the host) is authoritative: it issues resyncs.</summary>
+        public bool IsAuthoritative => LocalPlayerId == 0;
+
         // Inputs indexed by the frame they APPLY to (not the frame they were captured on).
         private readonly Dictionary<int, InputState> _localInputs = new Dictionary<int, InputState>();
         private readonly Dictionary<int, InputState> _remoteInputs = new Dictionary<int, InputState>();
 
-        // The next frame number a freshly captured local input will be scheduled into.
-        private int _nextLocalFrame;
+        // Week 4: one snapshot per confirmed frame (its hash drives desync detection; the full snapshot
+        // is what we ship to resync a diverged peer).
+        private readonly SnapshotStore _snapshots = new SnapshotStore(128);
+        private readonly DesyncDetector _detector;
 
-        // How many past frames of local input to resend in each packet (packet-loss insurance).
+        public DesyncReport? LastDesync { get; private set; }
+        public int ResyncCount { get; private set; }
+        public event Action<DesyncReport>? OnDesyncDetected;
+        public event Action<int>? OnResynced;
+
+        private int _nextLocalFrame;
         private const int RedundantHistory = 4;
 
         public int CurrentFrame => _session.CurrentFrame;
@@ -61,20 +69,22 @@ namespace Bomberman.Net.Lockstep
             RemotePlayerId = 1 - localPlayerId; // 2-player
             InputDelay = Math.Max(0, inputDelay);
             _nextLocalFrame = InputDelay;
+            _detector = new DesyncDetector(_snapshots);
 
-            // The first `InputDelay` frames have no real input yet, so both peers deterministically
-            // fill them with a neutral input. This lets the match start without an initial stall.
             for (int f = 0; f < InputDelay; f++)
             {
                 _localInputs[f] = default;
                 _remoteInputs[f] = default;
             }
 
+            // Seed the buffer with the initial (frame 0) state so its hash is comparable.
+            _snapshots.Store(_session.CaptureState());
+
             _net.OnInputReceived += HandleRemoteInput;
+            _net.OnChecksumReceived += HandleRemoteChecksum;
         }
 
-        /// <summary>Chooses an input delay (in frames) that covers the measured one-way latency.
-        /// Clamped to a sane range so a bad ping can't make the game unplayably laggy.</summary>
+        /// <summary>Chooses an input delay (in frames) that covers the measured one-way latency.</summary>
         public static int CalculateInputDelay(int roundTripMs, int minDelay = 1, int maxDelay = 10)
         {
             double oneWayMs = roundTripMs / 2.0;
@@ -84,28 +94,24 @@ namespace Bomberman.Net.Lockstep
 
         /// <summary>Capture this tick's local input: schedule it `InputDelay` frames ahead and send it
         /// (with a little history behind it) to the peer.</summary>
-        public void SubmitLocalInput(InputState input, int posX = 0, int posY = 0, int stateHash = 0)
+        public void SubmitLocalInput(InputState input)
         {
             int applyFrame = _nextLocalFrame;
             _localInputs[applyFrame] = input;
 
-            // Build a short run [startFrame .. applyFrame] so one received packet can cover dropped ones.
             int startFrame = Math.Max(0, applyFrame - (RedundantHistory - 1));
             int count = applyFrame - startFrame + 1;
             var history = new InputState[count];
             for (int i = 0; i < count; i++)
                 history[i] = _localInputs.TryGetValue(startFrame + i, out var v) ? v : default;
 
-            _net.SendInput(LocalPlayerId, startFrame, history, posX, posY, stateHash);
+            _net.SendInput(LocalPlayerId, startFrame, history, 0, 0, 0);
             _nextLocalFrame++;
         }
 
-        /// <summary>Store remote inputs. Each packet carries a run starting at <paramref name="startFrame"/>;
-        /// we keep the first value seen per frame, so duplicates are ignored and a later packet can fill
-        /// gaps left by an earlier lost one.</summary>
         public void HandleRemoteInput(int pid, int startFrame, InputState[] inputs, int posX, int posY, int hash)
         {
-            if (pid == LocalPlayerId) return; // ignore echoes of our own input
+            if (pid == LocalPlayerId) return;
             for (int i = 0; i < inputs.Length; i++)
             {
                 int frame = startFrame + i;
@@ -114,8 +120,8 @@ namespace Bomberman.Net.Lockstep
             }
         }
 
-        /// <summary>Try to advance exactly one frame. Steps the deterministic sim only if both players'
-        /// inputs for the current frame are in hand; otherwise reports a stall and changes nothing.</summary>
+        /// <summary>Try to advance exactly one frame. On success, snapshot the new state, store it, and
+        /// announce its hash so the peer can check for a desync.</summary>
         public LockstepStep TryAdvance()
         {
             int f = _session.CurrentFrame;
@@ -128,13 +134,82 @@ namespace Bomberman.Net.Lockstep
 
             _session.Step(inputs, FixedTimeStep);
 
-            // Free memory we will never need again.
+            // Week 4: confirm the new frame's state and broadcast its fingerprint.
+            var snap = _session.CaptureState();          // Frame = f + 1, Hash = state after frame f
+            _snapshots.Store(snap);
+            var (px, py) = LocalPlayerPos();
+            _net.SendChecksum(snap.Frame, snap.Hash, px, py);
+
             _localInputs.Remove(f - 120);
             _remoteInputs.Remove(f - 120);
             return LockstepStep.Stepped;
         }
 
-        /// <summary>True if we are currently blocked waiting on the remote input for this frame.</summary>
+        /// <summary>A peer told us its hash for <paramref name="frame"/>. Compare; on a mismatch report
+        /// it, and if we are the host, push our authoritative snapshot of that frame back to resync them.</summary>
+        public void HandleRemoteChecksum(int frame, int remoteHash, int remotePosX, int remotePosY)
+        {
+            var report = _detector.Check(frame, remoteHash, remotePosX, remotePosY);
+            if (report == null) return;
+
+            LastDesync = report;
+            OnDesyncDetected?.Invoke(report.Value);
+
+            if (IsAuthoritative && _snapshots.TryGet(frame, out var authoritative))
+                _net.BroadcastStateSync(authoritative.Serialize());   // host corrects the client
+        }
+
+        /// <summary>Apply a snapshot pushed by the host (resync). Restore the world to the authoritative
+        /// state; buffered inputs from that frame on are replayed as lockstep resumes.</summary>
+        public void ApplyResync(byte[] snapshotBytes)
+        {
+            var snap = GameStateSnapshot.Deserialize(snapshotBytes);
+            _session.RestoreState(snap);     // CurrentFrame jumps to snap.Frame
+            _snapshots.Clear();
+            _snapshots.Store(snap);          // re-seed with the authoritative state
+            ResyncCount++;
+            OnResynced?.Invoke(snap.Frame);
+        }
+
+        /// <summary>Demo hook: nudge the local player's position by one unit so this peer's state (and
+        /// hence its hash) diverges from the remote, proving desync detection and resync fire.</summary>
+        public void ForceDesync()
+        {
+            var world = _session.Simulation.World;
+            var players = world.Players.GetAll();
+            var pents = world.Players.GetEntities();
+            for (int i = 0; i < players.Count; i++)
+            {
+                if (players[i].PlayerId != (uint)LocalPlayerId) continue;
+                var te = world.Transforms.GetEntities();
+                for (int t = 0; t < te.Count; t++)
+                {
+                    if (!te[t].Equals(pents[i])) continue;
+                    var tr = world.Transforms.Get(t);
+                    tr.Position += new Vector2(1, 0);
+                    world.Transforms.Set(t, tr);
+                    return;
+                }
+            }
+        }
+
+        private (int x, int y) LocalPlayerPos()
+        {
+            var world = _session.Simulation.World;
+            var players = world.Players.GetAll();
+            var pents = world.Players.GetEntities();
+            for (int i = 0; i < players.Count; i++)
+            {
+                if (players[i].PlayerId != (uint)LocalPlayerId) continue;
+                var te = world.Transforms.GetEntities();
+                var tr = world.Transforms.GetAll();
+                for (int t = 0; t < te.Count; t++)
+                    if (te[t].Equals(pents[i]))
+                        return ((int)tr[t].Position.X, (int)tr[t].Position.Y);
+            }
+            return (0, 0);
+        }
+
         public bool IsStalledWaitingForRemote =>
             _localInputs.ContainsKey(_session.CurrentFrame) && !_remoteInputs.ContainsKey(_session.CurrentFrame);
     }

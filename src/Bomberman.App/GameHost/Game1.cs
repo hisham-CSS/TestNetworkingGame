@@ -61,6 +61,8 @@ namespace Bomberman.App
         private GameSession? _netSession;
         private LockstepSession? _lockstep;
         private string _hud = "";
+        private string _desyncMsg = "";
+        private double _desyncMsgUntil;
 
         public Game1()
         {
@@ -198,8 +200,17 @@ namespace Bomberman.App
             _netSession = new GameSession(_seed, TotalPlayers);
             int delay = LockstepSession.CalculateInputDelay(_net!.LastPingMs);
             _lockstep = new LockstepSession(_netSession, _net, _localPlayerId, delay);
+
+            // Week 4: host's authoritative snapshot arrives here; restore it.
+            _net.OnStateSyncReceived += bytes => _lockstep!.ApplyResync(bytes);
+            _lockstep.OnDesyncDetected += r => Flash($"DESYNC F{r.Frame}");
+            _lockstep.OnResynced += fr => Flash($"RESYNCED -> F{fr}");
+
             _mode = Mode.NetPlaying;
         }
+
+        private void Flash(string msg) { _desyncMsg = msg; _desyncMsgUntil = _clock + 2.5; }
+        private double _clock;
 
         private void LeaveToMenu()
         {
@@ -215,6 +226,7 @@ namespace Bomberman.App
         protected override void Update(GameTime gameTime)
         {
             var k = Keyboard.GetState();
+            _clock += gameTime.ElapsedGameTime.TotalSeconds;
             _net?.Update();
 
             switch (_mode)
@@ -296,6 +308,7 @@ namespace Bomberman.App
         private void UpdateNetPlaying(KeyboardState k)
         {
             if (Pressed(k, Keys.Escape)) { LeaveToMenu(); return; }
+            if (Pressed(k, Keys.K)) _lockstep!.ForceDesync();   // demo: corrupt our state -> desync
             _lockstep!.SubmitLocalInput(ReadInput(k));
             while (_lockstep.TryAdvance() == LockstepStep.Stepped) { }
             _hud = _lockstep.IsStalledWaitingForRemote
@@ -415,6 +428,10 @@ namespace Bomberman.App
         {
             T(_hud, 8, 8, 2, _lockstep!.IsStalledWaitingForRemote ? REDC : GREEN);
             T("P" + _localPlayerId, W - 40, 8, 2, AMBER);
+            T("K: FORCE DESYNC", 8, H - 20, 2, MUT);
+            if (_lockstep.ResyncCount > 0) T("RESYNCS " + _lockstep.ResyncCount, W - 120, H - 20, 2, MUT);
+            if (_desyncMsg != "" && _clock < _desyncMsgUntil)
+                T(_desyncMsg, 8, 28, 2, REDC);
         }
 
         private void DrawGame(GameSession? src)

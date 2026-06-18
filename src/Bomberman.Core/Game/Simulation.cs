@@ -7,6 +7,10 @@ namespace Bomberman.Core
     public class Simulation : IGameSimulation<InputState>
     {
         public World World { get; private set; }
+
+        /// <summary>Frames simulated so far. Advances each Update; restored with a snapshot. This is
+        /// the single source of truth for "what frame are we on" (GameSession just reflects it).</summary>
+        public int Frame { get; private set; }
         private const int MapWidth = 15;
         private const int MapHeight = 13;
         private const int TileSize = 32;
@@ -103,6 +107,17 @@ namespace Bomberman.Core
             UpdatePlayers(inputs, dt);
             UpdateBombs();
             UpdateExplosions();
+            Frame++;
+        }
+
+        /// <summary>Snapshot the world at the current frame (Week 4).</summary>
+        public GameStateSnapshot CaptureState() => GameStateSnapshot.Capture(World, Frame);
+
+        /// <summary>Restore the world (and frame counter) from a snapshot (Week 4).</summary>
+        public void RestoreState(GameStateSnapshot state)
+        {
+            state.Restore(World);
+            Frame = state.Frame;
         }
 
         private void UpdatePlayers(InputState[] inputs, float dt)

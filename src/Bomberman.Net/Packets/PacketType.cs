@@ -19,6 +19,7 @@ namespace Bomberman.Net.Packets
         StateSync = 10,        // Full state snapshot (used from Week 4-5)
         StateChunk = 11,       // One fragment of a chunked snapshot
         Ping = 12,             // Latency probe (carries a timestamp)
-        Pong = 13              // Reply to a Ping (echoes the timestamp)
+        Pong = 13,             // Reply to a Ping (echoes the timestamp)
+        Checksum = 14          // Week 4: a peer's state hash for a confirmed frame (desync detection)
     }
 }

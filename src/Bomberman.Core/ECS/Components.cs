@@ -17,6 +17,20 @@ namespace Bomberman.Core
         public List<T> GetAll() => _components;
         public List<Entity> GetEntities() => _entities;
 
+        // Week 4: snapshot support. CaptureState returns an independent copy of the pool's parallel
+        // lists; RestoreState swaps fresh copies back in. Copies (not references) so a stored snapshot
+        // never aliases the live world.
+        public (List<Entity> entities, List<T> components) CaptureState()
+            => (new List<Entity>(_entities), new List<T>(_components));
+
+        public void RestoreState(List<Entity> entities, List<T> components)
+        {
+            _entities = new List<Entity>(entities);
+            _components = new List<T>(components);
+        }
+
+        public void Clear() { _entities.Clear(); _components.Clear(); }
+
         public void Remove(Entity entity)
         {
             int index = _entities.IndexOf(entity);

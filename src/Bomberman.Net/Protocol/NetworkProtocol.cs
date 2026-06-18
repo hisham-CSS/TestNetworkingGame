@@ -53,6 +53,10 @@ namespace Bomberman.Net.Protocol
         public static byte[] CreatePing(long timestamp) => Serialize(new PingPacket { Timestamp = timestamp });
         public static byte[] CreatePong(long timestamp) => Serialize(new PongPacket { Timestamp = timestamp });
 
+        // --- Checksum (Week 4 desync detection) ---
+        public static byte[] CreateChecksum(int frame, int hash, int posX, int posY)
+            => Serialize(new ChecksumPacket { Frame = frame, Hash = hash, PosX = posX, PosY = posY });
+
         // --- Input ---
         public static byte[] CreateInputPacket(int playerId, int startFrame, TInput[] inputs, int posX, int posY, int stateHash)
             => Serialize(new InputPacket<TInput>
@@ -166,6 +170,15 @@ namespace Bomberman.Net.Protocol
             reader.ReadByte();
             var p = StateChunkPacket.Deserialize(reader);
             return (p.Index, p.TotalChunks, p.Data);
+        }
+
+        public static (int frame, int hash, int posX, int posY) ReadChecksum(byte[] data)
+        {
+            using var ms = new MemoryStream(data);
+            using var reader = new BinaryReader(ms);
+            reader.ReadByte();
+            var p = ChecksumPacket.Deserialize(reader);
+            return (p.Frame, p.Hash, p.PosX, p.PosY);
         }
 
         public static (int pid, int startFrame, TInput[] inputs, int posX, int posY, int hash) ReadInputPacket(byte[] data)

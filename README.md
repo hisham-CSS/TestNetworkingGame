@@ -1,48 +1,52 @@
-# Week 3 — Input Synchronization & Lockstep Networking  (branch week3-networking)
+# Week 4 - State Hashing & Desync Detection  (branch week4-desync)
 
-Built on the Week 2 final (week2-architecture). The `Bomberman.Net` seam is filled in: two players
-connect over UDP and stay in perfect sync by exchanging INPUTS (not state) under a lockstep model.
+Built on the Week 3 final (week3-networking). Two networked peers now prove, every frame, that their
+deterministic simulations still agree - and recover when they don't.
 
-## Solution layout
-    src/Bomberman.Core/     reusable engine library (unchanged from Week 2)
-    src/Bomberman.Net/      the networking library — now implemented
-        ITransport.cs           transport seam (from Week 2)
-        UdpTransport.cs         concrete non-blocking UDP socket (+ broadcast for discovery)
-        Packets/                tagged binary packets (Input, Welcome, Lobby, Ping, ...)
-        Protocol/               NetworkProtocol<TInput>: serialize/parse every packet
-        Handlers/               PacketReassembler: rebuild chunked snapshots
-        NetworkController.cs    high-level routing, heartbeat/ping/timeout, lobby, input send
-        Lockstep/               LockstepSession: the stall-then-delay lockstep rule
-    src/Bomberman.App/      MonoGame View — single-player loop OR networked lockstep
-    Bomberman.Tests/Net/    ProtocolTests, LobbyTests, LockstepTests
-    docs/NetworkProtocol.md the wire format
+## Solution layout (new/changed this week)
+    src/Bomberman.Core/
+        Game/GameStateSnapshot.cs     complete, restorable world copy + BINARY serialize/deserialize
+        Game/Simulation.cs            owns the Frame counter; implements CaptureState / RestoreState
+        Game/IGameSimulation.cs       extended with the snapshot boundary
+        Determinism/StateHasher.cs    Jenkins per-frame fingerprint (from Week 1)
+        Determinism/Crc32.cs          CRC-32 checksum (lecture comparison vs Jenkins)
+        Snapshots/SnapshotStore.cs    bounded ring of recent snapshots, looked up by frame
+    src/Bomberman.Net/
+        Packets/ChecksumPacket.cs     a peer's state hash for a confirmed frame
+        Desync/DesyncDetector.cs      compares remote vs local hash; emits a DesyncReport
+        Lockstep/LockstepSession.cs   snapshots each frame, exchanges checksums, detects + resyncs
+        NetworkController.cs          SendChecksum / OnChecksumReceived / BroadcastStateSync
+    Bomberman.Tests/
+        Core/SnapshotTests.cs         capture/restore + binary round-trip + ring eviction
+        Core/SerializationTests.cs    CRC-32 check value + Jenkins determinism
+        Net/DesyncTests.cs            detection, and resync convergence
 
-## What changed from Week 2
-    NEW   UdpTransport          concrete ITransport: non-blocking UDP, port-retry, broadcast
-    NEW   PacketType + Packets  14 tagged binary packet types (1 leading type byte each)
-    NEW   NetworkProtocol<T>    one place that knows the wire format (Create* / Read*)
-    NEW   NetworkController<T>  connection lifecycle: join/welcome/lobby/start, ping, timeouts
-    NEW   LockstepSession       advance frame F only when BOTH players' inputs for F are in hand;
-                                otherwise STALL. InputDelay=0 is pure stall; InputDelay=d hides
-                                latency by scheduling local input d frames ahead.
-    NEW   PacketReassembler     reassembles snapshots split across datagrams (used Weeks 4-5)
+## How desync detection works
+1. After each confirmed frame, lockstep captures a snapshot (its hash is the frame's fingerprint) and
+   stores it in the SnapshotStore.
+2. It announces that hash to the peer in a Checksum packet.
+3. On receiving a remote checksum, DesyncDetector compares it to the local hash for that frame. Equal =
+   in sync; different = a desync, reported with frame, both hashes, and the remote position.
+4. Resync: the host (authoritative, player 0) ships its snapshot of the diverged frame via StateSync;
+   the client deserializes and Restores it, then lockstep resumes from the authoritative state.
 
-## The lockstep rule (the heart of the week)
-Send inputs, not state. Each peer schedules its captured input `InputDelay` frames ahead and sends a
-short history (loss insurance). The simulation only steps a frame once both players' inputs for that
-frame have arrived; a missing input means STALL, never guess. Because the sim is deterministic
-(Weeks 1-2) and both peers share a seed (delivered in `Welcome`), identical inputs produce identical
-worlds on both machines.
+The StateSync / StateChunk packets and the PacketReassembler that Week 3 defined but left idle are
+exactly what carries the snapshot here.
 
-## Build · run · test  (.NET 9 SDK + MonoGame DesktopGL)
+## Build / run / test  (.NET 9 SDK + MonoGame DesktopGL)
     dotnet build Bomberman.sln
-    dotnet run --project src/Bomberman.App      # [H]ost  [J]oin 127.0.0.1  [F]ind LAN  [R] ready
-    dotnet test                                 # incl. ProtocolTests, LobbyTests, LockstepTests
-In-game (single-player): WASD / arrows to move, Space to place a bomb.
-To play locally: run two copies — press H in one, J in the other, R in both to start.
+    dotnet run --project src/Bomberman.App     # in a match, press K to force a desync and watch it recover
+    dotnet test                                # incl. SnapshotTests, SerializationTests, DesyncTests
+In a networked match the HUD shows the current frame, ping, "DESYNC Fn" when detected, and a resync
+count. Pressing K on the CLIENT is the clearest demo: it corrupts the client's state and the host
+corrects it.
 
-## Interface note
-Still named `Bomberman.Net` (not `Chronos.Net`) and `NetworkController` is generic over the input
-type as a first step toward framework independence. The `Chronos.Core / Chronos.Net / Chronos.Rollback`
-rename, client-side prediction, and rollback all arrive in Week 5; snapshot state sync (StateSync /
-StateChunk packets) is wired here but exercised in Weeks 4-5.
+## Hashing choices (lecture)
+Jenkins one-at-a-time hashes the world's fields directly (no serialization, very fast). CRC-32 hashes
+the serialized bytes (classic integrity check). SHA-256 is cryptographically strong but ~100x slower
+and unnecessary for trusted-peer desync checks, where we only need to NOTICE divergence. The course
+uses Jenkins as the working checksum and CRC-32 as the point of comparison.
+
+## Looking ahead
+Week 5 reuses this snapshot buffer and per-frame hash to do client-side prediction and full rollback:
+instead of a hard resync to the host, mispredicted frames are rolled back and re-simulated locally.

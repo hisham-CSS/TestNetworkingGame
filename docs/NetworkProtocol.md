@@ -20,6 +20,7 @@ UDP, protocol version 1, little-endian (`BinaryWriter` default). Every packet be
 | 11 | StateChunk | host->client | Snapshot fragment (Weeks 4-5) |
 | 12 | Ping | both | Latency probe (timestamp) |
 | 13 | Pong | both | Echo of a Ping timestamp |
+| 14 | Checksum | both | Week 4: a peer's state hash for a confirmed frame (desync detection) |
 
 ## Connection lifecycle
 1. **Discovery (optional):** client broadcasts `DiscoveryRequest` over a LAN port range; hosts answer with `DiscoveryResponse`.
@@ -32,6 +33,11 @@ UDP, protocol version 1, little-endian (`BinaryWriter` default). Every packet be
   frames of history for loss recovery) via `InputPacket`.
 - A peer advances frame **F only when it holds both players' inputs for F**; otherwise it **stalls**.
 - `Input` packets also carry `PosX/PosY/StateHash` as a sync-check proxy — Week 4 uses these to detect desync.
+
+## Checksum (Week 4)
+`byte Type(14)` · `int Frame` · `int Hash` · `int PosX` · `int PosY`. A peer announces its state
+hash for a confirmed frame; the receiver compares against its own stored hash for that frame. On a
+mismatch the host pushes its authoritative snapshot back via `StateSync` and the client restores it.
 
 ## InputPacket schema
 `byte Type(0)` · `int PlayerId` · `int StartFrame` · `int Count` · `Count × InputState` · `int PosX` · `int PosY` · `int StateHash`
