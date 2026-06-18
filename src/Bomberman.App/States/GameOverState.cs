@@ -137,7 +137,7 @@ namespace Bomberman.App.States
 
         public void Draw(GameTime gameTime)
         {
-            _context.Renderer.ClearScreen(Color.Black);
+            _context.Renderer.ClearScreen(Rendering.Theme.Bg);
             _context.Renderer.BeginDraw();
 
             int centerX = _context.Game.WindowWidth / 2;
@@ -149,12 +149,12 @@ namespace Bomberman.App.States
 
             if (_isReplayView && !_isGameCompleted)
             {
-                titleColor = Color.Orange;
+                titleColor = Rendering.Theme.Accent;
                 scale = 3; // Reduce scale to fit
             }
             else
             {
-                titleColor = _winnerId == -1 ? Color.Gray : Color.Gold;
+                titleColor = _winnerId == -1 ? Rendering.Theme.Muted : Rendering.Theme.Accent;
             }
             
             _context.Renderer.DrawTextCentered(title, centerX, 100, titleColor, scale);
@@ -163,22 +163,22 @@ namespace Bomberman.App.States
             {
                  if (!_isGameCompleted)
                  {
-                     _context.Renderer.DrawTextCentered("Recording stopped before game over.", centerX, 200, Color.White, 2);
+                     _context.Renderer.DrawTextCentered("RECORDING STOPPED BEFORE GAME OVER.", centerX, 200, Rendering.Theme.Text, 2);
                  }
                  else
                  {
-                     _context.Renderer.DrawTextCentered("REPLAY FINISHED", centerX, 250, Color.Cyan, 2);
+                     _context.Renderer.DrawTextCentered("REPLAY FINISHED", centerX, 250, Rendering.Theme.Title, 2);
                  }
-                 _context.Renderer.DrawTextCentered("Press ESC to Return to Menu", centerX, 400, Color.White, 2);
+                 _context.Renderer.DrawTextCentered("PRESS ESC TO RETURN TO MENU", centerX, 400, Rendering.Theme.Text, 2);
             }
             else
             {
                 // Replay Input
-                _context.Renderer.DrawTextCentered("Name your Replay:", centerX, 250, Color.White, 2);
-                _context.Renderer.DrawTextCentered(_replayName + "_", centerX, 280, Color.Yellow, 2);
+                _context.Renderer.DrawTextCentered("NAME YOUR REPLAY:", centerX, 250, Rendering.Theme.Text, 2);
+                _context.Renderer.DrawTextCentered(_replayName + "_", centerX, 280, Rendering.Theme.Accent, 2);
 
-                _context.Renderer.DrawTextCentered("Press ENTER to Save & Exit", centerX, 400, Color.White, 2);
-                _context.Renderer.DrawTextCentered("Press ESC to Discard", centerX, 430, Color.Gray, 2);
+                _context.Renderer.DrawTextCentered("PRESS ENTER TO SAVE AND EXIT", centerX, 400, Rendering.Theme.Text, 2);
+                _context.Renderer.DrawTextCentered("PRESS ESC TO DISCARD", centerX, 430, Rendering.Theme.Muted, 2);
             }
 
             _context.Renderer.EndDraw();

@@ -469,13 +469,15 @@ namespace Bomberman.App.States
 
         public void Draw(GameTime gameTime)
         {
-            _context.Renderer.ClearScreen(Color.CornflowerBlue);
+            _context.Renderer.ClearScreen(Rendering.Theme.Bg);
             _context.Renderer.BeginDraw();
 
             if (_gameSession.Simulation != null)
             {
                 _worldRenderer.DrawWorld(_gameSession.Simulation.World);
             }
+
+            DrawHud();
 
             if (_showDebugOverlay)
             {
@@ -485,11 +487,23 @@ namespace Bomberman.App.States
             _context.Renderer.EndDraw();
         }
 
+        private void DrawHud()
+        {
+            int frame = _gameSession.RollbackSystem.CurrentFrame;
+            _context.Renderer.DrawText($"FRAME {frame}", 8, 8, Rendering.Theme.Ok, 2);
+            if (_context.Network != null)
+                _context.Renderer.DrawText($"PING {_context.Network.LastPingMs}MS", 8, 28, Rendering.Theme.Muted, 2);
+            _context.Renderer.DrawText($"P{_localPlayerId}", _context.Game.WindowWidth - 36, 8, Rendering.Theme.Accent, 2);
+            if (_gameSession.RollbackSystem.IsRecording)
+                _context.Renderer.DrawText("REC", _context.Game.WindowWidth - 100, 8, Rendering.Theme.Bad, 2);
+            _context.Renderer.DrawText("[F1] STATS", 8, _context.Game.WindowHeight - 18, Rendering.Theme.Muted, 1);
+        }
+
         private void DrawDebugStats()
         {
             int y = 10;
             int x = 10;
-            Color c = Color.Yellow;
+            Color c = Rendering.Theme.Accent;
 
             // Ping
             int ping = _context.Network != null ? _context.Network.LastPingMs : 0;

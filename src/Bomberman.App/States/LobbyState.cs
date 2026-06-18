@@ -421,7 +421,7 @@ namespace Bomberman.App.States
 
         public void Draw(GameTime gameTime)
         {
-             _context.Renderer.ClearScreen(Color.CornflowerBlue);
+             _context.Renderer.ClearScreen(Rendering.Theme.Bg);
              _context.Renderer.BeginDraw();
 
              int centerX = _context.Game.WindowWidth / 2;
@@ -429,19 +429,19 @@ namespace Bomberman.App.States
              // If client and waiting for welcome (local ID -1), show connecting
              if (!_isHost && _localPlayerId == -1)
              {
-                 _context.Renderer.DrawTextCentered("CONNECTING...", centerX, 300, Color.White, 4);
+                 _context.Renderer.DrawTextCentered("CONNECTING...", centerX, 300, Rendering.Theme.Text, 4);
                  _context.Renderer.EndDraw();
                  return;
              }
 
-             _context.Renderer.DrawTextCentered("LOBBY", centerX, 30, Color.Red, 8);
+             _context.Renderer.DrawTextCentered("LOBBY", centerX, 30, Rendering.Theme.Title, 8);
              
-             _context.Renderer.DrawTextCentered($"PLAYERS: {_connectedPlayerCount} / {_totalPlayersForGame}", centerX, 70, Color.White, 3);
+             _context.Renderer.DrawTextCentered($"PLAYERS: {_connectedPlayerCount} / {_totalPlayersForGame}", centerX, 70, Rendering.Theme.Text, 3);
              
              // Instructions
              if (_isHost)
              {
-                 _context.Renderer.DrawTextCentered("ADJUST PLAYER COUNT:  [2]   [3]   [4]", centerX, 100, Color.Yellow, 2);
+                 _context.Renderer.DrawTextCentered("ADJUST PLAYER COUNT:  [2]   [3]   [4]", centerX, 100, Rendering.Theme.Accent, 2);
              }
              
              // Slots
@@ -451,7 +451,7 @@ namespace Bomberman.App.States
              for(int i=0; i<_totalPlayersForGame; i++)
              {
                  string slotInfo = $"SLOT {i+1}:   ";
-                 Color c = Color.DarkGray;
+                 Color c = Rendering.Theme.Muted;
                  
                  // Check occupancy: Host (0) is always occupied if we are here. Others check slots.
                  bool occupied = (i == 0) || (_lobbySlots[i] != null);
@@ -460,7 +460,7 @@ namespace Bomberman.App.States
                  {
                      bool ready = _playerReady.ContainsKey(i) && _playerReady[i];
                      slotInfo += ready ? "READY" : "NOT READY";
-                     c = ready ? Color.Lime : Color.Orange;
+                     c = ready ? Rendering.Theme.Ok : Rendering.Theme.Bad;
                      
                      if (i == _localPlayerId) slotInfo += "  (YOU)";
                  }
@@ -474,7 +474,7 @@ namespace Bomberman.App.States
 
              // Footer Controls
              string statusMsg = "";
-             Color statusColor = Color.Gray;
+             Color statusColor = Rendering.Theme.Muted;
 
             bool allReady = true;
             for (int i = 0; i < _connectedPlayerCount; i++) if (!_playerReady.ContainsKey(i) || !_playerReady[i]) allReady = false;
@@ -484,7 +484,7 @@ namespace Bomberman.App.States
                  if (_connectedPlayerCount >= _totalPlayersForGame && allReady)
                  {
                      statusMsg = "PRESS [ENTER] TO START GAME";
-                     statusColor = Color.Green;
+                     statusColor = Rendering.Theme.Ok;
                  }
                  else
                  {
@@ -502,7 +502,7 @@ namespace Bomberman.App.States
              _context.Renderer.DrawTextCentered(statusMsg, centerX, 350, statusColor, 2);
 
              string readyMsg = _amIReady ? "PRESS [SPACE] TO UNREADY" : "PRESS [SPACE] TO READY UP";
-             _context.Renderer.DrawTextCentered(readyMsg, centerX, 400, _amIReady ? Color.Cyan : Color.Magenta, 2);
+             _context.Renderer.DrawTextCentered(readyMsg, centerX, 400, _amIReady ? Rendering.Theme.Ok : Rendering.Theme.Accent, 2);
 
              _context.Renderer.EndDraw();
         }

@@ -24,9 +24,9 @@ namespace Bomberman.App.States
         private string[] _menuOptions = new string[] 
         { 
             "HOST GAME", 
-            "JOIN GAME", 
+            "FIND LAN GAME", 
             "REPLAYS", 
-            "EXIT" 
+            "QUIT" 
         };
 
         public MenuState(GameContext context, GameStateManager manager, string? message = null)
@@ -93,12 +93,13 @@ namespace Bomberman.App.States
 
         public void Draw(GameTime gameTime)
         {
-            _context.Renderer.ClearScreen(Color.CornflowerBlue);
+            _context.Renderer.ClearScreen(Rendering.Theme.Bg);
             _context.Renderer.BeginDraw();
 
             int centerX = _context.Game.WindowWidth / 2;
             // Title
-            _context.Renderer.DrawTextCentered("BOMBERMAN", centerX, 80, Color.White, 8);
+            _context.Renderer.DrawTextCentered("BOMBERMAN", centerX, 80, Rendering.Theme.Title, 8);
+            _context.Renderer.DrawTextCentered("ROLLBACK NETWORKING", centerX, 135, Rendering.Theme.Muted, 2);
             
             // Menu
             int startY = 220;
@@ -107,7 +108,7 @@ namespace Bomberman.App.States
             for (int i = 0; i < _menuOptions.Length; i++)
             {
                 bool selected = (i == _selectedIndex);
-                Color color = selected ? Color.Yellow : Color.White;
+                Color color = selected ? Rendering.Theme.Accent : Rendering.Theme.Text;
                 string text = _menuOptions[i];
                 if (selected) text = $"> {text} <";
                 
@@ -117,11 +118,11 @@ namespace Bomberman.App.States
             // Message
             if (!string.IsNullOrEmpty(_message))
             {
-                _context.Renderer.DrawTextCentered(_message, centerX, 380, Color.OrangeRed, 2);
+                _context.Renderer.DrawTextCentered(_message, centerX, 380, Rendering.Theme.Bad, 2);
             }
             
             // Controls Hint
-            _context.Renderer.DrawTextCentered("[UP/DOWN] Select   [ENTER] Confirm", centerX, 400, Color.LightGray, 1);
+            _context.Renderer.DrawTextCentered("[UP/DOWN] SELECT   [ENTER] CONFIRM", centerX, 400, Rendering.Theme.Muted, 1);
 
             _context.Renderer.EndDraw();
         }

@@ -94,7 +94,7 @@ namespace Bomberman.App.Rendering
                 Vector2 pos = ToVec2(trans.Position);
                 Vector2 size = ToVec2(trans.Size);
                 
-                Color[] playerColors = new Color[] { Color.White, Color.Blue, Color.Red, Color.Green };
+                Color[] playerColors = new Color[] { Color.DodgerBlue, Color.Crimson, Color.MediumSeaGreen, Color.Gold };
                 DrawRect(pos, size, playerColors[i % playerColors.Length]);
                 
                 // Eyes

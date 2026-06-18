@@ -44,16 +44,16 @@ namespace Bomberman.App.States
 
         public void Draw(GameTime gameTime)
         {
-            _context.Renderer.ClearScreen(Color.Black);
+            _context.Renderer.ClearScreen(Rendering.Theme.Bg);
             _context.Renderer.BeginDraw();
 
             int centerX = _context.Game.WindowWidth / 2;
             int centerY = _context.Game.WindowHeight / 2;
 
             // Draw Message Box
-            _context.Renderer.DrawTextCentered("NOTICE", centerX, centerY - 50, Color.Yellow, 4);
-            _context.Renderer.DrawTextCentered(_message, centerX, centerY + 20, Color.White, 2);
-            _context.Renderer.DrawTextCentered("Press [ENTER] to Continue", centerX, centerY + 100, Color.Gray, 2);
+            _context.Renderer.DrawTextCentered("NOTICE", centerX, centerY - 50, Rendering.Theme.Title, 4);
+            _context.Renderer.DrawTextCentered(_message, centerX, centerY + 20, Rendering.Theme.Text, 2);
+            _context.Renderer.DrawTextCentered("PRESS [ENTER] TO CONTINUE", centerX, centerY + 100, Rendering.Theme.Muted, 2);
 
             _context.Renderer.EndDraw();
         }

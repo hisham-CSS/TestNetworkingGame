@@ -161,21 +161,21 @@ namespace Bomberman.App.States
 
         public void Draw(GameTime gameTime)
         {
-            _context.Renderer.ClearScreen(Color.DarkSlateGray);
+            _context.Renderer.ClearScreen(Rendering.Theme.Bg);
             _context.Renderer.BeginDraw();
 
             int centerX = _context.Game.WindowWidth / 2;
             int width = _context.Game.WindowWidth;
             
-            _context.Renderer.DrawTextCentered("SERVER BROWSER", centerX, 50, Color.White, 4); // Match Header Style
-            _context.Renderer.DrawTextCentered("Scanning LAN...", centerX, 100, Color.Gray, 2);
+            _context.Renderer.DrawTextCentered("FIND LAN GAME", centerX, 50, Rendering.Theme.Title, 4);
+            _context.Renderer.DrawTextCentered("SCANNING LAN...", centerX, 100, Rendering.Theme.Muted, 2);
 
             int startY = 150;
             int lineHeight = 30;
 
             if (_servers.Count == 0)
             {
-                _context.Renderer.DrawTextCentered("NO SERVERS FOUND...", centerX, startY, Color.Gray, 2);
+                _context.Renderer.DrawTextCentered("NO SERVERS FOUND...", centerX, startY, Rendering.Theme.Muted, 2);
             }
             else
             {
@@ -187,7 +187,7 @@ namespace Bomberman.App.States
                     string row = $"{server.Name} [{server.Players}/{server.MaxPlayers}]";
                     if (selected) row = $"> {row} <";
                     
-                    Color color = selected ? Color.Yellow : Color.White;
+                    Color color = selected ? Rendering.Theme.Accent : Rendering.Theme.Text;
                     _context.Renderer.DrawTextCentered(row, centerX, startY + (i * lineHeight), color, 2);
                 }
             }

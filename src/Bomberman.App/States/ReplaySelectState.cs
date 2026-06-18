@@ -111,18 +111,18 @@ namespace Bomberman.App.States
 
         public void Draw(GameTime gameTime)
         {
-            _context.Renderer.ClearScreen(Color.Black);
+            _context.Renderer.ClearScreen(Rendering.Theme.Bg);
             _context.Renderer.BeginDraw();
 
             int centerX = _context.Game.WindowWidth / 2;
             int startY = 80;
             int gap = 30;
 
-            _context.Renderer.DrawTextCentered("REPLAYS", centerX, 30, Color.White, 4);
+            _context.Renderer.DrawTextCentered("REPLAYS", centerX, 30, Rendering.Theme.Title, 4);
 
             if (_replayFiles.Count == 0)
             {
-                _context.Renderer.DrawTextCentered("No Replays Found", centerX, startY, Color.Gray, 2);
+                _context.Renderer.DrawTextCentered("NO REPLAYS FOUND", centerX, startY, Rendering.Theme.Muted, 2);
             }
             else
             {
@@ -136,7 +136,7 @@ namespace Bomberman.App.States
                     bool selected = (i == _selection);
                     string text = filename; 
                     if (selected) text = $"> {text} <";
-                    Color color = selected ? Color.Yellow : Color.White;
+                    Color color = selected ? Rendering.Theme.Accent : Rendering.Theme.Text;
                     
                     // index for drawing position (0 to MaxVisibleItems-1)
                     int drawIndex = i - _scrollOffset;
@@ -146,10 +146,10 @@ namespace Bomberman.App.States
                 
                 // Scroll Indicators
                 if (_scrollOffset > 0)
-                    _context.Renderer.DrawTextCentered("^", centerX, startY - 20, Color.Gray, 1);
+                    _context.Renderer.DrawTextCentered("^", centerX, startY - 20, Rendering.Theme.Muted, 1);
                 
                 if (_scrollOffset + itemsToShow < _replayFiles.Count)
-                    _context.Renderer.DrawTextCentered("v", centerX, startY + (itemsToShow * gap), Color.Gray, 1);
+                    _context.Renderer.DrawTextCentered("v", centerX, startY + (itemsToShow * gap), Rendering.Theme.Muted, 1);
             }
 
             _context.Renderer.EndDraw();
