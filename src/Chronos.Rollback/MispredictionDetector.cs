@@ -26,32 +26,14 @@ namespace Chronos.Rollback
 
         public void DetectInputMisprediction(int pid, int startFrame, TInput[] inputs, int currentFrame, InputRecorder<TInput> recorder, ref int earliestMisprediction)
         {
-            // Process all inputs in the packet (Oldest first)
-            for (int i = inputs.Length - 1; i >= 0; i--)
-            {
-                int frame = startFrame - i;
-                TInput input = inputs[i];
-
-                if (frame < 0) continue;
-
-                // CHECK FOR MISPREDICTION (INPUTS)
-                if (frame < currentFrame)
-                {
-                    TInput[] usedInputs = recorder.GetFrame(frame);
-
-                    if (usedInputs != null && usedInputs.Length > pid && !input.Equals(usedInputs[pid]))
-                    {
-                        if (earliestMisprediction == -1 || frame < earliestMisprediction)
-                        {
-                            earliestMisprediction = frame;
-                        }
-
-                        // Correct the history with the authoritative input
-                        usedInputs[pid] = input;
-                        recorder.UpdateFrame(frame, usedInputs);
-                    }
-                }
-            }
+            // TODO (LA3 - Misprediction detection): find the earliest frame we guessed wrong.
+            //  The packet carries the peer's REAL inputs: inputs[i] is for frame (startFrame - i).
+            //  For each frame that is >= 0 AND already simulated (frame < currentFrame):
+            //   - Read what we actually used: var used = recorder.GetFrame(frame);
+            //   - If used has an entry for this player and !inputs[i].Equals(used[pid]) it was mispredicted:
+            //       * record the EARLIEST such frame into earliestMisprediction,
+            //       * correct the history: used[pid] = inputs[i]; recorder.UpdateFrame(frame, used);
+            throw new System.NotImplementedException("LA3: implement DetectInputMisprediction");
         }
 
         public void DetectStateDesync(int pid, int frame, int remoteHash, int currentFrame, SnapshotStore<TState> snapshots, ref int earliestMisprediction)

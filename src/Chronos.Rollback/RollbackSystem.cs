@@ -122,10 +122,12 @@ namespace Chronos.Rollback
 
         public int CalculateTargetSteps(int localFrame, int hostFrame)
         {
-             int lag = hostFrame - localFrame; 
-             if (lag > 2) return 1 + Math.Min(lag, 8); 
-             else if (lag < -5) return 0;
-             return 1;
+            // TODO (LA3 - Time sync): return how many simulation steps to take this tick.
+            //  - lag = hostFrame - localFrame  (how far the host is ahead of us).
+            //  - If lag > 2 (we are behind): take extra steps to catch up: 1 + Min(lag, 8).
+            //  - If lag < -5 (we are too far ahead): stall this tick: return 0.
+            //  - Otherwise: take one normal step: return 1.
+            throw new System.NotImplementedException("LA3: implement CalculateTargetSteps");
         }
 
         public void SyncToFrame(int frame)
@@ -297,11 +299,11 @@ namespace Chronos.Rollback
 
          private TInput PredictInputForPlayer(int playerId)
         {
-            if (_lastConfirmedRemoteInputs.TryGetValue(playerId, out var lastInput))
-            {
-                return lastInput;
-            }
-            return new TInput(); 
+            // TODO (LA3 - Prediction): predict a remote player's input for the current frame.
+            //  - If we have a last-confirmed input for this player
+            //    (_lastConfirmedRemoteInputs.TryGetValue(playerId, out var last)), repeat it.
+            //  - Otherwise return a default input: new TInput().
+            throw new System.NotImplementedException("LA3: implement PredictInputForPlayer");
         }
 
 

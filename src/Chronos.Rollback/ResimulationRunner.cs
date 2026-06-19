@@ -33,50 +33,18 @@ namespace Chronos.Rollback
             int totalPlayers,
             bool isRecording)
         {
-            _telemetry.LogWarning($"[Chronos] ROLLBACK from frame {currentFrame} to {mispredictedFrame}");
-            _telemetry.RecordRollback(currentFrame, mispredictedFrame);
-
-            if (!snapshotStore.TryGet(mispredictedFrame - 1, out TState snapshot))
-            {
-                _telemetry.LogError($"!!! CRITICAL: Cannot rollback, no snapshot for frame {mispredictedFrame - 1}");
-                return;
-            }
-            
-            simulation.RestoreState(snapshot);
-
-            for (int frame = mispredictedFrame; frame < currentFrame; frame++)
-            {
-                TInput[] inputs = new TInput[totalPlayers];
-                
-                if (localInputBuffer.ContainsKey(frame)) inputs[localPlayerId] = localInputBuffer[frame];
-
-                for (int i = 0; i < totalPlayers; i++)
-                {
-                    if (i == localPlayerId) continue;
-                    if (remoteInputBuffer.ContainsKey(frame) && remoteInputBuffer[frame].ContainsKey(i))
-                    {
-                        inputs[i] = remoteInputBuffer[frame][i]; 
-                    }
-                    else
-                    {
-                        // Prediction Logic
-                        if (lastConfirmedRemoteInputs.TryGetValue(i, out var lastInput))
-                        {
-                            inputs[i] = lastInput;
-                        }
-                        else
-                        {
-                            inputs[i] = new TInput(); // Default
-                        }
-                    }
-                }
-
-                simulation.Update(inputs, _fixedTimeStep);
-
-                snapshotStore.Save(frame, simulation.CaptureState());
-
-                if (isRecording) recorder.UpdateFrame(frame, inputs);
-            }
+            // TODO (LA3 - Rollback and resimulation): rewind to before the wrong frame, replay to now.
+            //  1. Restore the snapshot from the frame BEFORE the misprediction:
+            //       if (!snapshotStore.TryGet(mispredictedFrame - 1, out TState snapshot)) return;  // bail safely
+            //       simulation.RestoreState(snapshot);
+            //  2. Replay each frame from mispredictedFrame up to (but not including) currentFrame:
+            //       - Build TInput[totalPlayers]: local input from localInputBuffer[frame];
+            //         each remote input from remoteInputBuffer[frame][i] if known, else predict
+            //         (lastConfirmedRemoteInputs[i] if present, else new TInput()).
+            //       - simulation.Update(inputs, _fixedTimeStep);
+            //       - snapshotStore.Save(frame, simulation.CaptureState());
+            //       - if (isRecording) recorder.UpdateFrame(frame, inputs);
+            throw new System.NotImplementedException("LA3: implement PerformRollback");
         }
     }
 }
