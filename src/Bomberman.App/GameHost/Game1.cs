@@ -198,7 +198,12 @@ namespace Bomberman.App
         private void BeginMatch()
         {
             _netSession = new GameSession(_seed, TotalPlayers);
-            int delay = LockstepSession.CalculateInputDelay(_net!.LastPingMs);
+            // Lockstep needs a cushion: the peer's input for a frame must be in hand BEFORE we reach it,
+            // or we stall. A 1-frame delay leaves no slack for the per-frame send/recv cadence, so on a
+            // fast link we stall constantly and it feels far laggier than the ping. Floor the delay at a
+            // few frames (still tiny, ~50ms) so play stays smooth; the ping-based value scales up from there.
+            const int MinNetDelayFrames = 3;
+            int delay = LockstepSession.CalculateInputDelay(_net!.LastPingMs, minDelay: MinNetDelayFrames);
             _lockstep = new LockstepSession(_netSession, _net, _localPlayerId, delay);
 
             // Week 4: host's authoritative snapshot arrives here; restore it.
