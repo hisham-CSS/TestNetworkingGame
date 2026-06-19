@@ -23,47 +23,24 @@ namespace Bomberman.Net.Packets
 
         public void Serialize(BinaryWriter writer)
         {
-            writer.Write((byte)Type);
-            writer.Write(PlayerId);
-            writer.Write(StartFrame);
-
-            writer.Write(Inputs.Length);
-            for (int i = 0; i < Inputs.Length; i++)
-            {
-                Inputs[i].Serialize(writer);
-            }
-
-            writer.Write(PosX);
-            writer.Write(PosY);
-            writer.Write(StateHash);
+            // TODO (LA2 - Protocol): write this packet to the wire.
+            //  1. Write the leading type byte:           writer.Write((byte)Type);
+            //  2. Write PlayerId, then StartFrame (ints).
+            //  3. Write the input count (Inputs.Length), then each input: Inputs[i].Serialize(writer);
+            //  4. Write PosX, PosY, StateHash (ints).
+            //  Read them back in the SAME order in Deserialize.
+            throw new System.NotImplementedException("LA2: implement InputPacket.Serialize");
         }
 
         public static InputPacket<TInput> Deserialize(BinaryReader reader)
         {
-            var p = new InputPacket<TInput>();
-            p.PlayerId = reader.ReadInt32();
-            p.StartFrame = reader.ReadInt32();
-
-            int count = reader.ReadInt32();
-
-            // Hardening: never trust a length from the wire. If the claimed count exceeds the bytes
-            // actually available, bail out with an empty history instead of allocating wildly.
-            if (count < 0 || (reader.BaseStream.CanSeek && count > (reader.BaseStream.Length - reader.BaseStream.Position)))
-            {
-                p.Inputs = new TInput[0];
-                return p;
-            }
-
-            p.Inputs = new TInput[count];
-            for (int i = 0; i < count; i++)
-            {
-                p.Inputs[i] = TInput.Deserialize(reader);
-            }
-
-            p.PosX = reader.ReadInt32();
-            p.PosY = reader.ReadInt32();
-            p.StateHash = reader.ReadInt32();
-            return p;
+            // TODO (LA2 - Protocol): read the packet back in the SAME order Serialize wrote it.
+            //  - Read PlayerId, StartFrame (ints), then the input count (int).
+            //  - HARDENING: if count < 0, or count is larger than the bytes remaining in the stream,
+            //    return a packet with an empty Inputs array instead of allocating (reject bad input).
+            //  - Otherwise read 'count' inputs with TInput.Deserialize(reader).
+            //  - Read PosX, PosY, StateHash (ints). Return the populated packet.
+            throw new System.NotImplementedException("LA2: implement InputPacket.Deserialize");
         }
     }
 }

@@ -77,27 +77,25 @@ namespace Bomberman.Net.Lockstep
         /// Clamped to a sane range so a bad ping can't make the game unplayably laggy.</summary>
         public static int CalculateInputDelay(int roundTripMs, int minDelay = 1, int maxDelay = 10)
         {
-            double oneWayMs = roundTripMs / 2.0;
-            int frames = (int)Math.Ceiling(oneWayMs / FrameMs);
-            return Math.Clamp(frames, minDelay, maxDelay);
+            // TODO (LA2 - Input delay): convert a round-trip time (ms) into frames of input delay.
+            //  - One-way latency is roughly roundTripMs / 2.
+            //  - Convert ms to frames by dividing by FrameMs (ms per frame), rounding UP (Math.Ceiling).
+            //  - Clamp the result to [minDelay, maxDelay] so a bad ping cannot make the game unplayable.
+            throw new System.NotImplementedException("LA2: implement CalculateInputDelay");
         }
 
         /// <summary>Capture this tick's local input: schedule it `InputDelay` frames ahead and send it
         /// (with a little history behind it) to the peer.</summary>
         public void SubmitLocalInput(InputState input, int posX = 0, int posY = 0, int stateHash = 0)
         {
-            int applyFrame = _nextLocalFrame;
-            _localInputs[applyFrame] = input;
-
-            // Build a short run [startFrame .. applyFrame] so one received packet can cover dropped ones.
-            int startFrame = Math.Max(0, applyFrame - (RedundantHistory - 1));
-            int count = applyFrame - startFrame + 1;
-            var history = new InputState[count];
-            for (int i = 0; i < count; i++)
-                history[i] = _localInputs.TryGetValue(startFrame + i, out var v) ? v : default;
-
-            _net.SendInput(LocalPlayerId, startFrame, history, posX, posY, stateHash);
-            _nextLocalFrame++;
+            // TODO (LA2 - Input delay + loss): schedule and send this tick's input.
+            //  1. The frame this input APPLIES to is _nextLocalFrame (which starts at InputDelay).
+            //     Store it: _localInputs[applyFrame] = input;
+            //  2. Build a short run of recent inputs for redundancy: frames
+            //     [Max(0, applyFrame - (RedundantHistory - 1)) .. applyFrame]. Missing frames -> default.
+            //  3. Send it: _net.SendInput(LocalPlayerId, startFrame, history, posX, posY, stateHash);
+            //  4. Advance _nextLocalFrame by one.
+            throw new System.NotImplementedException("LA2: implement SubmitLocalInput");
         }
 
         /// <summary>Store remote inputs. Each packet carries a run starting at <paramref name="startFrame"/>;
@@ -105,33 +103,26 @@ namespace Bomberman.Net.Lockstep
         /// gaps left by an earlier lost one.</summary>
         public void HandleRemoteInput(int pid, int startFrame, InputState[] inputs, int posX, int posY, int hash)
         {
-            if (pid == LocalPlayerId) return; // ignore echoes of our own input
-            for (int i = 0; i < inputs.Length; i++)
-            {
-                int frame = startFrame + i;
-                if (!_remoteInputs.ContainsKey(frame))
-                    _remoteInputs[frame] = inputs[i];
-            }
+            // TODO (LA2 - Loss handling): store the remote inputs.
+            //  - Ignore echoes of our own input (pid == LocalPlayerId).
+            //  - The packet carries a run starting at startFrame: inputs[i] applies to frame startFrame + i.
+            //  - Keep the FIRST value seen per frame (only set _remoteInputs[frame] if not already present).
+            //    This ignores duplicates and lets a later packet fill a gap left by an earlier lost one.
+            throw new System.NotImplementedException("LA2: implement HandleRemoteInput");
         }
 
         /// <summary>Try to advance exactly one frame. Steps the deterministic sim only if both players'
         /// inputs for the current frame are in hand; otherwise reports a stall and changes nothing.</summary>
         public LockstepStep TryAdvance()
         {
-            int f = _session.CurrentFrame;
-            if (!_localInputs.TryGetValue(f, out var local)) return LockstepStep.Stalled;
-            if (!_remoteInputs.TryGetValue(f, out var remote)) return LockstepStep.Stalled;
-
-            var inputs = new InputState[2];
-            inputs[LocalPlayerId] = local;
-            inputs[RemotePlayerId] = remote;
-
-            _session.Step(inputs, FixedTimeStep);
-
-            // Free memory we will never need again.
-            _localInputs.Remove(f - 120);
-            _remoteInputs.Remove(f - 120);
-            return LockstepStep.Stepped;
+            // TODO (LA2 - Lockstep rule): advance exactly one frame, but only if BOTH inputs are ready.
+            //  - Let f = _session.CurrentFrame.
+            //  - If _localInputs has no entry for f, or _remoteInputs has no entry for f, return Stalled
+            //    and change nothing (NEVER guess a missing input).
+            //  - Otherwise build InputState[2] with the local input at LocalPlayerId and the remote input
+            //    at RemotePlayerId, call _session.Step(inputs, FixedTimeStep), and return Stepped.
+            //  - (Optional) drop very old buffered inputs to save memory.
+            throw new System.NotImplementedException("LA2: implement TryAdvance");
         }
 
         /// <summary>True if we are currently blocked waiting on the remote input for this frame.</summary>

@@ -44,17 +44,15 @@ namespace Bomberman.Net.Packets
 
         public void Serialize(BinaryWriter writer)
         {
-            writer.Write((byte)Type);
-            writer.Write(PlayerId);
-            writer.Write(IsReady);
+            // TODO (LA2 - Protocol): write the type byte, then PlayerId (int), then IsReady (bool).
+            throw new System.NotImplementedException("LA2: implement LobbyReadyPacket.Serialize");
         }
 
         public static LobbyReadyPacket Deserialize(BinaryReader reader)
-            => new LobbyReadyPacket
-            {
-                PlayerId = reader.ReadInt32(),
-                IsReady = reader.ReadBoolean()
-            };
+        {
+            // TODO (LA2 - Protocol): read PlayerId (int) then IsReady (bool), same order as Serialize.
+            throw new System.NotImplementedException("LA2: implement LobbyReadyPacket.Deserialize");
+        }
     }
 
     /// <summary>Client -> broadcast: "any servers out there?" Sent to a range of LAN ports.</summary>
