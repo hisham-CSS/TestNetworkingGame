@@ -61,17 +61,24 @@ namespace Bomberman.Tests.Net
         public void RedundantHistory_FillsGapLeftByLostPacket()
         {
             var (ls, s) = Make(localId: 0, delay: 0);
-            for (int f = 0; f < 3; f++) ls.SubmitLocalInput(new InputState());
 
-            // Simulate losing the packets for frames 0 and 1, then receiving a single packet whose
-            // history run covers frames 0..2. One packet heals the gap.
-            var run = new[] { new InputState(), new InputState(), new InputState() };
+            // We hold our own input for frame 0, but the peer's frame-0 packet is "lost": no remote
+            // input for frame 0 yet, so we must stall.
+            ls.SubmitLocalInput(new InputState());
+            Assert.That(ls.TryAdvance(), Is.EqualTo(LockstepStep.Stalled));
+
+            // A later packet (for frame 1) carries a redundant history run covering frames 0..1.
+            // One packet heals the dropped frame 0, and we can step it.
+            var run = new[] { new InputState(), new InputState() };
             ls.HandleRemoteInput(pid: 1, startFrame: 0, inputs: run, 0, 0, 0);
+            Assert.That(ls.TryAdvance(), Is.EqualTo(LockstepStep.Stepped)); // 0, healed by the run
+            Assert.That(s.CurrentFrame, Is.EqualTo(1));
 
-            Assert.That(ls.TryAdvance(), Is.EqualTo(LockstepStep.Stepped)); // 0
-            Assert.That(ls.TryAdvance(), Is.EqualTo(LockstepStep.Stepped)); // 1
-            Assert.That(ls.TryAdvance(), Is.EqualTo(LockstepStep.Stepped)); // 2
-            Assert.That(s.CurrentFrame, Is.EqualTo(3));
+            // Now poised at frame 1: our buffer tops up to the new horizon, and the run already
+            // delivered the peer's frame 1, so we step again with no further packets.
+            ls.SubmitLocalInput(new InputState());
+            Assert.That(ls.TryAdvance(), Is.EqualTo(LockstepStep.Stepped)); // 1, from the same run
+            Assert.That(s.CurrentFrame, Is.EqualTo(2));
         }
 
         [Test]
