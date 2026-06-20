@@ -315,7 +315,12 @@ namespace Bomberman.App
             if (Pressed(k, Keys.Escape)) { LeaveToMenu(); return; }
             if (Pressed(k, Keys.K)) _lockstep!.ForceDesync();   // demo: corrupt our state -> desync
             _lockstep!.SubmitLocalInput(ReadInput(k));
-            while (_lockstep.TryAdvance() == LockstepStep.Stepped) { }
+            // Advance at most ONE simulation frame per fixed 60Hz Update. MonoGame already calls
+            // Update at a fixed cadence, so one step per tick pins the sim to wall-clock. Draining
+            // every buffered frame here (the old while-loop) fast-forwards through the input-delay
+            // cushion and runs the game at 2x+; if the peer's input is not in yet we just stall this
+            // tick and retry next tick.
+            _lockstep.TryAdvance();
             _hud = _lockstep.IsStalledWaitingForRemote
                 ? $"FRAME {_lockstep.CurrentFrame}  STALLING"
                 : $"FRAME {_lockstep.CurrentFrame}  PING {_net!.LastPingMs}MS";
