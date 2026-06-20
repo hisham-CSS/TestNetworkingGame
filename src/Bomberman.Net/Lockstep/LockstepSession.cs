@@ -84,17 +84,37 @@ namespace Bomberman.Net.Lockstep
             throw new System.NotImplementedException("LA2: implement CalculateInputDelay");
         }
 
-        /// <summary>Capture this tick's local input: schedule it `InputDelay` frames ahead and send it
-        /// (with a little history behind it) to the peer.</summary>
+        /// <summary>Capture this tick's local input. We keep the local buffer filled exactly up to
+        /// <c>CurrentFrame + InputDelay</c>: schedule any frames between what we have already sent and
+        /// that horizon, then send the newest window (with a little history) to the peer.
+        ///
+        /// Anchoring the horizon to <see cref="CurrentFrame"/> (rather than bumping a counter every call)
+        /// makes the input delay both CONSISTENT and SELF-HEALING:
+        ///  * It MAINTAINS the cushion every tick. The neutral prefill alone drains away after the first
+        ///    few advances; re-topping to the horizon keeps a steady InputDelay frames in hand, so the
+        ///    peer's input is normally already buffered when we reach its frame (no stall, no choppiness).
+        ///  * It CAPS the local lead. While we are stalled the simulation frame is frozen, so the horizon
+        ///    is frozen too and we stop scheduling. Without this a long stall (e.g. the peer dragged their
+        ///    window) keeps pushing our input further into the future every tick and bakes in a permanent
+        ///    delay as large as the stall; the lead can no longer shrink back. Capping it means the input
+        ///    delay snaps back to normal the instant lockstep resumes.
+        /// Each frame is written exactly once, so a committed input is never mutated (which would desync the
+        /// peer). Re-sending unchanged frames is safe and helps the peer recover packets lost in a freeze.</summary>
         public void SubmitLocalInput(InputState input, int posX = 0, int posY = 0, int stateHash = 0)
         {
-            // TODO (LA2 - Input delay + loss): schedule and send this tick's input.
-            //  1. The frame this input APPLIES to is _nextLocalFrame (which starts at InputDelay).
-            //     Store it: _localInputs[applyFrame] = input;
-            //  2. Build a short run of recent inputs for redundancy: frames
-            //     [Max(0, applyFrame - (RedundantHistory - 1)) .. applyFrame]. Missing frames -> default.
-            //  3. Send it: _net.SendInput(LocalPlayerId, startFrame, history, posX, posY, stateHash);
-            //  4. Advance _nextLocalFrame by one.
+            // TODO (LA2 - Input delay + loss): keep the local buffer filled up to the horizon, then send it.
+            //  1. The horizon is CurrentFrame + InputDelay: this input should APPLY that many frames ahead
+            //     of the frame we are about to simulate.
+            //  2. Schedule every not-yet-sent frame from _nextLocalFrame up to (and including) the horizon:
+            //        while (_nextLocalFrame <= horizon) { _localInputs[_nextLocalFrame] = input; _nextLocalFrame++; }
+            //     Anchoring to CurrentFrame (not just _nextLocalFrame++ once per call) is what keeps the
+            //     delay steady AND stops it running away during a stall: when the sim is frozen the horizon
+            //     is frozen, so you stop scheduling and the local lead cannot grow without bound.
+            //  3. Let applyFrame = _nextLocalFrame - 1 (return early if it is < 0).
+            //  4. Build a short run ending at applyFrame for redundancy (cover everything you just
+            //     scheduled, plus a little history) and send it:
+            //        _net.SendInput(LocalPlayerId, startFrame, history, posX, posY, stateHash);
+            //     Write each frame exactly once - never mutate a frame you have already sent.
             throw new System.NotImplementedException("LA2: implement SubmitLocalInput");
         }
 
