@@ -34,6 +34,10 @@ namespace Bomberman.App.GameHost
 
         protected override void Initialize()
         {
+            // Close the socket on app exit so a peer sees a clean disconnect immediately, instead of
+            // waiting for the heartbeat/watchdog timeout to fire. (Ported from main; the lambda runs at
+            // exit, by which point _context is initialized.)
+            Exiting += (s, e) => _context.Network?.Close();
             base.Initialize();
         }
 
