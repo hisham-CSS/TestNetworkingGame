@@ -196,7 +196,12 @@ namespace Bomberman.App
         private void BeginMatch()
         {
             _netSession = new GameSession(_seed, TotalPlayers);
-            int delay = LockstepSession.CalculateInputDelay(_net!.LastPingMs);
+            // Lockstep needs a cushion: the peer's input for a frame must be in hand BEFORE we reach it,
+            // or we stall. A 1-frame delay leaves no slack for the per-frame send/recv cadence, so on a
+            // fast link we stall constantly and it feels far laggier than the ping. Floor the delay at a
+            // few frames (still tiny, ~50ms) so play stays smooth; the ping-based value scales up from there.
+            const int MinNetDelayFrames = 3;
+            int delay = LockstepSession.CalculateInputDelay(_net!.LastPingMs, minDelay: MinNetDelayFrames);
             _lockstep = new LockstepSession(_netSession, _net, _localPlayerId, delay);
             _mode = Mode.NetPlaying;
         }
@@ -297,7 +302,12 @@ namespace Bomberman.App
         {
             if (Pressed(k, Keys.Escape)) { LeaveToMenu(); return; }
             _lockstep!.SubmitLocalInput(ReadInput(k));
-            while (_lockstep.TryAdvance() == LockstepStep.Stepped) { }
+            // Advance at most ONE simulation frame per fixed 60Hz Update. MonoGame already calls
+            // Update at a fixed cadence, so one step per tick pins the sim to wall-clock. Draining
+            // every buffered frame here (the old while-loop) fast-forwards through the input-delay
+            // cushion and runs the game at 2x+; if the peer's input is not in yet we just stall this
+            // tick and retry next tick.
+            _lockstep.TryAdvance();
             _hud = _lockstep.IsStalledWaitingForRemote
                 ? $"FRAME {_lockstep.CurrentFrame}  STALLING"
                 : $"FRAME {_lockstep.CurrentFrame}  PING {_net!.LastPingMs}MS";
